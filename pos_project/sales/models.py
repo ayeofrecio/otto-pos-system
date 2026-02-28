@@ -562,23 +562,43 @@ class POSTransNumber(models.Model):
 class OpenTerminal(models.Model):
     """
     Equivalent of the Clarion OPENMMDD table.
-    One row per logged-in user on a terminal. Used to track which
-    cashiers currently have an open session on which terminals.
+    One row per logged-in cashier session per business day per terminal.
+
+    In the old Clarion POS a new physical file was created each day
+    (OPEN0214, OPEN0315 …) and its mere existence signalled that the
+    store was open.  Here a single table replaces all those files;
+    the business_date column carries what the filename used to encode.
+
+    "Is the store open today?" →
+        OpenTerminal.objects.filter(
+            store_id=store, business_date=today
+        ).exists()
+
+    "Who is currently logged in on terminal 001?" →
+        OpenTerminal.objects.filter(
+            store_id=store, terminal_id='001', business_date=today
+        )
+
+    Rows are inserted on cashier login and removed (or soft-closed via
+    tag='C') on logout / Z-reading close.
     """
 
-    store_id    = models.CharField(max_length=3)                       # STOREID
-    terminal_id = models.CharField(max_length=3)                       # TERMID
-    tag         = models.CharField(max_length=1, blank=True)           # TAG
-    user_id     = models.CharField(max_length=10)                      # USERID
+    store_id      = models.CharField(max_length=3)                     # STOREID
+    terminal_id   = models.CharField(max_length=3)                     # TERMID
+    business_date = models.DateField()                                  # replaces the MMDD in the filename
+    user_id       = models.CharField(max_length=10)                    # USERID
+    tag           = models.CharField(max_length=1, blank=True)         # TAG  ('C' = closed, blank = open)
 
     class Meta:
-        db_table = 'openmmdd'
+        db_table = 'openterm'
+        unique_together = [['store_id', 'terminal_id', 'business_date', 'user_id']]
         indexes = [
+            models.Index(fields=['store_id', 'business_date']),
             models.Index(fields=['user_id']),
         ]
 
     def __str__(self):
-        return f'{self.user_id} @ {self.store_id}/{self.terminal_id}'
+        return f'{self.user_id} @ {self.store_id}/{self.terminal_id} ({self.business_date})'
 
 
 # ---------------------------------------------------------------------------
