@@ -1,3 +1,5 @@
+import datetime
+
 from django.db import models
 
 
@@ -238,6 +240,10 @@ class TerminalSetup(models.Model):
 
     # --- Tax ---
     vat            = models.DecimalField(max_digits=8, decimal_places=4, default=0)  # VAT
+
+    # --- Business hours ---
+    open_time   = models.TimeField(default=datetime.time(9, 0))    # 09:00 – cashier login allowed
+    cutoff_time = models.TimeField(default=datetime.time(4, 0))    # 04:00 – late-night sales cut off
 
     class Meta:
         db_table = 'setup'

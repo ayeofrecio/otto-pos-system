@@ -1,0 +1,8 @@
+django>=4.2,<5.0
+mysqlclient>=2.2
+python-dotenv>=1.0
+whitenoise>=6.6
+pillow>=10.0
+reportlab>=4.0
+cryptography>=42.0
+python-escpos>=3.0

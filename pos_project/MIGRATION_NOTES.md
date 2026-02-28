@@ -6,8 +6,30 @@
 |---|---|---|---|
 | `sales` | `TransactionLog` | `TLOG` | `tlog` |
 | `sales` | `AccountingSummary` | `ACCT` | `acct` |
+| `sales` | `OpenTerminal` | `OPENMMDD` | `openterm` |
 
-Both models live in `sales/models.py` — ACCT is daily sales accounting data, not a derived report.
+Both `TransactionLog` and `AccountingSummary` live in `sales/models.py` — ACCT is daily sales accounting data, not a derived report.
+
+`OpenTerminal` replaces the per-day Clarion file pattern (`OPEN0214`, `OPEN0315` …) with a single table. A `business_date` column carries what the filename used to encode.
+
+## New Files (Store Open/Close Logic)
+
+| File | Purpose |
+|---|---|
+| `sales/services.py` | `get_business_date()`, `can_open()`, `open_store()`, `close_store()`, `assert_store_open()` |
+| `sales/exceptions.py` | `OutsideBusinessHoursError`, `StoreAlreadyOpenError`, `StoreClosedError` |
+
+## Migrations Status
+
+All migrations have been applied to `posdb`.
+
+Migration file: `sales/migrations/0001_initial_clarion_models.py`
+
+To apply to a fresh database:
+
+```bash
+python manage.py migrate
+```
 
 ## Add Apps to INSTALLED_APPS
 
