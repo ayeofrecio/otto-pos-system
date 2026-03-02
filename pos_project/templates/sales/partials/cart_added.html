@@ -17,4 +17,9 @@
     <p class="empty">Scan an item to see details</p>
     {% endif %}
 </div>
+<div id="scanned-items-panel" class="scanned-items-panel" hx-swap-oob="true">
+    {% with show_new_anim=True %}
+    {% include "sales/partials/_scanned_items_list.html" %}
+    {% endwith %}
+</div>
 <div class="toast">Added</div>

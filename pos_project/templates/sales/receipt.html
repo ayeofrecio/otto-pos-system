@@ -68,15 +68,24 @@
             <div class="receipt-total">
                 TOTAL: ₱{{ total }}
             </div>
+            {% for t in tender_lines %}
+            <div class="receipt-cash-line">
+                <span>{{ t.desc }}:</span>
+                <span>₱{{ t.amount }}</span>
+            </div>
+            {% empty %}
             <div class="receipt-line" style="margin-top:0.5rem;">
                 <span>Paid via:</span>
                 <span>{{ tender }}</span>
             </div>
-            {% if is_cash and amount_tendered %}
+            {% endfor %}
+            {% if amount_tendered %}
             <div class="receipt-cash-line">
-                <span>Cash Tendered:</span>
+                <span>Total Tendered:</span>
                 <span>₱{{ amount_tendered }}</span>
             </div>
+            {% endif %}
+            {% if is_cash and change_amount and change_amount != "0" and change_amount != "0.0000" %}
             <div class="receipt-change-line">
                 <span>Change:</span>
                 <span>₱{{ change_amount }}</span>

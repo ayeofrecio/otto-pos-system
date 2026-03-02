@@ -23,12 +23,25 @@
         .barcode-input { width: 100%; padding: 1rem 1.25rem; font-size: 1.5rem; border: 2px solid #2f3640; border-radius: 6px; background: #2d343e; color: #e6edf3; }
         .barcode-input:focus { outline: none; border-color: #8b3d4a; }
         .barcode-input::placeholder { color: #6e7681; }
-        .item-detail { flex: 1; padding: 1rem; background: #252b33; border-radius: 6px; border: 1px solid #2f3640; min-height: 200px; }
+        .detail-and-items-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; flex: 1; min-height: 200px; }
+        .item-detail { padding: 1rem; background: #252b33; border-radius: 6px; border: 1px solid #2f3640; }
         .item-detail h3 { margin: 0 0 0.75rem; font-size: 0.875rem; color: #8b949e; }
         .item-detail .empty { color: #6e7681; font-style: italic; }
         .item-detail dl { margin: 0; }
         .item-detail dt { float: left; margin-right: 0.5rem; color: #8b949e; }
         .item-detail dd { margin: 0 0 0.5rem; }
+        .scanned-items-panel { padding: 1rem; background: #252b33; border-radius: 6px; border: 1px solid #2f3640; display: flex; flex-direction: column; overflow: hidden; }
+        .scanned-items-title { margin: 0 0 0.75rem; font-size: 0.875rem; color: #8b949e; }
+        .scanned-items-inner { flex: 1; overflow-y: auto; min-height: 0; }
+        .scanned-items-list { display: flex; flex-direction: column; gap: 0.5rem; }
+        .scanned-item { padding: 0.6rem 0; border-bottom: 1px solid #2f3640; }
+        .scanned-item:last-child { border-bottom: none; }
+        .scanned-item-desc { font-size: 1.35rem; font-weight: 600; margin-bottom: 0.25rem; line-height: 1.3; }
+        .scanned-item-meta { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: #8b949e; }
+        .scanned-item-variant { color: #60b8f0; }
+        .scanned-item-amount { font-weight: 600; color: #e6edf3; margin-left: auto; }
+        .scanned-items-empty { margin: 0; color: #6e7681; font-style: italic; }
+        .scanned-item-new { animation: highlight 1.5s ease-out; }
         .cart-panel { display: flex; flex-direction: column; background: #252b33; border-radius: 6px; border: 1px solid #2f3640; overflow: hidden; }
         .cart-total { padding: 1rem; background: #2d343e; font-size: 1.5rem; font-weight: 700; text-align: right; }
         .cart-count { padding: 0.25rem 1rem; font-size: 0.875rem; color: #8b949e; }
@@ -119,6 +132,57 @@
         .search-result-price { font-weight: 600; white-space: nowrap; }
         .search-empty { padding: 2rem; text-align: center; color: #6e7681; }
         .search-hint { padding: 1.5rem; text-align: center; color: #6e7681; font-size: 0.9rem; }
+        /* Pay modal (tender floating window) */
+        .pay-modal { background: #252b33; border: 1px solid #2f3640; border-radius: 8px; width: 480px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
+        .pay-modal-inner { padding: 1.25rem 1.5rem; }
+        .pay-total-box { background: #2d343e; padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 1.25rem; text-align: center; border: 1px solid #2f3640; }
+        .pay-total-label { font-size: 0.7rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; }
+        .pay-total-amount { font-size: 2.25rem; font-weight: 700; margin: 0.2rem 0; }
+        .pay-total-breakdown { font-size: 0.8rem; color: #8b949e; margin-top: 0.2rem; }
+        .pay-total-breakdown-disc { color: #6edb8f; font-weight: 500; }
+        .pay-tender-title { font-size: 0.8rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.6rem; }
+        .pay-tenders { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.6rem; margin-bottom: 1.25rem; }
+        .pay-tender-btn { padding: 0.75rem 0.9rem; font-size: 0.95rem; background: #2d343e; border: 2px solid #2f3640; border-radius: 8px; color: #e6edf3; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+        .pay-tender-btn:hover { border-color: #8b3d4a; background: #2f3640; }
+        .pay-tender-btn.selected { border-color: #8b3d4a; background: #8b3d4a; color: white; }
+        .pay-cash-section { display: none; background: #2d343e; border: 1px solid #2f3640; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+        .pay-cash-section.visible { display: block; }
+        .pay-cash-section-title { font-size: 0.8rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.6rem; }
+        .pay-quick-amounts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
+        .pay-quick-btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; background: #252b33; border: 1.5px solid #2f3640; border-radius: 6px; color: #e6edf3; cursor: pointer; font-weight: 500; }
+        .pay-quick-btn:hover { border-color: #8b3d4a; background: #3d454d; }
+        .pay-quick-btn.exact { border-color: #4a5568; }
+        .pay-tendered-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+        .pay-tendered-currency { font-size: 1.5rem; font-weight: 700; color: #8b949e; }
+        .pay-tendered-input { flex: 1; padding: 0.6rem 0.9rem; font-size: 1.5rem; font-weight: 700; border: 2px solid #2f3640; border-radius: 6px; background: #252b33; color: #e6edf3; text-align: right; }
+        .pay-tendered-input:focus { outline: none; border-color: #8b3d4a; }
+        .pay-change-box { display: flex; justify-content: space-between; align-items: baseline; padding: 0.6rem 0.9rem; border-radius: 6px; background: #252b33; }
+        .pay-change-label { font-size: 0.85rem; color: #8b949e; }
+        .pay-change-amount { font-size: 1.5rem; font-weight: 700; }
+        .pay-change-amount.ok { color: #6edb8f; }
+        .pay-change-amount.exact { color: #8b949e; }
+        .pay-change-amount.short { color: #f85149; font-size: 1rem; }
+        .pay-modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.25rem; }
+        .pay-empty { text-align: center; padding: 1.5rem; color: #8b949e; }
+        .pay-modal-empty .pay-modal-actions { justify-content: center; }
+        #pay-modal-content { overflow-y: auto; flex: 1; min-height: 0; }
+        .pay-entries-section { background: #2d343e; border: 1px solid #2f3640; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+        .pay-entries-list { min-height: 2rem; margin-bottom: 0.75rem; }
+        .pay-entries-empty { margin: 0; color: #6e7681; font-size: 0.9rem; }
+        .pay-entry-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid #2f3640; }
+        .pay-entry-item:last-child { border-bottom: none; }
+        .pay-entry-desc { flex: 1; font-weight: 500; }
+        .pay-entry-amt { font-weight: 600; }
+        .pay-entry-remove { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 1.2rem; line-height: 1; padding: 0 0.3rem; }
+        .pay-entry-remove:hover { color: #f85149; }
+        .pay-summary-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.95rem; }
+        .pay-summary-label { color: #8b949e; }
+        .pay-summary-value { font-weight: 600; }
+        .pay-summary-value.ok { color: #6edb8f; }
+        .pay-summary-value.short { color: #f85149; }
+        .pay-change-row { display: flex; justify-content: space-between; align-items: baseline; padding: 0.5rem 0; margin-top: 0.25rem; border-top: 1px solid #2f3640; }
+        .pay-add-section { margin-bottom: 1rem; }
+        .pay-add-btn { margin-top: 0.5rem; }
     </style>
 </head>
 <body>
@@ -158,19 +222,24 @@
                     <button type="button" class="disc-badge-clear" onclick="clearDiscount()" title="Remove discount">&#10005;</button>
                 </div>
             </div>
-            <div class="item-detail" id="item-detail">
-                <h3>Item Detail</h3>
-                {% if last_item %}
-                <dl>
-                    <dt>Product:</dt><dd>{{ last_item.item_description }}</dd>
-                    <dt>Code:</dt><dd>{{ last_item.item_code }}</dd>
-                    <dt>Size:</dt><dd>{{ last_item.item_size|default:"—" }}</dd>
-                    <dt>Color:</dt><dd>{{ last_item.item_color|default:"—" }}</dd>
-                    <dt>Price:</dt><dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
-                </dl>
-                {% else %}
-                <p class="empty">Scan an item to see details</p>
-                {% endif %}
+            <div class="detail-and-items-row">
+                <div class="item-detail" id="item-detail">
+                    <h3>Item Detail</h3>
+                    {% if last_item %}
+                    <dl>
+                        <dt>Product:</dt><dd>{{ last_item.item_description }}</dd>
+                        <dt>Code:</dt><dd>{{ last_item.item_code }}</dd>
+                        <dt>Size:</dt><dd>{{ last_item.item_size|default:"—" }}</dd>
+                        <dt>Color:</dt><dd>{{ last_item.item_color|default:"—" }}</dd>
+                        <dt>Price:</dt><dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
+                    </dl>
+                    {% else %}
+                    <p class="empty">Scan an item to see details</p>
+                    {% endif %}
+                </div>
+                <div class="scanned-items-panel" id="scanned-items-panel">
+                    {% include "sales/partials/_scanned_items_list.html" %}
+                </div>
             </div>
         </div>
         <div class="cart-panel">
@@ -247,6 +316,19 @@
         </div>
     </div>
 
+    <!-- Pay Modal (tender floating window) -->
+    <div class="modal-overlay" id="pay-modal" onclick="closePayModalOutside(event)">
+        <div class="modal pay-modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Payment</h2>
+                <button class="modal-close" onclick="closePayModal()">&#10005;</button>
+            </div>
+            <div id="pay-modal-content">
+                <p class="search-hint" style="padding:2rem;">Loading…</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Item Search Modal -->
     <div class="modal-overlay" id="search-modal" onclick="closeSearchModalOutside(event)">
         <div class="modal">
@@ -264,7 +346,14 @@
     </div>
 
     <footer class="actions">
-        <a href="{% url 'sales:pay' %}" class="btn btn-primary">Pay</a>
+        <button type="button" class="btn btn-primary" id="pay-trigger-btn"
+                hx-get="{% url 'sales:pay' %}"
+                hx-target="#pay-modal-content"
+                hx-swap="innerHTML"
+                hx-trigger="click"
+                onclick="document.getElementById('pay-modal').classList.add('open')">
+            Pay
+        </button>
         <a href="{% url 'sales:cart_new' %}" class="btn btn-secondary">New Transaction</a>
         <div class="actions-divider"></div>
         <button type="button" class="btn-fn btn-fn-grey" onclick="openSearchModal()" title="Search items">

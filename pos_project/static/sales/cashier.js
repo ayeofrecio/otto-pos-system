@@ -108,9 +108,11 @@
     }
 
     if (evt.key === 'Escape') {
+      const payModal = document.getElementById('pay-modal');
       const discModal = document.getElementById('discount-modal');
       const tdModal = document.getElementById('trans-disc-modal');
-      if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
+      if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
+      else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
     }
   });
@@ -359,6 +361,22 @@
   window.closeSearchModalOutside = function (evt) {
     if (evt.target === document.getElementById('search-modal')) {
       window.closeSearchModal();
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Pay Modal (tender floating window)
+  // ---------------------------------------------------------------------------
+  window.closePayModal = function () {
+    const modal = document.getElementById('pay-modal');
+    if (modal) { modal.classList.remove('open'); }
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closePayModalOutside = function (evt) {
+    if (evt.target === document.getElementById('pay-modal')) {
+      window.closePayModal();
     }
   };
 

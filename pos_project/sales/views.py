@@ -428,7 +428,11 @@ def pay_view(request):
     """Payment screen - select tender and complete sale."""
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
+    is_htmx = request.headers.get("HX-Request")
+
     if not trans_no:
+        if is_htmx:
+            return render(request, "sales/partials/_pay_modal_empty.html", {"message": "No active transaction."})
         return redirect("sales:pos_cashier")
 
     cart_lines = TempTransaction.objects.filter(
@@ -442,10 +446,12 @@ def pay_view(request):
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
 
     if total <= 0:
+        if is_htmx:
+            return render(request, "sales/partials/_pay_modal_empty.html", {"message": "Add items to cart first."})
         return redirect("sales:pos_cashier")
 
     tenders = Tender.objects.filter(pallow="Y").order_by("pcode")
-    return render(request, "sales/pay.html", {
+    context = {
         "store_name": _get_store_name(),
         "cart_lines": cart_lines,
         "subtotal": subtotal,
@@ -453,18 +459,45 @@ def pay_view(request):
         "trans_disc_amt": trans_disc_amt,
         "total": total,
         "tenders": tenders,
-    })
+        "standalone": not is_htmx,
+    }
+    # Return modal partial when requested via HTMX (floating tender on cashier page)
+    if is_htmx:
+        return render(request, "sales/partials/_pay_modal.html", context)
+    return render(request, "sales/pay.html", context)
+
+
+def _parse_tender_entries(request):
+    """Parse tender_entries JSON from POST. Returns list of (pcode, amount) or empty."""
+    import json
+    raw = request.POST.get("tender_entries", "").strip()
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        entries = []
+        for item in data:
+            pcode = (item.get("pcode") or "").strip()
+            try:
+                amt = Decimal(str(item.get("amount", 0) or 0))
+            except (ValueError, TypeError):
+                amt = Decimal("0")
+            if pcode and amt > 0:
+                entries.append((pcode, amt))
+        return entries
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 
 @login_required(login_url="sales:pos_login")
 @require_http_methods(["POST"])
 def payment_complete(request):
-    """Complete payment with selected tender. Save to TransactionLog, show receipt."""
+    """Complete payment with tender entries. Supports multiple tenders. Only completes when total tendered >= amount due."""
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
-    tender_pcode = request.POST.get("tender_pcode", "").strip()
+    tender_entries = _parse_tender_entries(request)
 
-    if not tender_pcode:
+    if not tender_entries:
         return redirect("sales:pay")
 
     cart_lines = TempTransaction.objects.filter(
@@ -477,25 +510,31 @@ def payment_complete(request):
     if not cart_lines.exists():
         return redirect("sales:pos_cashier")
 
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+
+    total_tendered = sum(amt for _, amt in tender_entries)
+    if total_tendered < total:
+        # Do not complete - total tendered is less than amount due
+        return redirect("sales:pay")
+
     now = datetime.datetime.now()
     try:
         biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
     except Exception:
         biz_date = now.date()
 
-    trans_disc = _get_trans_disc(request)
-    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
-    tender = Tender.objects.filter(pcode=tender_pcode).first()
-    tender_desc = tender.description if tender else tender_pcode
-    is_cash = tender and tender.pchange == "Y"
-
-    try:
-        amount_tendered = Decimal(request.POST.get("amount_tendered", "0") or "0")
-        if amount_tendered < total:
-            amount_tendered = total
-    except (ValueError, TypeError):
-        amount_tendered = total
-    change_amount = max(Decimal("0"), amount_tendered - total) if is_cash else Decimal("0")
+    # Build receipt tender summary (multiple tenders)
+    tender_lines = []
+    total_cash = Decimal("0")
+    for pcode, amt in tender_entries:
+        tender = Tender.objects.filter(pcode=pcode).first()
+        desc = tender.description if tender else pcode
+        tender_lines.append({"desc": desc, "amount": str(amt), "is_cash": tender and tender.pchange == "Y"})
+        if tender and tender.pchange == "Y":
+            total_cash += amt
+    change_amount = max(Decimal("0"), total_tendered - total) if total_cash > 0 else Decimal("0")
+    tender_display = ", ".join(f"{t['desc']} ₱{t['amount']}" for t in tender_lines)
 
     # Save to TransactionLog
     for line in cart_lines:
@@ -528,10 +567,11 @@ def payment_complete(request):
         "trans_disc_label": trans_disc.get("label", ""),
         "trans_disc_amt": str(trans_disc_amt),
         "total": str(total),
-        "tender": tender_desc,
-        "is_cash": is_cash,
-        "amount_tendered": str(amount_tendered) if is_cash else "",
-        "change_amount": str(change_amount) if is_cash else "",
+        "tender": tender_display,
+        "tender_lines": tender_lines,
+        "is_cash": any(t["is_cash"] for t in tender_lines),
+        "amount_tendered": str(total_tendered),
+        "change_amount": str(change_amount),
         "lines": [
             {
                 "description": line.item_description or "",
@@ -564,6 +604,11 @@ def receipt_view(request):
     if not receipt:
         return redirect("sales:pos_cashier")
 
+    tender_lines = receipt.get("tender_lines") or []
+    if not tender_lines and receipt.get("tender"):
+        # Legacy single-tender format
+        tender_lines = [{"desc": receipt["tender"], "amount": receipt.get("amount_tendered", receipt["total"]), "is_cash": receipt.get("is_cash", False)}]
+
     context = {
         "store_name": _get_store_name(),
         "transaction_no": receipt["transaction_no"],
@@ -574,7 +619,8 @@ def receipt_view(request):
         "trans_disc_label": receipt.get("trans_disc_label", ""),
         "trans_disc_amt": receipt.get("trans_disc_amt", "0"),
         "total": receipt["total"],
-        "tender": receipt["tender"],
+        "tender": receipt.get("tender", ""),
+        "tender_lines": tender_lines,
         "is_cash": receipt.get("is_cash", False),
         "amount_tendered": receipt.get("amount_tendered", ""),
         "change_amount": receipt.get("change_amount", ""),

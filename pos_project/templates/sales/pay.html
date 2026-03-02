@@ -56,6 +56,47 @@
         .btn-secondary { background: #2f3640; color: #e6edf3; }
         .btn-secondary:hover { background: #3d454d; }
         .empty { text-align: center; padding: 2rem; color: #666; }
+        /* Pay modal (shared with cashier partial) */
+        .pay-modal-inner { padding: 1.25rem 0; }
+        .pay-total-box { background: #2d343e; padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 1.25rem; text-align: center; border: 1px solid #2f3640; }
+        .pay-total-label { font-size: 0.7rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; }
+        .pay-total-amount { font-size: 2.25rem; font-weight: 700; margin: 0.2rem 0; }
+        .pay-total-breakdown { font-size: 0.8rem; color: #8b949e; margin-top: 0.2rem; }
+        .pay-total-breakdown-disc { color: #6edb8f; font-weight: 500; }
+        .pay-tender-title { font-size: 0.8rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.6rem; }
+        .pay-tenders { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.6rem; margin-bottom: 1.25rem; }
+        .pay-tender-btn { padding: 0.75rem 0.9rem; font-size: 0.95rem; background: #2d343e; border: 2px solid #2f3640; border-radius: 8px; color: #e6edf3; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+        .pay-tender-btn:hover { border-color: #8b3d4a; background: #2f3640; }
+        .pay-tender-btn.selected { border-color: #8b3d4a; background: #8b3d4a; color: white; }
+        .pay-cash-section { display: none; background: #2d343e; border: 1px solid #2f3640; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+        .pay-cash-section.visible { display: block; }
+        .pay-quick-amounts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
+        .pay-quick-btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; background: #252b33; border: 1.5px solid #2f3640; border-radius: 6px; color: #e6edf3; cursor: pointer; font-weight: 500; }
+        .pay-quick-btn:hover { border-color: #8b3d4a; background: #3d454d; }
+        .pay-tendered-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+        .pay-tendered-currency { font-size: 1.5rem; font-weight: 700; color: #8b949e; }
+        .pay-tendered-input { flex: 1; padding: 0.6rem 0.9rem; font-size: 1.5rem; font-weight: 700; border: 2px solid #2f3640; border-radius: 6px; background: #252b33; color: #e6edf3; text-align: right; }
+        .pay-tendered-input:focus { outline: none; border-color: #8b3d4a; }
+        .pay-entries-section { background: #2d343e; border: 1px solid #2f3640; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+        .pay-entries-list { min-height: 2rem; margin-bottom: 0.75rem; }
+        .pay-entries-empty { margin: 0; color: #6e7681; font-size: 0.9rem; }
+        .pay-entry-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid #2f3640; }
+        .pay-entry-item:last-child { border-bottom: none; }
+        .pay-entry-desc { flex: 1; font-weight: 500; }
+        .pay-entry-amt { font-weight: 600; }
+        .pay-entry-remove { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 1.2rem; line-height: 1; padding: 0 0.3rem; }
+        .pay-entry-remove:hover { color: #f85149; }
+        .pay-summary-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.95rem; }
+        .pay-summary-label { color: #8b949e; }
+        .pay-summary-value { font-weight: 600; }
+        .pay-summary-value.ok { color: #6edb8f; }
+        .pay-summary-value.short { color: #f85149; }
+        .pay-change-row { display: flex; justify-content: space-between; align-items: baseline; padding: 0.5rem 0; margin-top: 0.25rem; border-top: 1px solid #2f3640; }
+        .pay-change-amount.ok { color: #6edb8f; }
+        .pay-add-section { margin-bottom: 1rem; }
+        .pay-add-btn { margin-top: 0.5rem; }
+        .pay-modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.25rem; }
+        .pay-empty { text-align: center; padding: 1.5rem; color: #8b949e; }
     </style>
 </head>
 <body>
@@ -65,57 +106,8 @@
     </header>
 
     <div class="container">
-        <!-- Amount due -->
-        <div class="total-box">
-            <div class="total-label">Amount to Pay</div>
-            <div class="total-amount">₱{{ total|floatformat:2 }}</div>
-            {% if trans_disc_amt %}
-            <div class="total-breakdown">
-                Subtotal: ₱{{ subtotal|floatformat:2 }} &nbsp;·&nbsp;
-                <span class="total-breakdown-disc">{{ trans_disc.label }} ({{ trans_disc.pct|floatformat:0 }}%) −₱{{ trans_disc_amt|floatformat:2 }}</span>
-            </div>
-            {% endif %}
-        </div>
-
         {% if tenders %}
-        <form method="post" action="{% url 'sales:payment_complete' %}" id="pay-form" onsubmit="return validatePayment()">
-            {% csrf_token %}
-            <input type="hidden" name="tender_pcode"    id="tender-pcode"    value="">
-            <input type="hidden" name="amount_tendered" id="amount-tendered" value="">
-
-            <h3>Select Payment Method</h3>
-            <div class="tenders">
-                {% for tender in tenders %}
-                <button type="button" class="tender-btn"
-                        data-pcode="{{ tender.pcode }}"
-                        data-pchange="{{ tender.pchange }}"
-                        onclick="selectTender('{{ tender.pcode }}', '{{ tender.pchange }}')">
-                    {{ tender.description }}
-                </button>
-                {% endfor %}
-            </div>
-
-            <!-- Cash tendered section (shown only for cash-type tenders) -->
-            <div class="cash-section" id="cash-section">
-                <div class="cash-section-title">Cash Tendered</div>
-                <div class="quick-amounts" id="quick-amounts"></div>
-                <div class="tendered-row">
-                    <span class="tendered-currency">₱</span>
-                    <input type="number" id="tendered-input" class="tendered-input"
-                           min="0" step="0.01" placeholder="0.00"
-                           oninput="calcChange()" onkeydown="handleTenderedKey(event)">
-                </div>
-                <div class="change-box">
-                    <span class="change-label">Change</span>
-                    <span class="change-amount exact" id="change-display">—</span>
-                </div>
-            </div>
-
-            <div class="actions">
-                <button type="submit" class="btn btn-primary" id="pay-btn" disabled>Complete Payment</button>
-                <a href="{% url 'sales:pos_cashier' %}" class="btn btn-secondary">Cancel</a>
-            </div>
-        </form>
+        {% include "sales/partials/_pay_modal.html" %}
         {% else %}
         <p class="empty">No payment methods configured. Run: <code>python manage.py seed_tenders</code></p>
         <div class="actions">
@@ -124,113 +116,5 @@
         {% endif %}
     </div>
 
-    <script>
-        const TOTAL = parseFloat("{{ total|floatformat:2 }}") || 0;
-        var isCash = false;
-
-        function fmt(n) {
-            return n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
-
-        function selectTender(pcode, pchange) {
-            document.getElementById('tender-pcode').value = pcode;
-            document.querySelectorAll('.tender-btn').forEach(b => b.classList.remove('selected'));
-            document.querySelector('[data-pcode="' + pcode + '"]').classList.add('selected');
-
-            isCash = (pchange === 'Y');
-            const cashSection = document.getElementById('cash-section');
-            if (isCash) {
-                cashSection.classList.add('visible');
-                buildQuickAmounts();
-                const inp = document.getElementById('tendered-input');
-                inp.value = '';
-                calcChange();
-                setTimeout(() => inp.focus(), 80);
-            } else {
-                cashSection.classList.remove('visible');
-                document.getElementById('pay-btn').disabled = false;
-            }
-        }
-
-        function buildQuickAmounts() {
-            const container = document.getElementById('quick-amounts');
-            container.innerHTML = '';
-            const amounts = getQuickAmounts(TOTAL);
-            amounts.forEach((amt, i) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'quick-btn' + (i === 0 ? ' exact' : '');
-                btn.textContent = (i === 0 ? 'Exact  ' : '') + '₱' + fmt(amt);
-                btn.onclick = () => { setTendered(amt); };
-                container.appendChild(btn);
-            });
-        }
-
-        function getQuickAmounts(total) {
-            const amounts = [total]; // exact first
-            const steps = [100, 200, 500, 1000, 2000, 5000, 10000];
-            for (const step of steps) {
-                const rounded = Math.ceil(total / step) * step;
-                if (rounded > total && !amounts.includes(rounded)) {
-                    amounts.push(rounded);
-                }
-                if (amounts.length >= 5) break;
-            }
-            return amounts;
-        }
-
-        function setTendered(amt) {
-            document.getElementById('tendered-input').value = amt.toFixed(2);
-            calcChange();
-            document.getElementById('tendered-input').focus();
-        }
-
-        function calcChange() {
-            const inp = parseFloat(document.getElementById('tendered-input').value) || 0;
-            const changeEl = document.getElementById('change-display');
-            const payBtn = document.getElementById('pay-btn');
-
-            if (inp === 0) {
-                changeEl.textContent = '—';
-                changeEl.className = 'change-amount exact';
-                payBtn.disabled = true;
-                return;
-            }
-
-            const change = inp - TOTAL;
-            if (change < 0) {
-                changeEl.textContent = '⚠ Short ₱' + fmt(Math.abs(change));
-                changeEl.className = 'change-amount short';
-                payBtn.disabled = true;
-            } else if (change === 0) {
-                changeEl.textContent = '₱0.00  (Exact)';
-                changeEl.className = 'change-amount exact';
-                payBtn.disabled = false;
-            } else {
-                changeEl.textContent = '₱' + fmt(change);
-                changeEl.className = 'change-amount ok';
-                payBtn.disabled = false;
-            }
-        }
-
-        function handleTenderedKey(evt) {
-            if (evt.key === 'Enter') {
-                evt.preventDefault();
-                const payBtn = document.getElementById('pay-btn');
-                if (!payBtn.disabled) { document.getElementById('pay-form').submit(); }
-            }
-        }
-
-        function validatePayment() {
-            if (isCash) {
-                const tendered = parseFloat(document.getElementById('tendered-input').value) || 0;
-                if (tendered < TOTAL) { return false; }
-                document.getElementById('amount-tendered').value = tendered.toFixed(2);
-            } else {
-                document.getElementById('amount-tendered').value = TOTAL.toFixed(2);
-            }
-            return true;
-        }
-    </script>
 </body>
 </html>
