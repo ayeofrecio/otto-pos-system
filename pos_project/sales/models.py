@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 
 from django.db import models
 
@@ -315,6 +316,25 @@ class TempTransaction(models.Model):
     transaction_no_ctr2 = models.CharField(max_length=8, blank=True)   # TRNBRCTR_
     rec_ctr             = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # RECCTR (primary key in Clarion)
     rec_num             = models.CharField(max_length=256, blank=True)  # RECNUM
+
+    # --- Computed helpers (no DB column) ---
+
+    @property
+    def item_gross(self):
+        """Unit price × qty — the pre-discount extended amount."""
+        return (self.item_price or Decimal('0')) * (self.item_qty or Decimal('0'))
+
+    @property
+    def item_disc_total(self):
+        """Total peso discount for this line (per-unit discount × qty)."""
+        return (self.item_discount or Decimal('0')) * (self.item_qty or Decimal('0'))
+
+    @property
+    def disc_pct(self):
+        """Discount as a percentage (e.g. 10.0 for 10%). Returns 0 when no discount."""
+        if self.item_price and self.item_discount:
+            return round(float(self.item_discount / self.item_price * 100), 4)
+        return 0
 
     class Meta:
         db_table = 'temptrans'

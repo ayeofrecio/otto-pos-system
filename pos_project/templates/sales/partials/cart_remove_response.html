@@ -1,0 +1,17 @@
+<div id="cart-summary">
+    {% include "sales/partials/_cart_body.html" %}
+</div>
+<div id="item-detail" hx-swap-oob="true">
+    <h3>Item Detail</h3>
+    {% if last_item %}
+    <dl>
+        <dt>Product:</dt><dd>{{ last_item.item_description }}</dd>
+        <dt>Code:</dt><dd>{{ last_item.item_code }}</dd>
+        <dt>Size:</dt><dd>{{ last_item.item_size|default:"—" }}</dd>
+        <dt>Color:</dt><dd>{{ last_item.item_color|default:"—" }}</dd>
+        <dt>Price:</dt><dd>&#8369;{{ last_item.item_price|floatformat:2 }}</dd>
+    </dl>
+    {% else %}
+    <p class="empty">Scan an item to see details</p>
+    {% endif %}
+</div>
