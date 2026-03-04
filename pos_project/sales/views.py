@@ -16,6 +16,9 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from .models import Item, ItemDetail, TempTransaction, TransactionLog, POSTransCounter, Tender, TerminalSetup, Color, Size
 from .services import get_business_date
 
+# For printing (Serial type of POS Printer)
+import serial
+import time
 
 # ---------------------------------------------------------------------------
 # Session keys and defaults
@@ -597,6 +600,39 @@ def payment_complete(request):
     return redirect("sales:receipt")
 
 
+# @login_required(login_url="sales:pos_login")
+# def receipt_view(request):
+#     """Display receipt after payment. Data comes from session."""
+#     receipt = request.session.get("last_receipt")
+#     if not receipt:
+#         return redirect("sales:pos_cashier")
+
+#     tender_lines = receipt.get("tender_lines") or []
+#     if not tender_lines and receipt.get("tender"):
+#         # Legacy single-tender format
+#         tender_lines = [{"desc": receipt["tender"], "amount": receipt.get("amount_tendered", receipt["total"]), "is_cash": receipt.get("is_cash", False)}]
+
+#     context = {
+#         "store_name": _get_store_name(),
+#         "transaction_no": receipt["transaction_no"],
+#         "date": receipt["date"],
+#         "time": receipt["time"],
+#         "subtotal": receipt.get("subtotal", receipt["total"]),
+#         "trans_disc_pct": receipt.get("trans_disc_pct", "0"),
+#         "trans_disc_label": receipt.get("trans_disc_label", ""),
+#         "trans_disc_amt": receipt.get("trans_disc_amt", "0"),
+#         "total": receipt["total"],
+#         "tender": receipt.get("tender", ""),
+#         "tender_lines": tender_lines,
+#         "is_cash": receipt.get("is_cash", False),
+#         "amount_tendered": receipt.get("amount_tendered", ""),
+#         "change_amount": receipt.get("change_amount", ""),
+#         "lines": receipt["lines"],
+#     }
+#     return render(request, "sales/receipt.html", context)
+
+
+
 @login_required(login_url="sales:pos_login")
 def receipt_view(request):
     """Display receipt after payment. Data comes from session."""
@@ -606,8 +642,11 @@ def receipt_view(request):
 
     tender_lines = receipt.get("tender_lines") or []
     if not tender_lines and receipt.get("tender"):
-        # Legacy single-tender format
-        tender_lines = [{"desc": receipt["tender"], "amount": receipt.get("amount_tendered", receipt["total"]), "is_cash": receipt.get("is_cash", False)}]
+        tender_lines = [{
+            "desc": receipt["tender"],
+            "amount": receipt.get("amount_tendered", receipt["total"]),
+            "is_cash": receipt.get("is_cash", False)
+        }]
 
     context = {
         "store_name": _get_store_name(),
@@ -626,6 +665,109 @@ def receipt_view(request):
         "change_amount": receipt.get("change_amount", ""),
         "lines": receipt["lines"],
     }
+
+    def format_money(val):
+        try:
+            return f"{float(val):,.2f}"
+        except:
+            return str(val)
+
+
+    # 🔥 PRINT TO EPSON TM-U220
+    try:
+        printer = serial.Serial(
+            port='COM1',   # CHANGE if needed
+            baudrate=9600,
+            bytesize=8,
+            parity='N',
+            stopbits=1,
+            timeout=1
+        )
+
+        time.sleep(1)
+
+        def write_line(text=""):
+            printer.write((text + "\n").encode("utf-8"))
+
+        def separator():
+            write_line("-" * 32)
+
+        # =============================
+        # HEADER
+        # =============================
+        printer.write(b'\x1b\x61\x01')  # center align
+        write_line(context["store_name"])
+        printer.write(b'\x1b\x61\x00')  # left align
+
+        write_line(context["date"])
+        write_line(context["time"])
+        write_line(f"Receipt #{context['transaction_no']}")
+        separator()
+
+        # =============================
+        # ITEMS
+        # =============================
+        for line in context["lines"]:
+            desc = line.get("description", "")
+            ext = format_money(line.get("ext", 0))
+
+            write_line(f"{desc[:28]}")
+            write_line(f"{line.get('qty')} x {format_money(line.get('price'))}".ljust(20) + f"{ext}".rjust(12))
+
+            if line.get("disc_pct"):
+                write_line(f"  {line.get('disc_pct')}% discount -{format_money(line.get('disc_total'))}")
+                write_line(f"  Net: {ext}")
+
+        # =============================
+        # TRANSACTION DISCOUNT
+        # =============================
+        if context["trans_disc_amt"] and context["trans_disc_amt"] not in ["0", "0.0000"]:
+            separator()
+            write_line(f"Subtotal: {format_money(context['subtotal'])}")
+            write_line(f"{context['trans_disc_label']} ({context['trans_disc_pct']}%)")
+            write_line(f"-{format_money(context['trans_disc_amt'])}")
+
+        # =============================
+        # TOTAL
+        # =============================
+        separator()
+        printer.write(b'\x1b\x45\x01')  # bold on
+        write_line(f"TOTAL: {format_money(context['total'])}")
+        printer.write(b'\x1b\x45\x00')  # bold off
+        separator()
+
+        # =============================
+        # TENDER LINES
+        # =============================
+        for t in context["tender_lines"]:
+            write_line(f"{t['desc']}: {format_money(t['amount'])}")
+
+        if context["amount_tendered"]:
+            write_line(f"Total Tendered: {format_money(context['amount_tendered'])}")
+
+        if context["is_cash"] and context["change_amount"] not in ["", "0", "0.0000"]:
+            printer.write(b'\x1b\x45\x01')
+            write_line(f"CHANGE: {format_money(context['change_amount'])}")
+            printer.write(b'\x1b\x45\x00')
+
+        # =============================
+        # FOOTER
+        # =============================
+        separator()
+        printer.write(b'\x1b\x61\x01')  # center align
+        write_line("Thank you for your purchase!")
+        write_line("Please come again")
+        printer.write(b'\x1b\x61\x00')
+
+        write_line("\n\n\n")
+
+        # Cut paper
+        printer.write(b'\x1d\x56\x00')
+
+        printer.close()
+
+    except Exception as e:
+        print("❌ Printer Error:", e)
     return render(request, "sales/receipt.html", context)
 
 
