@@ -1,0 +1,17 @@
+<div class="cart-line{% if show_new_anim %} cart-line-new{% endif %}" data-rec-ctr="{{ line.rec_ctr }}">
+    <span class="cart-line-desc">{{ line.item_description }}{% if line.item_size or line.item_color %} ({{ line.item_size|default:"" }}{% if line.item_size and line.item_color %}/{% endif %}{{ line.item_color|default:"" }}){% endif %}</span>
+    <div class="cart-line-details">
+        <span>Qty: {{ line.item_qty }} × ₱{{ line.item_price|floatformat:2 }} = ₱{% if line.item_discount %}{{ line.item_gross|floatformat:2 }}{% else %}{{ line.item_price_ext|floatformat:2 }}{% endif %}</span>
+        <form hx-post="{% url 'sales:cart_remove' %}" hx-target="#cart-summary" hx-swap="outerHTML" style="display:inline;">
+            {% csrf_token %}
+            <input type="hidden" name="rec_ctr" value="{{ line.rec_ctr }}">
+            <button type="submit" class="cart-line-remove">Remove</button>
+        </form>
+    </div>
+    {% if line.item_discount %}
+    <div class="cart-line-disc-row">
+        <span>{{ line.disc_pct|floatformat:-2 }}% discount &rarr; -&#8369;{{ line.item_disc_total|floatformat:2 }}</span>
+        <span class="cart-line-net">Net: &#8369;{{ line.item_price_ext|floatformat:2 }}</span>
+    </div>
+    {% endif %}
+</div>

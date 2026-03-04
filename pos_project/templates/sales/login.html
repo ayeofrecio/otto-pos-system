@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Cashier Login</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #1e2328; color: #e6edf3; }
+        .login-box { background: #252b33; padding: 2rem; border-radius: 8px; width: 320px; border: 1px solid #2f3640; }
+        h1 { margin: 0 0 1.5rem; font-size: 1.25rem; text-align: center; }
+        input { width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid #2f3640; border-radius: 4px; background: #2d343e; color: #e6edf3; font-size: 1rem; }
+        input:focus { outline: none; border-color: #8b3d4a; }
+        button { width: 100%; padding: 0.75rem; background: #8b3d4a; border: none; border-radius: 4px; color: white; font-size: 1rem; cursor: pointer; }
+        button:hover { background: #7a3540; }
+        .error { color: #c24d5a; font-size: 0.875rem; margin-bottom: 1rem; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>POS Cashier Login</h1>
+        {% if store_name %}<p style="text-align:center;color:#8b949e;margin:0 0 1rem;font-size:0.9rem;">{{ store_name }}</p>{% endif %}
+        {% if error %}<p class="error">{{ error }}</p>{% endif %}
+        <form method="post" action="{% url 'sales:pos_login' %}">
+            {% csrf_token %}
+            <input type="text" name="username" placeholder="Username" required autofocus>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+</body>
+</html>

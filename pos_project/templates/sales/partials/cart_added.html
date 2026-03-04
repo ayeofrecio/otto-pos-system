@@ -1,0 +1,25 @@
+<div id="cart-summary" hx-swap-oob="true">
+    {% with show_new_anim=True %}
+    {% include "sales/partials/_cart_body.html" %}
+    {% endwith %}
+</div>
+<div id="item-detail" hx-swap-oob="true">
+    <h3>Item Detail</h3>
+    {% if last_item %}
+    <dl>
+        <dt>Product:</dt><dd>{{ last_item.item_description }}</dd>
+        <dt>Code:</dt><dd>{{ last_item.item_code }}</dd>
+        <dt>Size:</dt><dd>{{ last_item.item_size|default:"—" }}</dd>
+        <dt>Color:</dt><dd>{{ last_item.item_color|default:"—" }}</dd>
+        <dt>Price:</dt><dd>&#8369;{{ last_item.item_price|floatformat:2 }}</dd>
+    </dl>
+    {% else %}
+    <p class="empty">Scan an item to see details</p>
+    {% endif %}
+</div>
+<div id="scanned-items-panel" class="scanned-items-panel" hx-swap-oob="true">
+    {% with show_new_anim=True %}
+    {% include "sales/partials/_scanned_items_list.html" %}
+    {% endwith %}
+</div>
+<div class="toast">Added</div>

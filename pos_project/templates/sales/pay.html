@@ -1,0 +1,120 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment - POS</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; margin: 0; background: #1e2328; color: #e6edf3; min-height: 100vh; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: #252b33; border-bottom: 1px solid #2f3640; }
+        .store-name { font-size: 1.25rem; font-weight: 700; }
+        .container { max-width: 560px; margin: 2rem auto; padding: 0 1rem; }
+
+        /* Amount due box */
+        .total-box { background: #252b33; padding: 1.25rem 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; text-align: center; border: 1px solid #2f3640; }
+        .total-label { font-size: 0.875rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; }
+        .total-amount { font-size: 2.75rem; font-weight: 700; margin: 0.25rem 0; }
+        .total-breakdown { font-size: 0.875rem; color: #8b949e; margin-top: 0.25rem; }
+        .total-breakdown-disc { color: #6edb8f; font-weight: 500; }
+
+        /* Tender buttons */
+        h3 { font-size: 0.875rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.75rem; }
+        .tenders { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+        .tender-btn { padding: 0.9rem 1rem; font-size: 1rem; background: #2d343e; border: 2px solid #2f3640; border-radius: 8px; color: #e6edf3; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+        .tender-btn:hover { border-color: #8b3d4a; background: #2f3640; }
+        .tender-btn.selected { border-color: #8b3d4a; background: #8b3d4a; color: white; }
+
+        /* Cash section */
+        .cash-section { display: none; background: #252b33; border: 1px solid #2f3640; border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+        .cash-section.visible { display: block; }
+        .cash-section-title { font-size: 0.875rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+        .quick-amounts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+        .quick-btn { padding: 0.45rem 0.9rem; font-size: 0.9rem; background: #2d343e; border: 1.5px solid #2f3640; border-radius: 6px; color: #e6edf3; cursor: pointer; font-weight: 500; }
+        .quick-btn:hover { border-color: #8b3d4a; background: #3d454d; }
+        .quick-btn.exact { border-color: #4a5568; }
+        .tendered-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+        .tendered-currency { font-size: 1.5rem; font-weight: 700; color: #8b949e; }
+        .tendered-input { flex: 1; padding: 0.75rem 1rem; font-size: 1.75rem; font-weight: 700; border: 2px solid #2f3640; border-radius: 6px; background: #2d343e; color: #e6edf3; text-align: right; }
+        .tendered-input:focus { outline: none; border-color: #8b3d4a; }
+
+        /* Change display */
+        .change-box { display: flex; justify-content: space-between; align-items: baseline; padding: 0.75rem 1rem; border-radius: 6px; background: #2d343e; }
+        .change-label { font-size: 0.9rem; color: #8b949e; }
+        .change-amount { font-size: 1.75rem; font-weight: 700; }
+        .change-amount.ok     { color: #6edb8f; }
+        .change-amount.exact  { color: #8b949e; }
+        .change-amount.short  { color: #f85149; font-size: 1rem; }
+
+        /* Actions */
+        .actions { display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem; }
+        .btn { padding: 0.8rem 1.75rem; font-size: 1rem; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; font-weight: 600; }
+        .btn-primary { background: #8b3d4a; color: white; font-size: 1.1rem; padding: 0.9rem 2.5rem; }
+        .btn-primary:hover { background: #7a3540; }
+        .btn-primary:disabled { background: #484f58; cursor: not-allowed; }
+        .btn-secondary { background: #2f3640; color: #e6edf3; }
+        .btn-secondary:hover { background: #3d454d; }
+        .empty { text-align: center; padding: 2rem; color: #666; }
+        /* Pay modal (shared with cashier partial) */
+        .pay-modal-inner { padding: 1.25rem 0; }
+        .pay-total-box { background: #2d343e; padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 1.25rem; text-align: center; border: 1px solid #2f3640; }
+        .pay-total-label { font-size: 0.7rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; }
+        .pay-total-amount { font-size: 2.25rem; font-weight: 700; margin: 0.2rem 0; }
+        .pay-total-breakdown { font-size: 0.8rem; color: #8b949e; margin-top: 0.2rem; }
+        .pay-total-breakdown-disc { color: #6edb8f; font-weight: 500; }
+        .pay-tender-title { font-size: 0.8rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.6rem; }
+        .pay-tenders { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.6rem; margin-bottom: 1.25rem; }
+        .pay-tender-btn { padding: 0.75rem 0.9rem; font-size: 0.95rem; background: #2d343e; border: 2px solid #2f3640; border-radius: 8px; color: #e6edf3; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+        .pay-tender-btn:hover { border-color: #8b3d4a; background: #2f3640; }
+        .pay-tender-btn.selected { border-color: #8b3d4a; background: #8b3d4a; color: white; }
+        .pay-cash-section { display: none; background: #2d343e; border: 1px solid #2f3640; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+        .pay-cash-section.visible { display: block; }
+        .pay-quick-amounts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
+        .pay-quick-btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; background: #252b33; border: 1.5px solid #2f3640; border-radius: 6px; color: #e6edf3; cursor: pointer; font-weight: 500; }
+        .pay-quick-btn:hover { border-color: #8b3d4a; background: #3d454d; }
+        .pay-tendered-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+        .pay-tendered-currency { font-size: 1.5rem; font-weight: 700; color: #8b949e; }
+        .pay-tendered-input { flex: 1; padding: 0.6rem 0.9rem; font-size: 1.5rem; font-weight: 700; border: 2px solid #2f3640; border-radius: 6px; background: #252b33; color: #e6edf3; text-align: right; }
+        .pay-tendered-input:focus { outline: none; border-color: #8b3d4a; }
+        .pay-entries-section { background: #2d343e; border: 1px solid #2f3640; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+        .pay-entries-list { min-height: 2rem; margin-bottom: 0.75rem; }
+        .pay-entries-empty { margin: 0; color: #6e7681; font-size: 0.9rem; }
+        .pay-entry-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid #2f3640; }
+        .pay-entry-item:last-child { border-bottom: none; }
+        .pay-entry-desc { flex: 1; font-weight: 500; }
+        .pay-entry-amt { font-weight: 600; }
+        .pay-entry-remove { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 1.2rem; line-height: 1; padding: 0 0.3rem; }
+        .pay-entry-remove:hover { color: #f85149; }
+        .pay-summary-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.95rem; }
+        .pay-summary-label { color: #8b949e; }
+        .pay-summary-value { font-weight: 600; }
+        .pay-summary-value.ok { color: #6edb8f; }
+        .pay-summary-value.short { color: #f85149; }
+        .pay-change-row { display: flex; justify-content: space-between; align-items: baseline; padding: 0.5rem 0; margin-top: 0.25rem; border-top: 1px solid #2f3640; }
+        .pay-change-amount.ok { color: #6edb8f; }
+        .pay-add-section { margin-bottom: 1rem; }
+        .pay-add-btn { margin-top: 0.5rem; }
+        .pay-modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.25rem; }
+        .pay-empty { text-align: center; padding: 1.5rem; color: #8b949e; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <span class="store-name">{{ store_name|default:"POS Store" }}</span>
+        <a href="{% url 'sales:pos_cashier' %}" class="btn btn-secondary">← Back to Sale</a>
+    </header>
+
+    <div class="container">
+        {% if tenders %}
+        {% include "sales/partials/_pay_modal.html" %}
+        {% else %}
+        <p class="empty">No payment methods configured. Run: <code>python manage.py seed_tenders</code></p>
+        <div class="actions">
+            <a href="{% url 'sales:pos_cashier' %}" class="btn btn-secondary">Back to Sale</a>
+        </div>
+        {% endif %}
+    </div>
+
+</body>
+</html>
