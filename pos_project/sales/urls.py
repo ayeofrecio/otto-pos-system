@@ -9,8 +9,6 @@ from . import views
 app_name = "sales"
 
 urlpatterns = [
-    path("login/", views.pos_login, name="pos_login"),
-    path("logout/", views.pos_logout, name="pos_logout"),
     path("", views.cashier_view, name="pos_cashier"),
     path("cart/add/", views.cart_add, name="cart_add"),
     path("cart/remove/", views.cart_remove, name="cart_remove"),

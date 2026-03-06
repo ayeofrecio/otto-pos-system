@@ -6,13 +6,10 @@ import datetime
 from decimal import Decimal
 
 from django.db import models
-from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import ensure_csrf_cookie
-
 from .models import Item, ItemDetail, TempTransaction, TransactionLog, POSTransCounter, Tender, TerminalSetup, Color, Size
 from .services import get_business_date
 
@@ -100,40 +97,10 @@ def _get_next_transaction_no():
 
 
 # ---------------------------------------------------------------------------
-# Login / Logout
-# ---------------------------------------------------------------------------
-
-@ensure_csrf_cookie
-def pos_login(request):
-    """Cashier login page."""
-    if request.user.is_authenticated:
-        return redirect("sales:pos_cashier")
-
-    if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "")
-        if username and password:
-            user = authenticate(request, username=username, password=password)
-            if user:
-                login(request, user)
-                next_url = request.GET.get("next") or "sales:pos_cashier"
-                return redirect(next_url)
-        return render(request, "sales/login.html", {"error": "Invalid username or password.", "store_name": _get_store_name()})
-
-    return render(request, "sales/login.html", {"store_name": _get_store_name()})
-
-
-def pos_logout(request):
-    """Cashier logout."""
-    logout(request)
-    return redirect("sales:pos_login")
-
-
-# ---------------------------------------------------------------------------
 # Cashier main view
 # ---------------------------------------------------------------------------
 
-@login_required(login_url="sales:pos_login")
+@login_required
 def cashier_view(request):
     """Main POS cashier screen."""
     user_id = _get_user_id(request)
@@ -186,7 +153,7 @@ def cashier_view(request):
 # Cart API (HTMX / JSON)
 # ---------------------------------------------------------------------------
 
-@login_required(login_url="sales:pos_login")
+@login_required(login_url="pos_login")
 @require_http_methods(["POST"])
 def cart_add(request):
     """Add item by barcode. Returns HTML fragment for HTMX or JSON."""
@@ -314,7 +281,7 @@ def cart_add(request):
     })
 
 
-@login_required(login_url="sales:pos_login")
+@login_required(login_url="pos_login")
 @require_http_methods(["POST"])
 def cart_remove(request):
     """Remove a cart line by rec_ctr."""
@@ -367,7 +334,7 @@ def cart_remove(request):
     return JsonResponse({"ok": True, "total": str(total)})
 
 
-@login_required(login_url="sales:pos_login")
+@login_required(login_url="pos_login")
 def cart_new(request):
     """Start a new transaction (clear cart, get new receipt number)."""
     user_id = _get_user_id(request)
@@ -388,7 +355,7 @@ def cart_new(request):
     return redirect("sales:pos_cashier")
 
 
-@login_required(login_url="sales:pos_login")
+@login_required(login_url="pos_login")
 @require_http_methods(["POST"])
 def cart_trans_disc(request):
     """Set or clear transaction-level discount. Returns updated cart-summary HTML."""
@@ -426,7 +393,7 @@ def cart_trans_disc(request):
     })
 
 
-@login_required(login_url="sales:pos_login")
+@login_required(login_url="pos_login")
 def pay_view(request):
     """Payment screen - select tender and complete sale."""
     user_id = _get_user_id(request)
@@ -492,7 +459,7 @@ def _parse_tender_entries(request):
         return []
 
 
-@login_required(login_url="sales:pos_login")
+@login_required(login_url="pos_login")
 @require_http_methods(["POST"])
 def payment_complete(request):
     """Complete payment with tender entries. Supports multiple tenders. Only completes when total tendered >= amount due."""
@@ -600,7 +567,7 @@ def payment_complete(request):
     return redirect("sales:receipt")
 
 
-# @login_required(login_url="sales:pos_login")
+# @login_required(login_url="pos_login")
 # def receipt_view(request):
 #     """Display receipt after payment. Data comes from session."""
 #     receipt = request.session.get("last_receipt")
@@ -633,7 +600,7 @@ def payment_complete(request):
 
 
 
-@login_required(login_url="sales:pos_login")
+@login_required(login_url="pos_login")
 def receipt_view(request):
     """Display receipt after payment. Data comes from session."""
     receipt = request.session.get("last_receipt")
@@ -771,7 +738,7 @@ def receipt_view(request):
     return render(request, "sales/receipt.html", context)
 
 
-@login_required(login_url="sales:pos_login")
+@login_required(login_url="pos_login")
 def item_search(request):
     """Search items by description, code, or barcode. Returns JSON."""
     q = (request.GET.get("q") or "").strip()

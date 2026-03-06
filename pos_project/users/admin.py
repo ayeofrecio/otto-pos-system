@@ -1,0 +1,22 @@
+# users_app/admin.py
+
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
+
+from users.models import UserProfile
+
+
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+    verbose_name_plural = 'POS Profile'
+    fields = ('role', 'store_id', 'terminal_id', 'middle_initial', 'suffix', 'is_suspended')
+
+
+class UserAdmin(BaseUserAdmin):
+    inlines = (UserProfileInline,)
+
+
+admin.site.unregister(User)
+admin.site.register(User, UserAdmin)

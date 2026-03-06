@@ -21,7 +21,7 @@
         <h1>POS Cashier Login</h1>
         {% if store_name %}<p style="text-align:center;color:#8b949e;margin:0 0 1rem;font-size:0.9rem;">{{ store_name }}</p>{% endif %}
         {% if error %}<p class="error">{{ error }}</p>{% endif %}
-        <form method="post" action="{% url 'sales:pos_login' %}">
+        <form method="post" action="{% url 'pos_login' %}">
             {% csrf_token %}
             <input type="text" name="username" placeholder="Username" required autofocus>
             <input type="password" name="password" placeholder="Password" required>

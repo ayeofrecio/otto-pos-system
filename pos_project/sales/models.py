@@ -2,7 +2,7 @@ import datetime
 from decimal import Decimal
 
 from django.db import models
-
+from django.contrib.auth.models import User
 
 class TransactionLog(models.Model):
     """
@@ -351,70 +351,6 @@ class TempTransaction(models.Model):
 # USERS  →  Cashier / staff accounts
 # (will move to users app once that app is built)
 # ---------------------------------------------------------------------------
-
-class ClarionUser(models.Model):
-    """
-    Equivalent of the Clarion USERS table.
-    Stores cashier and back-office user accounts with role, schedule,
-    and audit timestamps. Primary key: user_id.
-    Named ClarionUser to avoid collision with Django's built-in User model.
-    """
-
-    user_id          = models.CharField(max_length=10, unique=True)    # UserID
-    first_name       = models.CharField(max_length=15, blank=True)     # Firstname
-    last_name        = models.CharField(max_length=15, blank=True)     # Lastname
-    middle_initial   = models.CharField(max_length=1, blank=True)      # MiddleInitial
-    suffix           = models.CharField(max_length=6, blank=True)      # Suffix
-    long_name        = models.CharField(max_length=35, blank=True)     # LongName
-
-    # --- Role / access ---
-    user_level       = models.PositiveSmallIntegerField(default=0)     # UserLevel  (BYTE)
-    user_group       = models.CharField(max_length=15, blank=True)     # UserGroup
-    department       = models.CharField(max_length=15, blank=True)     # Department
-    modules          = models.CharField(max_length=50, blank=True)     # Modules
-    mode             = models.CharField(max_length=1, blank=True)      # Mode
-
-    # --- Credentials ---
-    password1        = models.CharField(max_length=10, blank=True)     # Password1
-    password2        = models.CharField(max_length=10, blank=True)     # Password2
-
-    # --- Flags ---
-    allow_change     = models.PositiveSmallIntegerField(default=0)     # AllowChange (BYTE)
-    allow_all        = models.PositiveSmallIntegerField(default=0)     # AllowAll    (BYTE)
-    active           = models.PositiveSmallIntegerField(default=0)     # Active      (BYTE)
-    suspended        = models.PositiveSmallIntegerField(default=0)     # Suspended   (BYTE)
-
-    # --- Expiry ---
-    expiry           = models.PositiveSmallIntegerField(default=0)     # Expiry      (BYTE)
-    expiry_date      = models.DateField(null=True, blank=True)         # ExpiryDate
-    login_days       = models.PositiveSmallIntegerField(default=0)     # LoginDays   (BYTE)
-
-    # --- Schedule ---
-    allowed_days     = models.CharField(max_length=8, blank=True)      # AllowedDays
-    allowed_shifts   = models.CharField(max_length=8, blank=True)      # AllowedShifts
-
-    # --- Last login ---
-    last_login_date  = models.DateField(null=True, blank=True)         # LastLogin
-    last_logon_time  = models.TimeField(null=True, blank=True)         # LastLogonTime
-
-    # --- Notes ---
-    notes            = models.SmallIntegerField(default=0)             # Notes (SHORT)
-    tag              = models.CharField(max_length=1, blank=True)      # Tag
-
-    # --- Audit ---
-    entry_by         = models.CharField(max_length=10, blank=True)     # EntryBy
-    entry_date       = models.DateField(null=True, blank=True)         # EntryDate
-    entry_time       = models.TimeField(null=True, blank=True)         # EntryTime
-    update_by        = models.CharField(max_length=10, blank=True)     # UpdateBy
-    update_date      = models.DateField(null=True, blank=True)         # UpdateDate
-    update_time      = models.TimeField(null=True, blank=True)         # UpdateTime
-
-    class Meta:
-        db_table = 'users'
-
-    def __str__(self):
-        return f'{self.user_id} – {self.last_name}, {self.first_name}'
-
 
 # ---------------------------------------------------------------------------
 # TENDERS  →  Payment tender type configuration
