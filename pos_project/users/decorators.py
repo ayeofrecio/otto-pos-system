@@ -1,7 +1,7 @@
 # users/decorators.py
 
 from django.contrib.auth.decorators import user_passes_test
-from users.models import UserProfile
+from users.models import Users
 
 
 # ---------------------------------------------------------
@@ -10,10 +10,10 @@ from users.models import UserProfile
 # ---------------------------------------------------------
 
 ROLE_LEVELS = {
-    UserProfile.ROLE_CASHIER: 1,
-    UserProfile.ROLE_SUPERVISOR: 2,
-    UserProfile.ROLE_MANAGER: 3,
-    UserProfile.ROLE_ADMIN: 4,
+    Users.ROLE_CASHIER: 1,
+    Users.ROLE_SUPERVISOR: 2,
+    Users.ROLE_MANAGER: 3,
+    Users.ROLE_ADMIN: 4,
 }
 
 
@@ -28,7 +28,7 @@ def _get_profile(user):
     """
     try:
         return user.profile
-    except (AttributeError, UserProfile.DoesNotExist):
+    except (AttributeError, Users.DoesNotExist):
         return None
 
 
@@ -41,7 +41,7 @@ def role_required(min_role_level):
     Generic decorator for role-based access control.
 
     Example:
-        @role_required(ROLE_LEVELS[UserProfile.ROLE_MANAGER])
+        @role_required(ROLE_LEVELS[Users.ROLE_MANAGER])
     """
 
     def decorator(view_func):
@@ -77,7 +77,7 @@ def cashier_required(view_func):
     Cashier, Supervisor, Manager, Admin
     """
     return role_required(
-        ROLE_LEVELS[UserProfile.ROLE_CASHIER]
+        ROLE_LEVELS[Users.ROLE_CASHIER]
     )(view_func)
 
 
@@ -87,7 +87,7 @@ def supervisor_required(view_func):
     Supervisor, Manager, Admin
     """
     return role_required(
-        ROLE_LEVELS[UserProfile.ROLE_SUPERVISOR]
+        ROLE_LEVELS[Users.ROLE_SUPERVISOR]
     )(view_func)
 
 
@@ -97,7 +97,7 @@ def manager_required(view_func):
     Manager, Admin
     """
     return role_required(
-        ROLE_LEVELS[UserProfile.ROLE_MANAGER]
+        ROLE_LEVELS[Users.ROLE_MANAGER]
     )(view_func)
 
 
@@ -107,5 +107,5 @@ def admin_required(view_func):
     Admin only
     """
     return role_required(
-        ROLE_LEVELS[UserProfile.ROLE_ADMIN]
+        ROLE_LEVELS[Users.ROLE_ADMIN]
     )(view_func)

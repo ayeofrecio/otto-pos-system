@@ -23,6 +23,7 @@ load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ['SECRET_KEY']
 
+AUTH_USER_MODEL = 'users.Users'  # Use our custom user model
 # ---------------------------------------------------------------------------
 # Application definition
 # ---------------------------------------------------------------------------
@@ -167,3 +168,4 @@ LOGGING = {
 # ---------------------------------------------------------------------------
 
 LOGIN_URL = 'pos_login'
+

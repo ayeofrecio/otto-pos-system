@@ -18,4 +18,5 @@ urlpatterns = [
     path("pay/complete/", views.payment_complete, name="payment_complete"),
     path("receipt/", views.receipt_view, name="receipt"),
     path("item-search/", views.item_search, name="item_search"),
+    path("open-session/", views.open_session, name="open_session"),
 ]

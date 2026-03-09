@@ -373,7 +373,7 @@
         const CSRF_TOKEN = "{{ csrf_token }}";
         // Initialise trans_disc state from server session (survives page reload)
         const INITIAL_TRANS_DISC = {
-            pct:   {{ trans_disc.pct|default:0 }},
+            pct:   "{{ trans_disc.pct|default:0 }}",
             type:  "{{ trans_disc.type|default:'' }}",
             label: "{{ trans_disc.label|default:'' }}"
         };

@@ -4,12 +4,17 @@ POS Cashier views: login, cashier screen, cart operations.
 
 import datetime
 from decimal import Decimal
+from pyexpat.errors import messages
 
 from django.db import models
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
+
+from users.models import POSSession
+
+from .decorators import require_open_session
 from .models import Item, ItemDetail, TempTransaction, TransactionLog, POSTransCounter, Tender, TerminalSetup, Color, Size
 from .services import get_business_date
 
@@ -23,6 +28,7 @@ import time
 
 STORE_ID = "001"
 TERMINAL_ID = "001"
+
 
 
 # ---------------------------------------------------------------------------
@@ -95,12 +101,45 @@ def _get_next_transaction_no():
 
 
 
+@login_required
+def open_session(request):
+    user = request.user
 
+    # Prevent multiple open sessions
+    if POSSession.objects.filter(cashier=user, status="open").exists():
+        messages.info(request, "You already have an open session.")
+        return redirect("sales:pos_cashier")
+
+    if request.method == "POST":
+        opening_cash = request.POST.get("opening_cash")
+
+        # Validate opening cash
+        try:
+            opening_cash = float(opening_cash)
+        except (TypeError, ValueError):
+            messages.error(request, "Invalid opening cash amount.")
+            return redirect("sales:open_session")
+
+        # Create new POS session
+        POSSession.objects.create(
+            cashier=user,
+            terminal_id="001",
+            store_id="001",
+            business_date=datetime.date.today(),
+            opening_cash=opening_cash,
+            status="open"
+        )
+
+        messages.success(request, "POS session opened successfully.")
+        return redirect("sales:pos_cashier")
+
+    return render(request, "sales/open_session.html")
 # ---------------------------------------------------------------------------
 # Cashier main view
 # ---------------------------------------------------------------------------
 
 @login_required
+@require_open_session
 def cashier_view(request):
     """Main POS cashier screen."""
     user_id = _get_user_id(request)
@@ -153,7 +192,7 @@ def cashier_view(request):
 # Cart API (HTMX / JSON)
 # ---------------------------------------------------------------------------
 
-@login_required(login_url="pos_login")
+@login_required
 @require_http_methods(["POST"])
 def cart_add(request):
     """Add item by barcode. Returns HTML fragment for HTMX or JSON."""
@@ -281,7 +320,7 @@ def cart_add(request):
     })
 
 
-@login_required(login_url="pos_login")
+@login_required
 @require_http_methods(["POST"])
 def cart_remove(request):
     """Remove a cart line by rec_ctr."""
@@ -334,7 +373,7 @@ def cart_remove(request):
     return JsonResponse({"ok": True, "total": str(total)})
 
 
-@login_required(login_url="pos_login")
+@login_required
 def cart_new(request):
     """Start a new transaction (clear cart, get new receipt number)."""
     user_id = _get_user_id(request)
@@ -346,7 +385,7 @@ def cart_new(request):
             terminal_id=TERMINAL_ID,
             store_id=STORE_ID,
             transaction_no=trans_no,
-        ).delete()
+        ).delete() # This needs to be configured to suspend instead of delete in case we want to support suspended transactions in the future
 
     new_trans = _get_next_transaction_no()
     request.session["pos_trans_no"] = new_trans
@@ -355,7 +394,7 @@ def cart_new(request):
     return redirect("sales:pos_cashier")
 
 
-@login_required(login_url="pos_login")
+@login_required
 @require_http_methods(["POST"])
 def cart_trans_disc(request):
     """Set or clear transaction-level discount. Returns updated cart-summary HTML."""
@@ -393,7 +432,7 @@ def cart_trans_disc(request):
     })
 
 
-@login_required(login_url="pos_login")
+@login_required
 def pay_view(request):
     """Payment screen - select tender and complete sale."""
     user_id = _get_user_id(request)
@@ -459,7 +498,7 @@ def _parse_tender_entries(request):
         return []
 
 
-@login_required(login_url="pos_login")
+@login_required
 @require_http_methods(["POST"])
 def payment_complete(request):
     """Complete payment with tender entries. Supports multiple tenders. Only completes when total tendered >= amount due."""
@@ -567,7 +606,7 @@ def payment_complete(request):
     return redirect("sales:receipt")
 
 
-# @login_required(login_url="pos_login")
+# @login_required
 # def receipt_view(request):
 #     """Display receipt after payment. Data comes from session."""
 #     receipt = request.session.get("last_receipt")
@@ -600,7 +639,7 @@ def payment_complete(request):
 
 
 
-@login_required(login_url="pos_login")
+@login_required
 def receipt_view(request):
     """Display receipt after payment. Data comes from session."""
     receipt = request.session.get("last_receipt")
@@ -738,7 +777,7 @@ def receipt_view(request):
     return render(request, "sales/receipt.html", context)
 
 
-@login_required(login_url="pos_login")
+@login_required
 def item_search(request):
     """Search items by description, code, or barcode. Returns JSON."""
     q = (request.GET.get("q") or "").strip()

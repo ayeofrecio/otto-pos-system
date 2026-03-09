@@ -2,7 +2,6 @@ import datetime
 from decimal import Decimal
 
 from django.db import models
-from django.contrib.auth.models import User
 
 class TransactionLog(models.Model):
     """
@@ -346,11 +345,6 @@ class TempTransaction(models.Model):
     def __str__(self):
         return f'{self.transaction_no} / {self.item_code}'
 
-
-# ---------------------------------------------------------------------------
-# USERS  →  Cashier / staff accounts
-# (will move to users app once that app is built)
-# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # TENDERS  →  Payment tender type configuration
