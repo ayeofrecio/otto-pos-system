@@ -37,6 +37,41 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Denomination Modal
+  // ---------------------------------------------------------------------------
+
+  window.openDenominationModal = function () {
+    const modal = document.getElementById("denom-modal");
+    if (modal) modal.classList.add("open");
+  };
+
+  window.closeDenominationModal = function () {
+    const modal = document.getElementById("denom-modal");
+    if (modal) modal.classList.remove("open");
+  };
+
+  window.closeDenominationModalOutside = function (e) {
+    if (e.target === document.getElementById("denom-modal")) {
+      window.closeDenominationModal();
+    }
+  };
+
+  window.applyDenominationTotal = function () {
+
+    const total = document.getElementById("denom-total-display").dataset.total || 0;
+
+    const cashInput = document.getElementById("closing-cash-input");
+
+    if (cashInput) {
+      cashInput.value = parseFloat(total).toFixed(2);
+      cashInput.dispatchEvent(new Event("input", { bubbles: true }));
+      cashInput.focus();
+    }
+
+    window.closeDenominationModal();
+  };
+
+  // ---------------------------------------------------------------------------
   // Toast auto-dismiss + open search on item-not-found
   // ---------------------------------------------------------------------------
   document.body.addEventListener('htmx:afterSwap', function (evt) {
@@ -100,6 +135,12 @@
       return;
     }
 
+    if (evt.key === 'F8') {
+      evt.preventDefault();
+      window.openCloseTransModal();
+      return;
+    }
+
     if (evt.key === '*' && qtyInput && document.activeElement === barcodeInput && !barcodeInput.value) {
       evt.preventDefault();
       qtyInput.focus();
@@ -114,6 +155,7 @@
       if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
       else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
+      else if (closeTransModal && closeTransModal.classList.contains('open')) { window.closeCloseTransModal(); }
     }
   });
 
@@ -316,8 +358,8 @@
   function submitTransDisc() {
     const form = document.getElementById('trans-disc-form');
     if (!form) { return; }
-    document.getElementById('trans-disc-pct-hidden').value   = pendingTransDisc.pct;
-    document.getElementById('trans-disc-type-hidden').value  = pendingTransDisc.type;
+    document.getElementById('trans-disc-pct-hidden').value = pendingTransDisc.pct;
+    document.getElementById('trans-disc-type-hidden').value = pendingTransDisc.type;
     document.getElementById('trans-disc-label-hidden').value = pendingTransDisc.label;
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   }
@@ -435,7 +477,7 @@
         ' ' + variantHtml + '</span>' +
         '<span class="search-result-code">' + escHtml(item.code) + '</span>' +
         '<span class="search-result-variant">' + escHtml(item.barcode) + '</span>' +
-        '<span class="search-result-price">₱' + parseFloat(item.price).toLocaleString('en-PH', {minimumFractionDigits: 2}) + '</span>' +
+        '<span class="search-result-price">₱' + parseFloat(item.price).toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '</span>' +
         '</div>';
     });
     resultsEl.innerHTML = rows.join('');
@@ -461,4 +503,270 @@
       .replace(/'/g, '&#39;');
   }
 
+  // ---------------------------------------------------------------------------
+  // Close Transaction Modal (F8)
+  // ---------------------------------------------------------------------------
+  window.openCloseTransModal = function () {
+    const modal = document.getElementById('close-trans-modal');
+    if (!modal) { return; }
+
+    // Pull expected cash from the cart total displayed on screen
+    const cartTotalEl = document.querySelector('.cart-total');
+    let expectedCash = 0;
+    if (cartTotalEl) {
+      expectedCash = parseFloat(
+        cartTotalEl.textContent.replace(/[^0-9.]/g, '')
+      ) || 0;
+    }
+
+    // Store for variance calc
+    modal._expectedCash = expectedCash;
+
+    const expectedEl = document.getElementById('close-trans-expected');
+    if (expectedEl) {
+      expectedEl.textContent = '₱' + expectedCash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+
+    // Reset variance display
+    const varianceEl = document.getElementById('close-trans-variance');
+    if (varianceEl) {
+      varianceEl.textContent = '—';
+      varianceEl.className = 'close-trans-variance-val';
+    }
+
+    // Reset inputs
+    const cashInput = document.getElementById('closing-cash-input');
+    const notesInput = document.getElementById('close-trans-notes');
+    const confirmBtn = document.getElementById('close-trans-confirm-btn');
+    if (cashInput) { cashInput.value = ''; }
+    if (notesInput) { notesInput.value = ''; }
+    if (confirmBtn) { confirmBtn.disabled = true; }
+
+    // Reset denominations
+    document.querySelectorAll('.denom-qty').forEach(function (inp) { inp.value = 0; });
+    document.querySelectorAll('.denom-subtotal').forEach(function (el) { el.textContent = '₱0.00'; });
+    const denomTotalEl = document.getElementById('denom-total-display');
+    if (denomTotalEl) { denomTotalEl.textContent = '₱0.00'; }
+
+    modal.classList.add('open');
+
+    setTimeout(function () {
+      if (cashInput) { cashInput.focus(); }
+    }, 80);
+  };
+
+  window.closeCloseTransModal = function () {
+    const modal = document.getElementById('close-trans-modal');
+    if (modal) { modal.classList.remove('open'); }
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closeCloseTransModalOutside = function (evt) {
+    if (evt.target === document.getElementById('close-trans-modal')) {
+      window.closeCloseTransModal();
+    }
+  };
+
+  // Live variance calculation as cashier types
+  const closingCashInput = document.getElementById('closing-cash-input');
+  if (closingCashInput) {
+    closingCashInput.addEventListener('input', function () {
+      const modal = document.getElementById('close-trans-modal');
+      const expected = 5000;// modal ? (modal._expectedCash || 5000) : 5000; // #TODO: Change this if you pull expected cash from somewhere else
+      const actual = parseFloat(closingCashInput.value) || 0;
+      const variance = actual - expected;
+      const varianceEl = document.getElementById('close-trans-variance');
+      const confirmBtn = document.getElementById('close-trans-confirm-btn');
+
+      if (varianceEl) {
+        if (!closingCashInput.value) {
+          varianceEl.textContent = '—';
+          varianceEl.className = 'close-trans-variance-val';
+        } else if (variance > 0) {
+          varianceEl.textContent = '+₱' + variance.toLocaleString('en-PH', { minimumFractionDigits: 2 }) + ' over';
+          varianceEl.className = 'close-trans-variance-val over';
+        } else if (variance < 0) {
+          varianceEl.textContent = '₱' + Math.abs(variance).toLocaleString('en-PH', { minimumFractionDigits: 2 }) + ' short';
+          varianceEl.className = 'close-trans-variance-val short';
+        } else {
+          varianceEl.textContent = 'Exact';
+          varianceEl.className = 'close-trans-variance-val exact';
+        }
+      }
+
+      if (confirmBtn) {
+        confirmBtn.disabled = !closingCashInput.value || actual < 0;
+      }
+    });
+
+    closingCashInput.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Enter') { evt.preventDefault(); window.confirmCloseTrans(); }
+    });
+  }
+
+  // Denomination counter
+  document.querySelectorAll('.denom-qty').forEach(function (inp) {
+    inp.addEventListener('input', function () {
+      const row = inp.closest('.denom-row');
+      const value = parseFloat(row.getAttribute('data-value')) || 0;
+      const qty = parseInt(inp.value, 10) || 0;
+      const subtotal = value * qty;
+      const subtotalEl = row.querySelector('.denom-subtotal');
+      if (subtotalEl) {
+        subtotalEl.textContent = '₱' + subtotal.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+      }
+      recalcDenomTotal();
+    });
+  });
+
+  function recalcDenomTotal() {
+    let total = 0;
+    document.querySelectorAll('.denom-row').forEach(function (row) {
+      const value = parseFloat(row.getAttribute('data-value')) || 0;
+      const qty = parseInt(row.querySelector('.denom-qty').value, 10) || 0;
+      total += value * qty;
+    });
+    const denomTotalEl = document.getElementById('denom-total-display');
+    if (denomTotalEl) {
+      denomTotalEl.textContent = '₱' + total.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+  }
+
+  window.useDenomTotal = function () {
+    let total = 0;
+    document.querySelectorAll('.denom-row').forEach(function (row) {
+      const value = parseFloat(row.getAttribute('data-value')) || 0;
+      const qty = parseInt(row.querySelector('.denom-qty').value, 10) || 0;
+      total += value * qty;
+    });
+    const cashInput = document.getElementById('closing-cash-input');
+    if (cashInput) {
+      cashInput.value = total.toFixed(2);
+      cashInput.dispatchEvent(new Event('input', { bubbles: true }));
+      cashInput.focus();
+    }
+  };
+
+  window.confirmCloseTrans = function () {
+    const cashInput = document.getElementById('closing-cash-input');
+    const notesInput = document.getElementById('close-trans-notes');
+    const modal = document.getElementById('close-trans-modal');
+    const confirmBtn = document.getElementById('close-trans-confirm-btn');
+
+    const closingCash = parseFloat(cashInput ? cashInput.value : 0) || 0;
+    if (closingCash < 0) { return; }
+
+    const expected = modal ? (modal._expectedCash || 0) : 0;
+    const variance = closingCash - expected;
+    const notes = notesInput ? notesInput.value.trim() : '';
+
+    const payload = {
+      closing_cash: closingCash,
+      expected_cash: expected,
+      cash_variance: variance,
+      notes: notes,
+    };
+
+    console.log('Close transaction payload:', payload);
+
+    // ── Wire to your backend here ──────────────────────────────────
+    // confirmBtn.disabled    = true;
+    // confirmBtn.textContent = 'Closing…';
+    // fetch('/pos/close-session/', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+    //   body: JSON.stringify(payload),
+    // })
+    // .then(r => r.json())
+    // .then(() => { window.closeCloseTransModal(); window.location.href = '/pos/login/'; })
+    // .catch(err => console.error('Close session failed:', err));
+    // ───────────────────────────────────────────────────────────────
+
+    // Temporary confirmation until backend is wired
+    alert(
+      'Session closed.\n' +
+      'Closing Cash: ₱' + closingCash.toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '\n' +
+      'Variance: ' + (variance >= 0 ? '+' : '') + '₱' + variance.toLocaleString('en-PH', { minimumFractionDigits: 2 })
+    );
+
+  };
+
+  // ------------ check this first! ------------
+  window.closeCloseTransModal();
+  function openDenominationModal() {
+    document.getElementById("denom-modal").style.display = "flex";
+  }
+  function closeDenominationModal() {
+    document.getElementById("denom-modal").style.display = "none";
+  }
+  function closeDenominationModalOutside(e) {
+    if (e.target.id === "denom-modal") {
+      closeDenominationModal();
+    }
+  }
+  function applyDenominationTotal() {
+
+    const total = document.getElementById("denom-total-display").dataset.total;
+
+    document.getElementById("closing-cash-input").value = total;
+
+    closeDenominationModal();
+  }
+  document.querySelectorAll(".denom-row").forEach(row => {
+
+    const value = parseFloat(row.dataset.value);
+    const qtyInput = row.querySelector(".denom-qty");
+    const subtotalEl = row.querySelector(".denom-subtotal");
+
+    const plusBtn = row.querySelector(".plus");
+    const minusBtn = row.querySelector(".minus");
+
+    plusBtn.addEventListener("click", () => {
+      qtyInput.value = parseInt(qtyInput.value || 0) + 1;
+      updateRow();
+    });
+
+    minusBtn.addEventListener("click", () => {
+      qtyInput.value = Math.max(0, parseInt(qtyInput.value || 0) - 1);
+      updateRow();
+    });
+
+    qtyInput.addEventListener("input", updateRow);
+
+    function updateRow() {
+
+      const qty = parseInt(qtyInput.value || 0);
+      const subtotal = qty * value;
+
+      subtotalEl.textContent = formatPeso(subtotal);
+
+      updateDenomTotal();
+    }
+
+  });
+  function updateDenomTotal() {
+
+    let total = 0;
+
+    document.querySelectorAll(".denom-row").forEach(row => {
+
+      const value = parseFloat(row.dataset.value);
+      const qty = parseInt(row.querySelector(".denom-qty").value || 0);
+
+      total += value * qty;
+
+    });
+
+    const totalDisplay = document.getElementById("denom-total-display");
+
+    totalDisplay.textContent = formatPeso(total);
+    totalDisplay.dataset.total = total;
+  }
+  function formatPeso(num) {
+    return "₱" + num.toLocaleString("en-PH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
 })();

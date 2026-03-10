@@ -1,190 +1,1425 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Cashier</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <style>
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, sans-serif; margin: 0; background: #1e2328; color: #e6edf3; min-height: 100vh; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.5rem; background: #252b33; border-bottom: 1px solid #2f3640; }
-        .header-left { display: flex; gap: 2rem; align-items: center; }
-        .store-name { font-size: 1.25rem; font-weight: 700; }
-        .header-right { display: flex; gap: 2rem; align-items: center; }
-        .date { font-size: 1.125rem; }
-        .time { font-size: 1.125rem; font-weight: 600; }
-        .receipt-no { font-size: 1rem; color: #8b949e; }
-        .cashier { font-size: 1rem; }
-        .main { display: grid; grid-template-columns: 1fr 380px; gap: 1rem; padding: 1rem; min-height: calc(100vh - 140px); }
-        .left { display: flex; flex-direction: column; gap: 1rem; }
-        .barcode-area { flex: 0 0 auto; }
-        .barcode-input { width: 100%; padding: 1rem 1.25rem; font-size: 1.5rem; border: 2px solid #2f3640; border-radius: 6px; background: #2d343e; color: #e6edf3; }
-        .barcode-input:focus { outline: none; border-color: #8b3d4a; }
-        .barcode-input::placeholder { color: #6e7681; }
-        .detail-and-items-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; flex: 1; min-height: 200px; }
-        .item-detail { padding: 1rem; background: #252b33; border-radius: 6px; border: 1px solid #2f3640; }
-        .item-detail h3 { margin: 0 0 0.75rem; font-size: 0.875rem; color: #8b949e; }
-        .item-detail .empty { color: #6e7681; font-style: italic; }
-        .item-detail dl { margin: 0; }
-        .item-detail dt { float: left; margin-right: 0.5rem; color: #8b949e; }
-        .item-detail dd { margin: 0 0 0.5rem; }
-        .scanned-items-panel { padding: 1rem; background: #252b33; border-radius: 6px; border: 1px solid #2f3640; display: flex; flex-direction: column; overflow: hidden; }
-        .scanned-items-title { margin: 0 0 0.75rem; font-size: 0.875rem; color: #8b949e; }
-        .scanned-items-inner { flex: 1; overflow-y: auto; min-height: 0; }
-        .scanned-items-list { display: flex; flex-direction: column; gap: 0.5rem; }
-        .scanned-item { padding: 0.6rem 0; border-bottom: 1px solid #2f3640; }
-        .scanned-item:last-child { border-bottom: none; }
-        .scanned-item-desc { font-size: 1.35rem; font-weight: 600; margin-bottom: 0.25rem; line-height: 1.3; }
-        .scanned-item-meta { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: #8b949e; }
-        .scanned-item-variant { color: #60b8f0; }
-        .scanned-item-amount { font-weight: 600; color: #e6edf3; margin-left: auto; }
-        .scanned-items-empty { margin: 0; color: #6e7681; font-style: italic; }
-        .scanned-item-new { animation: highlight 1.5s ease-out; }
-        .cart-panel { display: flex; flex-direction: column; background: #252b33; border-radius: 6px; border: 1px solid #2f3640; overflow: hidden; }
-        .cart-total { padding: 1rem; background: #2d343e; font-size: 1.5rem; font-weight: 700; text-align: right; }
-        .cart-count { padding: 0.25rem 1rem; font-size: 0.875rem; color: #8b949e; }
-        .cart-list { flex: 1; overflow-y: auto; max-height: 400px; padding: 0.5rem; }
-        .cart-line { padding: 0.5rem; border-bottom: 1px solid #2f3640; }
-        .cart-line:hover { background: #2d343e; }
-        .cart-line-desc { display: block; font-size: 0.95rem; font-weight: 500; margin-bottom: 0.25rem; }
-        .cart-line-details { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; color: #8b949e; }
-        .cart-line form { display: inline; }
-        .cart-line-remove { padding: 0.2rem 0.4rem; font-size: 0.7rem; background: #8b3d4a; border: none; border-radius: 4px; color: white; cursor: pointer; }
-        .cart-line-remove:hover { background: #7a3540; }
-        .actions { display: flex; gap: 0.75rem; padding: 0.75rem 1.5rem; background: #252b33; border-top: 1px solid #2f3640; align-items: center; }
-        .actions-divider { width: 1px; background: #2f3640; align-self: stretch; margin: 0 0.25rem; }
-        .btn-fn { padding: 0.6rem 1.1rem; font-size: 0.875rem; border: 2px solid; border-radius: 6px; cursor: pointer; background: #1e2328; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; line-height: 1.2; }
-        .btn-fn .fn-key { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; opacity: 0.75; }
-        .btn-fn .fn-label { font-weight: 600; }
-        .btn-fn-green { border-color: #2a5c3a; color: #6edb8f; }
-        .btn-fn-green:hover { background: #122a1a; border-color: #6edb8f; }
-        .btn-fn-blue  { border-color: #1a3a50; color: #60b8f0; }
-        .btn-fn-blue:hover  { background: #0d2035; border-color: #60b8f0; }
-        .btn-fn-grey  { border-color: #2f3640; color: #8b949e; }
-        .btn-fn-grey:hover  { background: #2f3640; color: #e6edf3; }
-        .btn { padding: 0.75rem 1.5rem; font-size: 1rem; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; }
-        .btn-primary { background: #8b3d4a; color: white; }
-        .btn-primary:hover { background: #7a3540; }
-        .btn-secondary { background: #2f3640; color: #e6edf3; }
-        .btn-secondary:hover { background: #3d454d; }
-        #toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 1000; }
-        .toast { padding: 1rem 1.5rem; background: #8b3d4a; border-radius: 6px; color: white; }
-        .htmx-settling .cart-line-new { opacity: 1; }
-        .cart-line-new { animation: highlight 1.5s ease-out; }
-        @keyframes highlight { from { background: #8b3d4a; } to { background: transparent; } }
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 0;
+            background: #1e2328;
+            color: #e6edf3;
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1.5rem;
+            background: #252b33;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .header-left {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .store-name {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .date {
+            font-size: 1.125rem;
+        }
+
+        .time {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .receipt-no {
+            font-size: 1rem;
+            color: #8b949e;
+        }
+
+        .cashier {
+            font-size: 1rem;
+        }
+
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 1rem;
+            padding: 1rem;
+            min-height: calc(100vh - 140px);
+        }
+
+        .left {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .barcode-area {
+            flex: 0 0 auto;
+        }
+
+        .barcode-input {
+            width: 100%;
+            padding: 1rem 1.25rem;
+            font-size: 1.5rem;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #e6edf3;
+        }
+
+        .barcode-input:focus {
+            outline: none;
+            border-color: #8b3d4a;
+        }
+
+        .barcode-input::placeholder {
+            color: #6e7681;
+        }
+
+        .detail-and-items-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            flex: 1;
+            min-height: 200px;
+        }
+
+        .item-detail {
+            padding: 1rem;
+            background: #252b33;
+            border-radius: 6px;
+            border: 1px solid #2f3640;
+        }
+
+        .item-detail h3 {
+            margin: 0 0 0.75rem;
+            font-size: 0.875rem;
+            color: #8b949e;
+        }
+
+        .item-detail .empty {
+            color: #6e7681;
+            font-style: italic;
+        }
+
+        .item-detail dl {
+            margin: 0;
+        }
+
+        .item-detail dt {
+            float: left;
+            margin-right: 0.5rem;
+            color: #8b949e;
+        }
+
+        .item-detail dd {
+            margin: 0 0 0.5rem;
+        }
+
+        .scanned-items-panel {
+            padding: 1rem;
+            background: #252b33;
+            border-radius: 6px;
+            border: 1px solid #2f3640;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .scanned-items-title {
+            margin: 0 0 0.75rem;
+            font-size: 0.875rem;
+            color: #8b949e;
+        }
+
+        .scanned-items-inner {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .scanned-items-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .scanned-item {
+            padding: 0.6rem 0;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .scanned-item:last-child {
+            border-bottom: none;
+        }
+
+        .scanned-item-desc {
+            font-size: 1.35rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            line-height: 1.3;
+        }
+
+        .scanned-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.9rem;
+            color: #8b949e;
+        }
+
+        .scanned-item-variant {
+            color: #60b8f0;
+        }
+
+        .scanned-item-amount {
+            font-weight: 600;
+            color: #e6edf3;
+            margin-left: auto;
+        }
+
+        .scanned-items-empty {
+            margin: 0;
+            color: #6e7681;
+            font-style: italic;
+        }
+
+        .scanned-item-new {
+            animation: highlight 1.5s ease-out;
+        }
+
+        .cart-panel {
+            display: flex;
+            flex-direction: column;
+            background: #252b33;
+            border-radius: 6px;
+            border: 1px solid #2f3640;
+            overflow: hidden;
+        }
+
+        .cart-total {
+            padding: 1rem;
+            background: #2d343e;
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .cart-count {
+            padding: 0.25rem 1rem;
+            font-size: 0.875rem;
+            color: #8b949e;
+        }
+
+        .cart-list {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 400px;
+            padding: 0.5rem;
+        }
+
+        .cart-line {
+            padding: 0.5rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .cart-line:hover {
+            background: #2d343e;
+        }
+
+        .cart-line-desc {
+            display: block;
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .cart-line-details {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: #8b949e;
+        }
+
+        .cart-line form {
+            display: inline;
+        }
+
+        .cart-line-remove {
+            padding: 0.2rem 0.4rem;
+            font-size: 0.7rem;
+            background: #8b3d4a;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .cart-line-remove:hover {
+            background: #7a3540;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.75rem 1.5rem;
+            background: #252b33;
+            border-top: 1px solid #2f3640;
+            align-items: center;
+        }
+
+        .actions-divider {
+            width: 1px;
+            background: #2f3640;
+            align-self: stretch;
+            margin: 0 0.25rem;
+        }
+
+        .btn-fn {
+            padding: 0.6rem 1.1rem;
+            font-size: 0.875rem;
+            border: 2px solid;
+            border-radius: 6px;
+            cursor: pointer;
+            background: #1e2328;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.15rem;
+            line-height: 1.2;
+        }
+
+        .btn-fn .fn-key {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            opacity: 0.75;
+        }
+
+        .btn-fn .fn-label {
+            font-weight: 600;
+        }
+
+        .btn-fn-green {
+            border-color: #2a5c3a;
+            color: #6edb8f;
+        }
+
+        .btn-fn-green:hover {
+            background: #122a1a;
+            border-color: #6edb8f;
+        }
+
+        .btn-fn-blue {
+            border-color: #1a3a50;
+            color: #60b8f0;
+        }
+
+        .btn-fn-blue:hover {
+            background: #0d2035;
+            border-color: #60b8f0;
+        }
+
+        .btn-fn-grey {
+            border-color: #2f3640;
+            color: #8b949e;
+        }
+
+        .btn-fn-grey:hover {
+            background: #2f3640;
+            color: #e6edf3;
+        }
+
+        .btn-fn-red {
+            border-color: #4a1d28;
+            color: #f85149;
+        }
+
+        .btn-fn-red:hover {
+            background: #3a1520;
+            border-color: #f85149;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #8b3d4a;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #7a3540;
+        }
+
+        .btn-secondary {
+            background: #2f3640;
+            color: #e6edf3;
+        }
+
+        .btn-secondary:hover {
+            background: #3d454d;
+        }
+
+        #toast-container {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 1000;
+        }
+
+        .toast {
+            padding: 1rem 1.5rem;
+            background: #8b3d4a;
+            border-radius: 6px;
+            color: white;
+        }
+
+        .htmx-settling .cart-line-new {
+            opacity: 1;
+        }
+
+        .cart-line-new {
+            animation: highlight 1.5s ease-out;
+        }
+
+        @keyframes highlight {
+            from {
+                background: #8b3d4a;
+            }
+
+            to {
+                background: transparent;
+            }
+        }
+
         /* Item Search Modal */
-        .barcode-row { display: flex; gap: 0.5rem; align-items: stretch; }
-        .barcode-row .barcode-input { flex: 1; }
-        .qty-wrapper { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
-        .qty-label { font-size: 0.7rem; color: #8b949e; letter-spacing: 0.05em; text-transform: uppercase; }
-        .qty-input { width: 72px; padding: 1rem 0.5rem; font-size: 1.5rem; font-weight: 700; text-align: center; border: 2px solid #8b3d4a; border-radius: 6px; background: #2d343e; color: #f0c060; }
-        .qty-input:focus { outline: none; border-color: #f0c060; }
-        .qty-multiplier { font-size: 1.25rem; color: #8b949e; display: flex; align-items: center; padding-bottom: 0.15rem; }
+        .barcode-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: stretch;
+        }
+
+        .barcode-row .barcode-input {
+            flex: 1;
+        }
+
+        .qty-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.2rem;
+        }
+
+        .qty-label {
+            font-size: 0.7rem;
+            color: #8b949e;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .qty-input {
+            width: 72px;
+            padding: 1rem 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-align: center;
+            border: 2px solid #8b3d4a;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #f0c060;
+        }
+
+        .qty-input:focus {
+            outline: none;
+            border-color: #f0c060;
+        }
+
+        .qty-multiplier {
+            font-size: 1.25rem;
+            color: #8b949e;
+            display: flex;
+            align-items: center;
+            padding-bottom: 0.15rem;
+        }
+
         /* Discount badge (shown below barcode row when discount is active) */
-        .disc-badge { display: none; margin-top: 0.5rem; padding: 0.4rem 0.9rem; background: #122a1a; border: 1.5px solid #6edb8f; border-radius: 6px; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: #6edb8f; font-weight: 600; }
-        .disc-badge.visible { display: flex; }
-        .disc-badge-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin-right: 0.25rem; }
-        .disc-badge-clear { margin-left: auto; background: none; border: none; color: #6edb8f; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0.2rem; }
-        .disc-badge-clear:hover { color: #fff; }
+        .disc-badge {
+            display: none;
+            margin-top: 0.5rem;
+            padding: 0.4rem 0.9rem;
+            background: #122a1a;
+            border: 1.5px solid #6edb8f;
+            border-radius: 6px;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.9rem;
+            color: #6edb8f;
+            font-weight: 600;
+        }
+
+        .disc-badge.visible {
+            display: flex;
+        }
+
+        .disc-badge-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #8b949e;
+            margin-right: 0.25rem;
+        }
+
+        .disc-badge-clear {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: #6edb8f;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0 0.2rem;
+        }
+
+        .disc-badge-clear:hover {
+            color: #fff;
+        }
+
         /* Discount modal */
-        .disc-modal { width: 400px; }
-        .disc-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 1rem 1.25rem; border-bottom: 1px solid #2f3640; }
-        .disc-type-btn { padding: 0.65rem 0.75rem; background: #2d343e; border: 2px solid #2f3640; border-radius: 6px; color: #e6edf3; cursor: pointer; font-size: 0.9rem; text-align: left; }
-        .disc-type-btn:hover { border-color: #6edb8f; color: #6edb8f; }
-        .disc-type-btn.selected { border-color: #6edb8f; background: #122a1a; color: #6edb8f; font-weight: 600; }
-        .disc-pct-row { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid #2f3640; }
-        .disc-pct-label { color: #8b949e; font-size: 0.95rem; white-space: nowrap; }
-        .disc-pct-num { width: 100px; padding: 0.6rem 0.75rem; font-size: 1.75rem; font-weight: 700; text-align: center; border: 2px solid #2f3640; border-radius: 6px; background: #2d343e; color: #6edb8f; }
-        .disc-pct-num:focus { outline: none; border-color: #6edb8f; }
-        .disc-pct-sym { font-size: 1.4rem; font-weight: 700; color: #6edb8f; }
-        .disc-modal-footer { display: flex; gap: 0.5rem; padding: 1rem 1.25rem; }
-        .btn-remove-disc { background: #3a1520; color: #e6edf3; margin-right: auto; }
-        .btn-remove-disc:hover { background: #4a1d28; }
-        .btn-apply-disc { background: #1a5c32; color: white; }
-        .btn-apply-disc:hover { background: #1f6e3c; }
+        .disc-modal {
+            width: 400px;
+        }
+
+        .disc-type-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .disc-type-btn {
+            padding: 0.65rem 0.75rem;
+            background: #2d343e;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            color: #e6edf3;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+
+        .disc-type-btn:hover {
+            border-color: #6edb8f;
+            color: #6edb8f;
+        }
+
+        .disc-type-btn.selected {
+            border-color: #6edb8f;
+            background: #122a1a;
+            color: #6edb8f;
+            font-weight: 600;
+        }
+
+        .disc-pct-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .disc-pct-label {
+            color: #8b949e;
+            font-size: 0.95rem;
+            white-space: nowrap;
+        }
+
+        .disc-pct-num {
+            width: 100px;
+            padding: 0.6rem 0.75rem;
+            font-size: 1.75rem;
+            font-weight: 700;
+            text-align: center;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #6edb8f;
+        }
+
+        .disc-pct-num:focus {
+            outline: none;
+            border-color: #6edb8f;
+        }
+
+        .disc-pct-sym {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #6edb8f;
+        }
+
+        .disc-modal-footer {
+            display: flex;
+            gap: 0.5rem;
+            padding: 1rem 1.25rem;
+        }
+
+        .btn-remove-disc {
+            background: #3a1520;
+            color: #e6edf3;
+            margin-right: auto;
+        }
+
+        .btn-remove-disc:hover {
+            background: #4a1d28;
+        }
+
+        .btn-apply-disc {
+            background: #1a5c32;
+            color: white;
+        }
+
+        .btn-apply-disc:hover {
+            background: #1f6e3c;
+        }
+
         /* Per-line discount row */
-        .cart-line-disc-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #6edb8f; background: #0d201a; border-radius: 3px; padding: 0.2rem 0.5rem; margin-top: 0.2rem; }
-        .cart-line-net { font-weight: 700; }
+        .cart-line-disc-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            color: #6edb8f;
+            background: #0d201a;
+            border-radius: 3px;
+            padding: 0.2rem 0.5rem;
+            margin-top: 0.2rem;
+        }
+
+        .cart-line-net {
+            font-weight: 700;
+        }
+
         /* Transaction subtotal breakdown */
-        .cart-subtotal-row { display: flex; justify-content: space-between; padding: 0.5rem 1rem 0.1rem; font-size: 0.875rem; color: #8b949e; }
-        .cart-trans-disc-row { display: flex; justify-content: space-between; padding: 0.2rem 1rem 0.5rem; font-size: 0.9rem; color: #6edb8f; font-weight: 500; border-bottom: 1px dashed #2f3640; }
-        .cart-trans-disc-row span:last-child { font-weight: 700; }
-        .btn-search { padding: 1rem 1.25rem; font-size: 1rem; background: #2f3640; border: 2px solid #2f3640; border-radius: 6px; color: #e6edf3; cursor: pointer; white-space: nowrap; }
-        .btn-search:hover { background: #3d454d; border-color: #8b3d4a; }
-        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 2000; align-items: center; justify-content: center; }
-        .modal-overlay.open { display: flex; }
-        .modal { background: #252b33; border: 1px solid #2f3640; border-radius: 8px; width: 640px; max-width: 95vw; max-height: 80vh; display: flex; flex-direction: column; }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid #2f3640; }
-        .modal-header h2 { margin: 0; font-size: 1rem; }
-        .modal-close { background: none; border: none; color: #8b949e; font-size: 1.25rem; cursor: pointer; line-height: 1; }
-        .modal-close:hover { color: #e6edf3; }
-        .modal-search-bar { padding: 0.75rem 1.25rem; border-bottom: 1px solid #2f3640; }
-        .modal-search-input { width: 100%; padding: 0.75rem 1rem; font-size: 1rem; border: 2px solid #2f3640; border-radius: 6px; background: #2d343e; color: #e6edf3; }
-        .modal-search-input:focus { outline: none; border-color: #8b3d4a; }
-        .modal-results { overflow-y: auto; flex: 1; padding: 0.5rem; }
-        .search-result { display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.75rem; align-items: center; padding: 0.6rem 0.75rem; border-radius: 4px; cursor: pointer; border-bottom: 1px solid #2f3640; }
-        .search-result:hover { background: #2d343e; }
-        .search-result-desc { font-weight: 500; }
-        .search-result-code { font-size: 0.8rem; color: #8b949e; }
-        .search-result-variant { font-size: 0.85rem; color: #8b949e; }
-        .search-result-price { font-weight: 600; white-space: nowrap; }
-        .search-empty { padding: 2rem; text-align: center; color: #6e7681; }
-        .search-hint { padding: 1.5rem; text-align: center; color: #6e7681; font-size: 0.9rem; }
+        .cart-subtotal-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 1rem 0.1rem;
+            font-size: 0.875rem;
+            color: #8b949e;
+        }
+
+        .cart-trans-disc-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.2rem 1rem 0.5rem;
+            font-size: 0.9rem;
+            color: #6edb8f;
+            font-weight: 500;
+            border-bottom: 1px dashed #2f3640;
+        }
+
+        .cart-trans-disc-row span:last-child {
+            font-weight: 700;
+        }
+
+        .btn-search {
+            padding: 1rem 1.25rem;
+            font-size: 1rem;
+            background: #2f3640;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            color: #e6edf3;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-search:hover {
+            background: #3d454d;
+            border-color: #8b3d4a;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal {
+            background: #252b33;
+            border: 1px solid #2f3640;
+            border-radius: 8px;
+            width: 640px;
+            max-width: 95vw;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #8b949e;
+            font-size: 1.25rem;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: #e6edf3;
+        }
+
+        .modal-search-bar {
+            padding: 0.75rem 1.25rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .modal-search-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #e6edf3;
+        }
+
+        .modal-search-input:focus {
+            outline: none;
+            border-color: #8b3d4a;
+        }
+
+        .modal-results {
+            overflow-y: auto;
+            flex: 1;
+            padding: 0.5rem;
+        }
+
+        .search-result {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto;
+            gap: 0.75rem;
+            align-items: center;
+            padding: 0.6rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .search-result:hover {
+            background: #2d343e;
+        }
+
+        .search-result-desc {
+            font-weight: 500;
+        }
+
+        .search-result-code {
+            font-size: 0.8rem;
+            color: #8b949e;
+        }
+
+        .search-result-variant {
+            font-size: 0.85rem;
+            color: #8b949e;
+        }
+
+        .search-result-price {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .search-empty {
+            padding: 2rem;
+            text-align: center;
+            color: #6e7681;
+        }
+
+        .search-hint {
+            padding: 1.5rem;
+            text-align: center;
+            color: #6e7681;
+            font-size: 0.9rem;
+        }
+
         /* Pay modal (tender floating window) */
-        .pay-modal { background: #252b33; border: 1px solid #2f3640; border-radius: 8px; width: 480px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
-        .pay-modal-inner { padding: 1.25rem 1.5rem; }
-        .pay-total-box { background: #2d343e; padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 1.25rem; text-align: center; border: 1px solid #2f3640; }
-        .pay-total-label { font-size: 0.7rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; }
-        .pay-total-amount { font-size: 2.25rem; font-weight: 700; margin: 0.2rem 0; }
-        .pay-total-breakdown { font-size: 0.8rem; color: #8b949e; margin-top: 0.2rem; }
-        .pay-total-breakdown-disc { color: #6edb8f; font-weight: 500; }
-        .pay-tender-title { font-size: 0.8rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.6rem; }
-        .pay-tenders { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.6rem; margin-bottom: 1.25rem; }
-        .pay-tender-btn { padding: 0.75rem 0.9rem; font-size: 0.95rem; background: #2d343e; border: 2px solid #2f3640; border-radius: 8px; color: #e6edf3; cursor: pointer; transition: all 0.15s; font-weight: 500; }
-        .pay-tender-btn:hover { border-color: #8b3d4a; background: #2f3640; }
-        .pay-tender-btn.selected { border-color: #8b3d4a; background: #8b3d4a; color: white; }
-        .pay-cash-section { display: none; background: #2d343e; border: 1px solid #2f3640; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
-        .pay-cash-section.visible { display: block; }
-        .pay-cash-section-title { font-size: 0.8rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.6rem; }
-        .pay-quick-amounts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
-        .pay-quick-btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; background: #252b33; border: 1.5px solid #2f3640; border-radius: 6px; color: #e6edf3; cursor: pointer; font-weight: 500; }
-        .pay-quick-btn:hover { border-color: #8b3d4a; background: #3d454d; }
-        .pay-quick-btn.exact { border-color: #4a5568; }
-        .pay-tendered-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
-        .pay-tendered-currency { font-size: 1.5rem; font-weight: 700; color: #8b949e; }
-        .pay-tendered-input { flex: 1; padding: 0.6rem 0.9rem; font-size: 1.5rem; font-weight: 700; border: 2px solid #2f3640; border-radius: 6px; background: #252b33; color: #e6edf3; text-align: right; }
-        .pay-tendered-input:focus { outline: none; border-color: #8b3d4a; }
-        .pay-change-box { display: flex; justify-content: space-between; align-items: baseline; padding: 0.6rem 0.9rem; border-radius: 6px; background: #252b33; }
-        .pay-change-label { font-size: 0.85rem; color: #8b949e; }
-        .pay-change-amount { font-size: 1.5rem; font-weight: 700; }
-        .pay-change-amount.ok { color: #6edb8f; }
-        .pay-change-amount.exact { color: #8b949e; }
-        .pay-change-amount.short { color: #f85149; font-size: 1rem; }
-        .pay-modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.25rem; }
-        .pay-empty { text-align: center; padding: 1.5rem; color: #8b949e; }
-        .pay-modal-empty .pay-modal-actions { justify-content: center; }
-        #pay-modal-content { overflow-y: auto; flex: 1; min-height: 0; }
-        .pay-entries-section { background: #2d343e; border: 1px solid #2f3640; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
-        .pay-entries-list { min-height: 2rem; margin-bottom: 0.75rem; }
-        .pay-entries-empty { margin: 0; color: #6e7681; font-size: 0.9rem; }
-        .pay-entry-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid #2f3640; }
-        .pay-entry-item:last-child { border-bottom: none; }
-        .pay-entry-desc { flex: 1; font-weight: 500; }
-        .pay-entry-amt { font-weight: 600; }
-        .pay-entry-remove { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 1.2rem; line-height: 1; padding: 0 0.3rem; }
-        .pay-entry-remove:hover { color: #f85149; }
-        .pay-summary-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.95rem; }
-        .pay-summary-label { color: #8b949e; }
-        .pay-summary-value { font-weight: 600; }
-        .pay-summary-value.ok { color: #6edb8f; }
-        .pay-summary-value.short { color: #f85149; }
-        .pay-change-row { display: flex; justify-content: space-between; align-items: baseline; padding: 0.5rem 0; margin-top: 0.25rem; border-top: 1px solid #2f3640; }
-        .pay-add-section { margin-bottom: 1rem; }
-        .pay-add-btn { margin-top: 0.5rem; }
+        .pay-modal {
+            background: #252b33;
+            border: 1px solid #2f3640;
+            border-radius: 8px;
+            width: 480px;
+            max-width: 95vw;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .pay-modal-inner {
+            padding: 1.25rem 1.5rem;
+        }
+
+        .pay-total-box {
+            background: #2d343e;
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            margin-bottom: 1.25rem;
+            text-align: center;
+            border: 1px solid #2f3640;
+        }
+
+        .pay-total-label {
+            font-size: 0.7rem;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .pay-total-amount {
+            font-size: 2.25rem;
+            font-weight: 700;
+            margin: 0.2rem 0;
+        }
+
+        .pay-total-breakdown {
+            font-size: 0.8rem;
+            color: #8b949e;
+            margin-top: 0.2rem;
+        }
+
+        .pay-total-breakdown-disc {
+            color: #6edb8f;
+            font-weight: 500;
+        }
+
+        .pay-tender-title {
+            font-size: 0.8rem;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin: 0 0 0.6rem;
+        }
+
+        .pay-tenders {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 0.6rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .pay-tender-btn {
+            padding: 0.75rem 0.9rem;
+            font-size: 0.95rem;
+            background: #2d343e;
+            border: 2px solid #2f3640;
+            border-radius: 8px;
+            color: #e6edf3;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-weight: 500;
+        }
+
+        .pay-tender-btn:hover {
+            border-color: #8b3d4a;
+            background: #2f3640;
+        }
+
+        .pay-tender-btn.selected {
+            border-color: #8b3d4a;
+            background: #8b3d4a;
+            color: white;
+        }
+
+        .pay-cash-section {
+            display: none;
+            background: #2d343e;
+            border: 1px solid #2f3640;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .pay-cash-section.visible {
+            display: block;
+        }
+
+        .pay-cash-section-title {
+            font-size: 0.8rem;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.6rem;
+        }
+
+        .pay-quick-amounts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .pay-quick-btn {
+            padding: 0.4rem 0.75rem;
+            font-size: 0.85rem;
+            background: #252b33;
+            border: 1.5px solid #2f3640;
+            border-radius: 6px;
+            color: #e6edf3;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .pay-quick-btn:hover {
+            border-color: #8b3d4a;
+            background: #3d454d;
+        }
+
+        .pay-quick-btn.exact {
+            border-color: #4a5568;
+        }
+
+        .pay-tendered-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .pay-tendered-currency {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #8b949e;
+        }
+
+        .pay-tendered-input {
+            flex: 1;
+            padding: 0.6rem 0.9rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            background: #252b33;
+            color: #e6edf3;
+            text-align: right;
+        }
+
+        .pay-tendered-input:focus {
+            outline: none;
+            border-color: #8b3d4a;
+        }
+
+        .pay-change-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 0.6rem 0.9rem;
+            border-radius: 6px;
+            background: #252b33;
+        }
+
+        .pay-change-label {
+            font-size: 0.85rem;
+            color: #8b949e;
+        }
+
+        .pay-change-amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .pay-change-amount.ok {
+            color: #6edb8f;
+        }
+
+        .pay-change-amount.exact {
+            color: #8b949e;
+        }
+
+        .pay-change-amount.short {
+            color: #f85149;
+            font-size: 1rem;
+        }
+
+        .pay-modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            margin-top: 1.25rem;
+        }
+
+        .pay-empty {
+            text-align: center;
+            padding: 1.5rem;
+            color: #8b949e;
+        }
+
+        .pay-modal-empty .pay-modal-actions {
+            justify-content: center;
+        }
+
+        #pay-modal-content {
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .pay-entries-section {
+            background: #2d343e;
+            border: 1px solid #2f3640;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1rem;
+        }
+
+        .pay-entries-list {
+            min-height: 2rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .pay-entries-empty {
+            margin: 0;
+            color: #6e7681;
+            font-size: 0.9rem;
+        }
+
+        .pay-entry-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .pay-entry-item:last-child {
+            border-bottom: none;
+        }
+
+        .pay-entry-desc {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .pay-entry-amt {
+            font-weight: 600;
+        }
+
+        .pay-entry-remove {
+            background: none;
+            border: none;
+            color: #8b949e;
+            cursor: pointer;
+            font-size: 1.2rem;
+            line-height: 1;
+            padding: 0 0.3rem;
+        }
+
+        .pay-entry-remove:hover {
+            color: #f85149;
+        }
+
+        .pay-summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.3rem 0;
+            font-size: 0.95rem;
+        }
+
+        .pay-summary-label {
+            color: #8b949e;
+        }
+
+        .pay-summary-value {
+            font-weight: 600;
+        }
+
+        .pay-summary-value.ok {
+            color: #6edb8f;
+        }
+
+        .pay-summary-value.short {
+            color: #f85149;
+        }
+
+        .pay-change-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 0.5rem 0;
+            margin-top: 0.25rem;
+            border-top: 1px solid #2f3640;
+        }
+
+        .pay-add-section {
+            margin-bottom: 1rem;
+        }
+
+        .pay-add-btn {
+            margin-top: 0.5rem;
+        }
+
+        /* ── Close Transaction Modal ───────────────────────────────────── */
+        .close-trans-modal-box {
+            width: 480px;
+            max-width: 95vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .close-trans-summary {
+            background: #2d343e;
+            border-bottom: 1px solid #2f3640;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            gap: 2rem;
+        }
+
+        .close-trans-summary-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            font-size: 0.8rem;
+            color: #8b949e;
+        }
+
+        .close-trans-summary-row span:last-child {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #e6edf3;
+        }
+
+        .close-trans-variance-val.over {
+            color: #6edb8f;
+        }
+
+        .close-trans-variance-val.short {
+            color: #f85149;
+        }
+
+        .close-trans-variance-val.exact {
+            color: #8b949e;
+        }
+
+        .close-trans-input-section {
+            padding: 1.2rem 1.5rem;
+            border-bottom: 1px solid #2f3640;
+            background: #1f252c;
+        }
+
+        .close-trans-label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #8b949e;
+            margin-bottom: 0.5rem;
+        }
+
+        .close-trans-input-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .close-trans-currency {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #8b949e;
+        }
+
+        .close-trans-cash-input {
+            flex: 1;
+            padding: 0.9rem 1rem;
+            font-size: 1.7rem;
+            font-weight: 700;
+            text-align: right;
+            border: 2px solid #2f3640;
+            border-radius: 8px;
+            background: #252b33;
+            color: #e6edf3;
+            transition: border .15s, box-shadow .15s;
+        }
+
+        .close-trans-cash-input:focus {
+            border-color: #8b3d4a;
+            box-shadow: 0 0 0 2px rgba(96, 184, 240, .15);
+        }
+
+        /* Denomination breakdown */
+        .close-trans-denom-details {
+            border-bottom: 1px solid #2f3640;
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .close-trans-denom-toggle {
+            padding: 0.65rem 1.5rem;
+            font-size: 0.85rem;
+            color: #8b949e;
+            cursor: pointer;
+            user-select: none;
+            list-style: none;
+        }
+
+        .close-trans-denom-toggle:hover {
+            color: #e6edf3;
+        }
+
+        .close-trans-denom-toggle::marker,
+        .close-trans-denom-toggle::-webkit-details-marker {
+            display: none;
+        }
+
+        .close-trans-denom-toggle::before {
+            content: '▶ ';
+            font-size: 0.7rem;
+        }
+
+        details[open] .close-trans-denom-toggle::before {
+            content: '▼ ';
+        }
+
+        .close-trans-denom-open {
+            padding: 0.8rem 1.5rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .close-trans-denom-grid {
+            padding: 0.5rem 1.5rem 0.25rem;
+            overflow-y: auto;
+            max-height: 150px;
+            scroll-behavior: smooth;
+        }
+
+        .denom-modal-box {
+            width: 420px;
+            max-width: 95vw;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .denom-modal-grid {
+            padding: 1rem 1.5rem;
+            overflow-y: auto;
+        }
+
+        .denom-modal-total {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.8rem 1.5rem;
+            font-size: 1.2rem;
+            font-weight: 700;
+            border-top: 1px solid #2f3640;
+            background: #252b33;
+        }
+
+        .denom-row {
+            display: grid;
+            grid-template-columns: 90px 1fr 100px;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .denom-row span:first-child {
+            font-weight: 600;
+            color: #e6edf3;
+        }
+
+        .denom-qty {
+            padding: 0.45rem 0.5rem;
+            border-radius: 6px;
+        }
+
+        .denom-qty:focus {
+            outline: none;
+            border-color: #8b3d4a;
+        }
+
+        .denom-subtotal {
+            text-align: right;
+            color: #8b949e;
+            font-size: 0.85rem;
+        }
+
+        .close-trans-denom-total-row {
+            background: #252b33;
+            border-top: 1px solid #2f3640;
+            padding: 0.8rem 1.5rem;
+        }
+
+        #denom-total-display {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .close-trans-denom-total-row span:first-child {
+            color: #8b949e;
+            margin-right: auto;
+        }
+
+        #denom-total-display {
+            color: #60b8f0;
+            font-size: 1.1rem;
+        }
+
+        .btn-use-denom {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8rem;
+            background: #1a3a50;
+            border: 1.5px solid #60b8f0;
+            border-radius: 5px;
+            color: #60b8f0;
+            cursor: pointer;
+        }
+
+        .btn-use-denom:hover {
+            background: #1f4a63;
+        }
+
+        /* Notes */
+        .close-trans-notes-section {
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .close-trans-notes-input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.9rem;
+            border: 1.5px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #e6edf3;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .close-trans-notes-input:focus {
+            outline: none;
+            border-color: #8b3d4a;
+        }
+
+        /* Footer */
+        .close-trans-footer {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            padding: 1rem 1.5rem;
+            background: #252b33;
+            border-top: 1px solid #2f3640;
+        }
+
+        .close-trans-confirm-btn {
+            background: #c54b58;
+            font-weight: 600;
+            padding: 0.6rem 1.2rem;
+        }
+
+        .close-trans-confirm-btn:hover {
+            background: #b53f4b;
+        }
+
+        .close-trans-confirm-btn:disabled {
+            background: #3d454d;
+            color: #6e7681;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 600px) {
+
+            .close-trans-modal-box {
+                width: 95vw;
+                max-height: 95vh;
+            }
+
+            .close-trans-summary {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .close-trans-cash-input {
+                font-size: 1.4rem;
+            }
+
+            .close-trans-currency {
+                font-size: 1.6rem;
+            }
+
+            .denom-row {
+                grid-template-columns: 70px 1fr 80px;
+                font-size: 0.85rem;
+            }
+
+            .close-trans-footer {
+                flex-direction: column-reverse;
+            }
+
+            .close-trans-footer button {
+                width: 100%;
+            }
+        }
     </style>
 </head>
+
 <body>
     <header class="header">
         <div class="header-left">
@@ -202,24 +1437,29 @@
     <main class="main">
         <div class="left">
             <div class="barcode-area">
-                <form id="barcode-form" hx-post="{% url 'sales:cart_add' %}" hx-target="#toast-container" hx-swap="innerHTML" hx-trigger="submit">
+                <form id="barcode-form" hx-post="{% url 'sales:cart_add' %}" hx-target="#toast-container"
+                    hx-swap="innerHTML" hx-trigger="submit">
                     {% csrf_token %}
                     <input type="hidden" id="disc-pct-field" name="disc_pct" value="0">
                     <input type="hidden" id="disc-type-field" name="disc_type" value="">
                     <div class="barcode-row">
                         <div class="qty-wrapper">
                             <span class="qty-label">Qty</span>
-                            <input type="number" id="qty-input" name="qty" class="qty-input" value="1" min="1" max="9999" autocomplete="off" title="Set quantity before scanning (F2 to focus)">
+                            <input type="number" id="qty-input" name="qty" class="qty-input" value="1" min="1"
+                                max="9999" autocomplete="off" title="Set quantity before scanning (F2 to focus)">
                         </div>
                         <span class="qty-multiplier">×</span>
-                        <input type="text" id="barcode-input" name="barcode" class="barcode-input" placeholder="Scan or enter barcode here" autofocus autocomplete="off">
-                        <button type="button" class="btn-search" onclick="openSearchModal()" title="Search items (F1)">&#128269; Search</button>
+                        <input type="text" id="barcode-input" name="barcode" class="barcode-input"
+                            placeholder="Scan or enter barcode here" autofocus autocomplete="off">
+                        <button type="button" class="btn-search" onclick="openSearchModal()"
+                            title="Search items (F1)">&#128269; Search</button>
                     </div>
                 </form>
                 <div class="disc-badge" id="disc-badge">
                     <span class="disc-badge-label">Discount Active</span>
                     <span id="disc-badge-text"></span>
-                    <button type="button" class="disc-badge-clear" onclick="clearDiscount()" title="Remove discount">&#10005;</button>
+                    <button type="button" class="disc-badge-clear" onclick="clearDiscount()"
+                        title="Remove discount">&#10005;</button>
                 </div>
             </div>
             <div class="detail-and-items-row">
@@ -227,11 +1467,16 @@
                     <h3>Item Detail</h3>
                     {% if last_item %}
                     <dl>
-                        <dt>Product:</dt><dd>{{ last_item.item_description }}</dd>
-                        <dt>Code:</dt><dd>{{ last_item.item_code }}</dd>
-                        <dt>Size:</dt><dd>{{ last_item.item_size|default:"—" }}</dd>
-                        <dt>Color:</dt><dd>{{ last_item.item_color|default:"—" }}</dd>
-                        <dt>Price:</dt><dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
+                        <dt>Product:</dt>
+                        <dd>{{ last_item.item_description }}</dd>
+                        <dt>Code:</dt>
+                        <dd>{{ last_item.item_code }}</dd>
+                        <dt>Size:</dt>
+                        <dd>{{ last_item.item_size|default:"—" }}</dd>
+                        <dt>Color:</dt>
+                        <dd>{{ last_item.item_color|default:"—" }}</dd>
+                        <dt>Price:</dt>
+                        <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
                     </dl>
                     {% else %}
                     <p class="empty">Scan an item to see details</p>
@@ -252,15 +1497,11 @@
     <div id="toast-container"></div>
 
     <!-- Hidden HTMX form for transaction-level discount -->
-    <form id="trans-disc-form"
-          hx-post="{% url 'sales:cart_trans_disc' %}"
-          hx-target="#cart-summary"
-          hx-swap="outerHTML"
-          hx-trigger="submit"
-          style="display:none;">
+    <form id="trans-disc-form" hx-post="{% url 'sales:cart_trans_disc' %}" hx-target="#cart-summary" hx-swap="outerHTML"
+        hx-trigger="submit" style="display:none;">
         {% csrf_token %}
-        <input type="hidden" id="trans-disc-pct-hidden"   name="trans_disc_pct"   value="0">
-        <input type="hidden" id="trans-disc-type-hidden"  name="trans_disc_type"  value="">
+        <input type="hidden" id="trans-disc-pct-hidden" name="trans_disc_pct" value="0">
+        <input type="hidden" id="trans-disc-type-hidden" name="trans_disc_type" value="">
         <input type="hidden" id="trans-disc-label-hidden" name="trans_disc_label" value="">
     </form>
 
@@ -272,20 +1513,26 @@
                 <button class="modal-close" onclick="closeTransDiscModal()">&#10005;</button>
             </div>
             <div class="disc-type-grid">
-                <button class="disc-type-btn" data-tdcode="REG" data-tdpct="0"  onclick="selectTransDiscType(this,'REG','Regular',0)">Regular %</button>
-                <button class="disc-type-btn" data-tdcode="SC"  data-tdpct="20" onclick="selectTransDiscType(this,'SC','Senior Citizen',20)">Senior Citizen (20%)</button>
-                <button class="disc-type-btn" data-tdcode="PWD" data-tdpct="20" onclick="selectTransDiscType(this,'PWD','PWD',20)">PWD (20%)</button>
-                <button class="disc-type-btn" data-tdcode="EMP" data-tdpct="10" onclick="selectTransDiscType(this,'EMP','Employee',10)">Employee (10%)</button>
+                <button class="disc-type-btn" data-tdcode="REG" data-tdpct="0"
+                    onclick="selectTransDiscType(this,'REG','Regular',0)">Regular %</button>
+                <button class="disc-type-btn" data-tdcode="SC" data-tdpct="20"
+                    onclick="selectTransDiscType(this,'SC','Senior Citizen',20)">Senior Citizen (20%)</button>
+                <button class="disc-type-btn" data-tdcode="PWD" data-tdpct="20"
+                    onclick="selectTransDiscType(this,'PWD','PWD',20)">PWD (20%)</button>
+                <button class="disc-type-btn" data-tdcode="EMP" data-tdpct="10"
+                    onclick="selectTransDiscType(this,'EMP','Employee',10)">Employee (10%)</button>
             </div>
             <div class="disc-pct-row">
                 <label class="disc-pct-label" for="trans-disc-pct-input">Discount %:</label>
-                <input type="number" id="trans-disc-pct-input" class="disc-pct-num" value="0" min="0" max="100" step="0.01" autocomplete="off" style="color:#60b8f0;border-color:#1a3a50;">
+                <input type="number" id="trans-disc-pct-input" class="disc-pct-num" value="0" min="0" max="100"
+                    step="0.01" autocomplete="off" style="color:#60b8f0;border-color:#1a3a50;">
                 <span class="disc-pct-sym" style="color:#60b8f0;">%</span>
             </div>
             <div class="disc-modal-footer">
                 <button class="btn btn-remove-disc" onclick="removeTransDiscAndClose()">Remove Discount</button>
                 <button class="btn btn-secondary" onclick="closeTransDiscModal()">Cancel</button>
-                <button class="btn" style="background:#1a4a6b;color:white;" onclick="applyTransDisc()">Apply to Subtotal</button>
+                <button class="btn" style="background:#1a4a6b;color:white;" onclick="applyTransDisc()">Apply to
+                    Subtotal</button>
             </div>
         </div>
     </div>
@@ -298,14 +1545,19 @@
                 <button class="modal-close" onclick="closeDiscountModal()">&#10005;</button>
             </div>
             <div class="disc-type-grid">
-                <button class="disc-type-btn" data-disc-code="REG" data-disc-pct="0"  onclick="selectDiscType(this, 'REG',  'Regular',          0)">Regular %</button>
-                <button class="disc-type-btn" data-disc-code="SC"  data-disc-pct="20" onclick="selectDiscType(this, 'SC',   'Senior Citizen',  20)">Senior Citizen (20%)</button>
-                <button class="disc-type-btn" data-disc-code="PWD" data-disc-pct="20" onclick="selectDiscType(this, 'PWD',  'PWD',             20)">PWD (20%)</button>
-                <button class="disc-type-btn" data-disc-code="EMP" data-disc-pct="10" onclick="selectDiscType(this, 'EMP',  'Employee',        10)">Employee (10%)</button>
+                <button class="disc-type-btn" data-disc-code="REG" data-disc-pct="0"
+                    onclick="selectDiscType(this, 'REG',  'Regular',          0)">Regular %</button>
+                <button class="disc-type-btn" data-disc-code="SC" data-disc-pct="20"
+                    onclick="selectDiscType(this, 'SC',   'Senior Citizen',  20)">Senior Citizen (20%)</button>
+                <button class="disc-type-btn" data-disc-code="PWD" data-disc-pct="20"
+                    onclick="selectDiscType(this, 'PWD',  'PWD',             20)">PWD (20%)</button>
+                <button class="disc-type-btn" data-disc-code="EMP" data-disc-pct="10"
+                    onclick="selectDiscType(this, 'EMP',  'Employee',        10)">Employee (10%)</button>
             </div>
             <div class="disc-pct-row">
                 <label class="disc-pct-label" for="disc-pct-modal-input">Discount %:</label>
-                <input type="number" id="disc-pct-modal-input" class="disc-pct-num" value="0" min="0" max="100" step="0.01" autocomplete="off">
+                <input type="number" id="disc-pct-modal-input" class="disc-pct-num" value="0" min="0" max="100"
+                    step="0.01" autocomplete="off">
                 <span class="disc-pct-sym">%</span>
             </div>
             <div class="disc-modal-footer">
@@ -329,6 +1581,133 @@
         </div>
     </div>
 
+    <!-- Close Transaction Modal (F8) -->
+    <div class="modal-overlay" id="close-trans-modal" onclick="closeCloseTransModalOutside(event)">
+        <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Close Transaction</h2>
+                <button class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
+            </div>
+
+            <!-- Summary strip -->
+            <div class="close-trans-summary">
+                <div class="close-trans-summary-row">
+                    <span>Expected Cash</span>
+                    <span id="close-trans-expected">₱0.00</span>
+                </div>
+                <div class="close-trans-summary-row">
+                    <span>Variance</span>
+                    <span id="close-trans-variance" class="close-trans-variance-val">—</span>
+                </div>
+            </div>
+
+            <!-- Closing cash input -->
+            <div class="close-trans-input-section">
+                <label class="close-trans-label" for="closing-cash-input">Closing Cash Amount</label>
+                <div class="close-trans-input-row">
+                    <span class="close-trans-currency">₱</span>
+                    <input type="number" id="closing-cash-input" class="close-trans-cash-input" placeholder="0.00"
+                        min="0" step="0.01" autocomplete="off">
+                </div>
+            </div>
+
+            <!-- Denomination breakdown (optional, collapsible) -->
+            <div class="close-trans-denom-open">
+                <button type="button" class="btn btn-secondary" onclick="openDenominationModal()">
+                    Count by Denomination
+                </button>
+            </div>
+
+            <!-- Notes -->
+            <div class="close-trans-notes-section">
+                <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
+                <textarea id="close-trans-notes" class="close-trans-notes-input" rows="2"
+                    placeholder="e.g. short due to petty cash withdrawal…"></textarea>
+            </div>
+
+            <div class="close-trans-footer">
+                <button class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
+                <button class="btn close-trans-confirm-btn" id="close-trans-confirm-btn" onclick="confirmCloseTrans()"
+                    disabled>
+                    Confirm Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close Transaction Modal -> Denomination Modal -->
+    <div class="modal-overlay" id="denom-modal" onclick="closeDenominationModalOutside(event)">
+        <div class="modal denom-modal-box" onclick="event.stopPropagation()">
+
+            <div class="modal-header">
+                <h2>Count Cash</h2>
+                <button class="modal-close" onclick="closeDenominationModal()">&#10005;</button>
+            </div>
+            <div class="denom-modal-grid">
+
+                <div class="denom-row" data-value="1000">
+                    <span class="denom-label">₱1,000</span>
+
+                    <div class="denom-controls">
+                        <button class="denom-btn minus">−</button>
+                        <input type="number" value="0" min="0" class="denom-qty">
+                        <button class="denom-btn plus">+</button>
+                    </div>
+
+                    <span class="denom-subtotal">₱0.00</span>
+                </div>
+
+                <div class="denom-row" data-value="500">
+                    <span class="denom-label">₱500</span>
+
+                    <div class="denom-controls">
+                        <button class="denom-btn minus">−</button>
+                        <input type="number" value="0" min="0" class="denom-qty">
+                        <button class="denom-btn plus">+</button>
+                    </div>
+
+                    <span class="denom-subtotal">₱0.00</span>
+                </div>
+
+                <div class="denom-row" data-value="200">
+                    <span class="denom-label">₱200</span>
+
+                    <div class="denom-controls">
+                        <button class="denom-btn minus">−</button>
+                        <input type="number" value="0" min="0" class="denom-qty">
+                        <button class="denom-btn plus">+</button>
+                    </div>
+
+                    <span class="denom-subtotal">₱0.00</span>
+                </div>
+
+                <div class="denom-row" data-value="100">
+                    <span class="denom-label">₱100</span>
+
+                    <div class="denom-controls">
+                        <button class="denom-btn minus">−</button>
+                        <input type="number" value="0" min="0" class="denom-qty">
+                        <button class="denom-btn plus">+</button>
+                    </div>
+
+                    <span class="denom-subtotal">₱0.00</span>
+                </div>
+
+                <!-- add rest here -->
+
+            </div>
+
+            <div class="denom-modal-total">
+                <span>Total</span>
+                <span id="denom-total-display">₱0.00</span>
+            </div>
+
+            <div class="close-trans-footer">
+                <button class="btn btn-secondary" onclick="closeDenominationModal()">Cancel</button>
+                <button class="btn close-trans-confirm-btn" onclick="applyDenominationTotal()">Use This Amount</button>
+            </div>
+
+        </div>
+    </div>
     <!-- Item Search Modal -->
     <div class="modal-overlay" id="search-modal" onclick="closeSearchModalOutside(event)">
         <div class="modal">
@@ -337,7 +1716,8 @@
                 <button class="modal-close" onclick="closeSearchModal()">&#10005;</button>
             </div>
             <div class="modal-search-bar">
-                <input type="text" id="modal-search-input" class="modal-search-input" placeholder="Type item name, code, or description..." autocomplete="off">
+                <input type="text" id="modal-search-input" class="modal-search-input"
+                    placeholder="Type item name, code, or description..." autocomplete="off">
             </div>
             <div class="modal-results" id="modal-results">
                 <p class="search-hint">Type at least 2 characters to search</p>
@@ -345,13 +1725,12 @@
         </div>
     </div>
 
+
+
     <footer class="actions">
-        <button type="button" class="btn btn-primary" id="pay-trigger-btn"
-                hx-get="{% url 'sales:pay' %}"
-                hx-target="#pay-modal-content"
-                hx-swap="innerHTML"
-                hx-trigger="click"
-                onclick="document.getElementById('pay-modal').classList.add('open')">
+        <button type="button" class="btn btn-primary" id="pay-trigger-btn" hx-get="{% url 'sales:pay' %}"
+            hx-target="#pay-modal-content" hx-swap="innerHTML" hx-trigger="click"
+            onclick="document.getElementById('pay-modal').classList.add('open')">
             Pay
         </button>
         <a href="{% url 'sales:cart_new' %}" class="btn btn-secondary">New Transaction</a>
@@ -359,11 +1738,17 @@
         <button type="button" class="btn-fn btn-fn-grey" onclick="openSearchModal()" title="Search items">
             <span class="fn-key">F1</span><span class="fn-label">&#128269; Search</span>
         </button>
-        <button type="button" class="btn-fn btn-fn-green" onclick="openDiscountModal()" title="Item discount — applies to next scan only">
+        <button type="button" class="btn-fn btn-fn-green" onclick="openDiscountModal()"
+            title="Item discount — applies to next scan only">
             <span class="fn-key">F3</span><span class="fn-label">Item Discount</span>
         </button>
-        <button type="button" class="btn-fn btn-fn-blue" onclick="openTransDiscModal()" title="Subtotal discount — applies to entire transaction">
+        <button type="button" class="btn-fn btn-fn-blue" onclick="openTransDiscModal()"
+            title="Subtotal discount — applies to entire transaction">
             <span class="fn-key">F4</span><span class="fn-label">Sub Discount</span>
+        </button>
+        <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
+            title="Close transaction — enter closing cash">
+            <span class="fn-key">F8</span><span class="fn-label">Close</span>
         </button>
     </footer>
 
@@ -373,11 +1758,12 @@
         const CSRF_TOKEN = "{{ csrf_token }}";
         // Initialise trans_disc state from server session (survives page reload)
         const INITIAL_TRANS_DISC = {
-            pct:   "{{ trans_disc.pct|default:0 }}",
-            type:  "{{ trans_disc.type|default:'' }}",
+            pct: "{{ trans_disc.pct|default:0 }}",
+            type: "{{ trans_disc.type|default:'' }}",
             label: "{{ trans_disc.label|default:'' }}"
         };
     </script>
     <script src="{% static 'sales/cashier.js' %}"></script>
 </body>
+
 </html>
