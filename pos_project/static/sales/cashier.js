@@ -512,7 +512,7 @@
 
     // Pull expected cash from the cart total displayed on screen
     const cartTotalEl = document.querySelector('.cart-total');
-    let expectedCash = 0;
+    let expectedCash = 5000; // CHANGE::::::Default fallback if cart total not found or parseable
     if (cartTotalEl) {
       expectedCash = parseFloat(
         cartTotalEl.textContent.replace(/[^0-9.]/g, '')
@@ -573,7 +573,7 @@
   if (closingCashInput) {
     closingCashInput.addEventListener('input', function () {
       const modal = document.getElementById('close-trans-modal');
-      const expected = 5000;// modal ? (modal._expectedCash || 5000) : 5000; // #TODO: Change this if you pull expected cash from somewhere else
+      const expected = modal ? (modal._expectedCash || 0) : 0; // #TODO: Change this if you pull expected cash from somewhere else
       const actual = parseFloat(closingCashInput.value) || 0;
       const variance = actual - expected;
       const varianceEl = document.getElementById('close-trans-variance');
@@ -650,61 +650,60 @@
 
   window.confirmCloseTrans = function () {
     const cashInput = document.getElementById('closing-cash-input');
-    const notesInput = document.getElementById('close-trans-notes');
     const modal = document.getElementById('close-trans-modal');
-    const confirmBtn = document.getElementById('close-trans-confirm-btn');
 
     const closingCash = parseFloat(cashInput ? cashInput.value : 0) || 0;
-    if (closingCash < 0) { return; }
+    if (closingCash < 0) return;
 
     const expected = modal ? (modal._expectedCash || 0) : 0;
     const variance = closingCash - expected;
-    const notes = notesInput ? notesInput.value.trim() : '';
 
-    const payload = {
-      closing_cash: closingCash,
-      expected_cash: expected,
-      cash_variance: variance,
-      notes: notes,
-    };
+    // Sync hidden fields so they POST alongside the form
+    document.getElementById('hidden-expected-cash').value = expected.toFixed(2);
+    document.getElementById('hidden-cash-variance').value = variance.toFixed(2);
+
+    document.getElementById('close-trans-form').submit();
 
     console.log('Close transaction payload:', payload);
 
     // ── Wire to your backend here ──────────────────────────────────
-    // confirmBtn.disabled    = true;
-    // confirmBtn.textContent = 'Closing…';
-    // fetch('/pos/close-session/', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-    //   body: JSON.stringify(payload),
-    // })
-    // .then(r => r.json())
-    // .then(() => { window.closeCloseTransModal(); window.location.href = '/pos/login/'; })
-    // .catch(err => console.error('Close session failed:', err));
+    confirmBtn.disabled    = true;
+    confirmBtn.textContent = 'Closing…';
+    fetch('/pos/close-session/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(() => { window.closeCloseTransModal(); window.location.href = '/pos/login/'; })
+    .catch(err => console.error('Close session failed:', err));
     // ───────────────────────────────────────────────────────────────
 
     // Temporary confirmation until backend is wired
-    alert(
-      'Session closed.\n' +
-      'Closing Cash: ₱' + closingCash.toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '\n' +
-      'Variance: ' + (variance >= 0 ? '+' : '') + '₱' + variance.toLocaleString('en-PH', { minimumFractionDigits: 2 })
-    );
+    // alert(
+    //   'Session closed.\n' +
+    //   'Closing Cash: ₱' + closingCash.toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '\n' +
+    //   'Variance: ' + (variance >= 0 ? '+' : '') + '₱' + variance.toLocaleString('en-PH', { minimumFractionDigits: 2 })
+    // );
 
   };
 
-  // ------------ check this first! ------------
   window.closeCloseTransModal();
+  
   function openDenominationModal() {
     document.getElementById("denom-modal").style.display = "flex";
   }
+
   function closeDenominationModal() {
     document.getElementById("denom-modal").style.display = "none";
   }
+
   function closeDenominationModalOutside(e) {
     if (e.target.id === "denom-modal") {
       closeDenominationModal();
     }
   }
+
   function applyDenominationTotal() {
 
     const total = document.getElementById("denom-total-display").dataset.total;

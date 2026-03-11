@@ -1194,6 +1194,13 @@
             transition: border .15s, box-shadow .15s;
         }
 
+        /* Remove spinner arrows */
+        .close-trans-cash-input::-webkit-outer-spin-button,
+        .close-trans-cash-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        
         .close-trans-cash-input:focus {
             border-color: #8b3d4a;
             box-shadow: 0 0 0 2px rgba(96, 184, 240, .15);
@@ -1287,6 +1294,58 @@
         .denom-qty {
             padding: 0.45rem 0.5rem;
             border-radius: 6px;
+
+        }
+
+        .denom-controls input {
+            width: 50px;
+            padding: 0.45rem 0.5rem;
+            font-size: 0.9rem;
+            border: 1.5px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #e6edf3;
+        }
+
+        /* Remove spinner arrows */
+        .denom-qty::-webkit-outer-spin-button,
+        .denom-qty::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Plus / Minus buttons */
+        .denom-row .denom-btn {
+            width: 32px;
+            height: 32px;
+            border: 1.5px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #e6edf3;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        /* Hover effect */
+        .denom-row .denom-btn:hover {
+            background: #3a414c;
+            border-color: #4a5563;
+        }
+
+        /* Click effect */
+        .denom-row .denom-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Optional: different colors */
+        .denom-btn.minus {
+            color: #ff7675;
+        }
+
+        .denom-btn.plus {
+            color: #55efc4;
         }
 
         .denom-qty:focus {
@@ -1581,13 +1640,20 @@
         </div>
     </div>
 
-    <!-- Close Transaction Modal (F8) -->
-    <div class="modal-overlay" id="close-trans-modal" onclick="closeCloseTransModalOutside(event)">
-        <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <h2>Close Transaction</h2>
-                <button class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
-            </div>
+<!-- Close Transaction Modal (F8) -->
+<div class="modal-overlay" id="close-trans-modal" onclick="closeCloseTransModalOutside(event)">
+    <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2>Close Transaction</h2>
+            <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
+        </div>
+
+        <form id="close-trans-form" method="POST" action="{% url 'sales:close_session' %}">
+            {% csrf_token %}
+
+            <!-- Hidden fields populated by JS -->
+            <input type="hidden" name="expected_cash" id="hidden-expected-cash" value="0">
+            <input type="hidden" name="cash_variance" id="hidden-cash-variance" value="0">
 
             <!-- Summary strip -->
             <div class="close-trans-summary">
@@ -1606,12 +1672,13 @@
                 <label class="close-trans-label" for="closing-cash-input">Closing Cash Amount</label>
                 <div class="close-trans-input-row">
                     <span class="close-trans-currency">₱</span>
-                    <input type="number" id="closing-cash-input" class="close-trans-cash-input" placeholder="0.00"
+                    <input type="number" id="closing-cash-input" name="closing_cash"
+                        class="close-trans-cash-input" placeholder="0.00"
                         min="0" step="0.01" autocomplete="off">
                 </div>
             </div>
 
-            <!-- Denomination breakdown (optional, collapsible) -->
+            <!-- Denomination breakdown -->
             <div class="close-trans-denom-open">
                 <button type="button" class="btn btn-secondary" onclick="openDenominationModal()">
                     Count by Denomination
@@ -1621,18 +1688,21 @@
             <!-- Notes -->
             <div class="close-trans-notes-section">
                 <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
-                <textarea id="close-trans-notes" class="close-trans-notes-input" rows="2"
-                    placeholder="e.g. short due to petty cash withdrawal…"></textarea>
+                <textarea id="close-trans-notes" name="notes" class="close-trans-notes-input"
+                    rows="2" placeholder="e.g. short due to petty cash withdrawal…"></textarea>
             </div>
 
             <div class="close-trans-footer">
-                <button class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
-                <button class="btn close-trans-confirm-btn" id="close-trans-confirm-btn" onclick="confirmCloseTrans()"
-                    disabled>
-                    Confirm Close</button>
+                <button type="button" class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
+                <button type="submit" class="btn close-trans-confirm-btn"
+                    id="close-trans-confirm-btn" disabled>
+                    Confirm Close
+                </button>
             </div>
-        </div>
+        </form>
+
     </div>
+</div>
 
     <!-- Close Transaction Modal -> Denomination Modal -->
     <div class="modal-overlay" id="denom-modal" onclick="closeDenominationModalOutside(event)">
@@ -1649,7 +1719,7 @@
 
                     <div class="denom-controls">
                         <button class="denom-btn minus">−</button>
-                        <input type="number" value="0" min="0" class="denom-qty">
+                        <input type="number" value="" min="0" class="denom-qty" placeholder="0">
                         <button class="denom-btn plus">+</button>
                     </div>
 
@@ -1661,7 +1731,7 @@
 
                     <div class="denom-controls">
                         <button class="denom-btn minus">−</button>
-                        <input type="number" value="0" min="0" class="denom-qty">
+                        <input type="number" value="" min="0" class="denom-qty" placeholder="0">
                         <button class="denom-btn plus">+</button>
                     </div>
 
@@ -1673,7 +1743,7 @@
 
                     <div class="denom-controls">
                         <button class="denom-btn minus">−</button>
-                        <input type="number" value="0" min="0" class="denom-qty">
+                        <input type="number" value="" min="0" class="denom-qty" placeholder="0">
                         <button class="denom-btn plus">+</button>
                     </div>
 
@@ -1685,7 +1755,7 @@
 
                     <div class="denom-controls">
                         <button class="denom-btn minus">−</button>
-                        <input type="number" value="0" min="0" class="denom-qty">
+                        <input type="number" value="" min="0" class="denom-qty" placeholder="0">
                         <button class="denom-btn plus">+</button>
                     </div>
 

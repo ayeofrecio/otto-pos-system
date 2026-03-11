@@ -3,6 +3,7 @@ POS Cashier views: login, cashier screen, cart operations.
 """
 
 import datetime
+import django.utils.timezone as timezone
 from decimal import Decimal
 from pyexpat.errors import messages
 
@@ -99,7 +100,9 @@ def _get_next_transaction_no():
         pass
     return "00000001"
 
-
+# ---------------------------------------------------------------------------
+# Open session view
+# ---------------------------------------------------------------------------
 
 @login_required
 def open_session(request):
@@ -115,7 +118,7 @@ def open_session(request):
 
         # Validate opening cash
         try:
-            opening_cash = float(opening_cash)
+            opening_cash = float(opening_cash) # I CHANGE ITO ACCORDING SA EXPECTED AMOUNT 
         except (TypeError, ValueError):
             messages.error(request, "Invalid opening cash amount.")
             return redirect("sales:open_session")
@@ -130,10 +133,97 @@ def open_session(request):
             status="open"
         )
 
-        messages.success(request, "POS session opened successfully.")
+        # messages.success(request, "POS session opened successfully.")
         return redirect("sales:pos_cashier")
 
     return render(request, "sales/open_session.html")
+
+
+# ---------------------------------------------------------------------------
+# Close session view
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["POST"])
+def close_session(request):
+    user = request.user
+
+    # Find the active cashier session for this user + terminal + store
+    session = POSSession.objects.filter(
+        cashier=user,
+        store_id=STORE_ID,       # your existing constant
+        status="open",
+    ).order_by("-opened_at").first()
+
+    if not session:
+        messages.error(request, "No active session found to close.")
+        return redirect("sales:pos_cashier")
+
+    # --- Parse POST values ---
+    def parse_decimal(val, default=0):
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return default
+
+    closing_cash  = parse_decimal(request.POST.get("closing_cash"))
+    expected_cash = parse_decimal(request.POST.get("expected_cash"))
+    cash_variance = parse_decimal(request.POST.get("cash_variance"))
+    notes         = request.POST.get("notes", "").strip()
+    print(session)
+    print(closing_cash)
+    print(expected_cash)
+    print(cash_variance)
+    if closing_cash < 0:
+        messages.error(request, "Closing cash cannot be negative.")
+        return redirect("sales:pos_cashier")
+
+    # --- Update and close the session ---
+    session.closing_cash  = closing_cash
+    session.expected_cash = expected_cash
+    session.cash_variance = cash_variance
+    session.notes         = notes or None
+    session.closed_at   = timezone.now()
+    session.status = "closed"
+    session.save(update_fields=[
+        "closing_cash", 
+        # "expected_cash",
+        # "cash_variance",
+        # "notes",
+        "closed_at", 
+        "status", 
+        # "updated_at",
+    ])
+
+    # --- Audit trail entry ---
+    # AuditTrail.objects.create(
+    #     user_id=user.pk,
+    #     username=user.username,
+    #     action_type="LOGOUT",
+    #     action_description=(
+    #         f"Session closed. Closing cash: {closing_cash:.2f}, "
+    #         f"Expected: {expected_cash:.2f}, Variance: {cash_variance:.2f}"
+    #     ),
+    #     table_name="cashier_sessions",
+    #     record_id=str(session.pk),
+    #     new_values={
+    #         "closing_cash":  closing_cash,
+    #         "expected_cash": expected_cash,
+    #         "cash_variance": cash_variance,
+    #         "session_status": "closed",
+    #     },
+    #     terminal_id=TERMINAL_ID,
+    #     store_id=STORE_ID,
+    # )
+
+    # Clear session keys set during this POS session
+    for key in ("pos_trans_no", "pos_trans_disc_pct",
+                "pos_trans_disc_type", "pos_trans_disc_label", "last_receipt"):
+        request.session.pop(key, None)
+
+    # messages.success(request, "Session closed successfully.")
+    return redirect("sales:pos_login")
+
 # ---------------------------------------------------------------------------
 # Cashier main view
 # ---------------------------------------------------------------------------
