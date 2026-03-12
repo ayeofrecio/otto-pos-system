@@ -1,0 +1,91 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Open POS Session</title>
+
+    <style>
+        body {
+            background: #1e2328;
+            color: white;
+            font-family: system-ui;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .session-box {
+            background: #252b33;
+            padding: 40px;
+            border-radius: 10px;
+            width: 360px;
+            text-align: center;
+            border: 1px solid #2f3640;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            font-size: 18px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            border: 2px solid #2f3640;
+            background: #2d343e;
+            color: white;
+        }
+
+        /* Remove spinner arrows */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #8b3d4a;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #7a3540;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <div class="session-box">
+
+        <h2>Open POS Session</h2>
+
+        <p>Enter your opening cash drawer amount.</p>
+
+        <form method="post">
+            {% csrf_token %}
+
+            <input type="number" name="opening_cash" step="0.01" placeholder="Opening Cash" required>
+
+            <button type="submit">
+                Start Session
+            </button>
+
+        </form>
+        
+    </div>
+
+</body>
+
+</html>

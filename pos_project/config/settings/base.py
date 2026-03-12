@@ -23,6 +23,7 @@ load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ['SECRET_KEY']
 
+AUTH_USER_MODEL = 'users.Users'  # Use our custom user model
 # ---------------------------------------------------------------------------
 # Application definition
 # ---------------------------------------------------------------------------
@@ -37,6 +38,7 @@ INSTALLED_APPS = [
     # POS apps
     'sales.apps.SalesConfig',
     'reports.apps.ReportsConfig',
+    'users.apps.UsersConfig',
 ]
 
 MIDDLEWARE = [
@@ -78,7 +80,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME':     os.environ.get('DB_NAME', 'posdb'),
         'USER':     os.environ.get('DB_USER', 'root'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'drewbrinas'),
+        # 'PASSWORD': os.environ.get('DB_PASSWORD', 'andrew'), pc
         'HOST':     os.environ.get('DB_HOST', '127.0.0.1'),
         'PORT':     os.environ.get('DB_PORT', '3306'),
         'OPTIONS': {
@@ -159,3 +162,10 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+# ---------------------------------------------------------------------------
+# Login URL for @login_required and similar decorators  
+# ---------------------------------------------------------------------------
+
+LOGIN_URL = 'pos_login'
+

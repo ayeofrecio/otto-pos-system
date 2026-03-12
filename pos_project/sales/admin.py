@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from .models import (
     AccountingSummary,
-    ClarionUser,
     Color,
     Item,
     ItemDetail,
@@ -65,15 +64,15 @@ class TempTransactionAdmin(admin.ModelAdmin):
     search_fields = ('transaction_no', 'item_code', 'user_id')
 
 
-@admin.register(ClarionUser)
-class ClarionUserAdmin(admin.ModelAdmin):
-    list_display = (
-        'user_id', 'last_name', 'first_name', 'user_level',
-        'user_group', 'department', 'active', 'suspended',
-    )
-    list_filter = ('user_group', 'department', 'active', 'suspended', 'user_level')
-    search_fields = ('user_id', 'last_name', 'first_name', 'long_name')
-    ordering = ('last_name', 'first_name')
+# @admin.register(ClarionUser)
+# class ClarionUserAdmin(admin.ModelAdmin):
+#     list_display = (
+#         'user_id', 'last_name', 'first_name', 'user_level',
+#         'user_group', 'department', 'active', 'suspended',
+#     )
+#     list_filter = ('user_group', 'department', 'active', 'suspended', 'user_level')
+#     search_fields = ('user_id', 'last_name', 'first_name', 'long_name')
+#     ordering = ('last_name', 'first_name')
 
 
 @admin.register(Tender)

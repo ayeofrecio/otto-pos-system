@@ -1,0 +1,865 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Cashier | Profile</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #1e2328;
+            --surface:   #252b33;
+            --surface2:  #2d343e;
+            --border:    #2f3640;
+            --text:      #e6edf3;
+            --muted:     #8b949e;
+            --faint:     #6e7681;
+            --red:       #8b3d4a;
+            --red-dim:   #3a1520;
+            --green:     #6edb8f;
+            --green-dim: #122a1a;
+            --blue:      #60b8f0;
+            --blue-dim:  #0d2035;
+            --gold:      #f0c060;
+        }
+
+        body {
+            font-family: 'IBM Plex Sans', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1.5rem;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+        .header-left { display: flex; gap: 2rem; align-items: center; }
+        .store-name  { font-size: 1.25rem; font-weight: 700; }
+        .header-right { display: flex; gap: 2rem; align-items: center; }
+        .time { font-size: 1.125rem; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+        .date { font-size: 1.125rem; }
+        .cashier-name { font-size: 1rem; color: var(--muted); }
+
+        /* ── LAYOUT ── */
+        .page {
+            max-width: 960px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        /* ── PAGE TITLE BAR ── */
+        .page-title-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .page-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+        .page-breadcrumb {
+            font-size: 0.8rem;
+            color: var(--muted);
+            font-family: 'IBM Plex Mono', monospace;
+        }
+        .page-breadcrumb a { color: var(--muted); text-decoration: none; }
+        .page-breadcrumb a:hover { color: var(--text); }
+
+        /* ── CARD ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 0.85rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .card-header-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+        .card-header-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--red);
+            flex-shrink: 0;
+        }
+        .card-header-dot.green { background: var(--green); }
+        .card-header-dot.blue  { background: var(--blue); }
+        .card-body { padding: 1.25rem; }
+
+        /* ── IDENTITY CARD ── */
+        .identity-row {
+            display: flex;
+            gap: 1.5rem;
+            align-items: flex-start;
+        }
+        .avatar-wrap {
+            flex-shrink: 0;
+            position: relative;
+        }
+        .avatar {
+            width: 90px;
+            height: 90px;
+            border-radius: 8px;
+            background: var(--surface2);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--red);
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: -0.05em;
+            user-select: none;
+        }
+        .role-badge {
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.2rem 0.55rem;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .role-badge.cashier { background: var(--red); color: #fff; }
+        .role-badge.admin   { background: var(--gold); color: #1e2328; }
+
+        .identity-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding-top: 0.25rem;
+        }
+        .identity-name {
+            font-size: 1.6rem;
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+        .identity-emp {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+        .identity-tags {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            margin-top: 0.25rem;
+        }
+        .tag {
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            border: 1px solid;
+        }
+        .tag-green { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+        .tag-blue  { border-color: var(--blue);  color: var(--blue);  background: var(--blue-dim);  }
+        .tag-red   { border-color: var(--red);   color: #e6edf3;     background: var(--red-dim);   }
+        .tag-muted { border-color: var(--border); color: var(--muted); background: transparent; }
+
+        /* ── STAT GRID ── */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0;
+        }
+        .stat-cell {
+            padding: 1rem 1.25rem;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        .stat-cell:last-child { border-right: none; }
+        .stat-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--faint);
+            font-weight: 600;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: -0.02em;
+        }
+        .stat-value.green { color: var(--green); }
+        .stat-value.gold  { color: var(--gold); }
+        .stat-value.blue  { color: var(--blue); }
+        .stat-sub {
+            font-size: 0.7rem;
+            color: var(--faint);
+        }
+
+        /* ── TWO-COL ── */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+        }
+
+        /* ── FIELD LIST ── */
+        .field-list { display: flex; flex-direction: column; gap: 0; }
+        .field-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 0.7rem 0;
+            border-bottom: 1px solid var(--border);
+            gap: 1rem;
+        }
+        .field-row:last-child { border-bottom: none; }
+        .field-label {
+            font-size: 0.8rem;
+            color: var(--muted);
+            flex-shrink: 0;
+            min-width: 130px;
+        }
+        .field-value {
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-align: right;
+            font-family: 'IBM Plex Mono', monospace;
+            word-break: break-all;
+        }
+
+        /* ── SESSION TABLE ── */
+        .session-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .session-table th {
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            color: var(--faint);
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+        }
+        .session-table td {
+            padding: 0.65rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        .session-table tr:last-child td { border-bottom: none; }
+        .session-table tr:hover td { background: var(--surface2); }
+        .session-num  { font-family: 'IBM Plex Mono', monospace; color: var(--blue); }
+        .session-cash { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+        .session-status {
+            display: inline-block;
+            padding: 0.15rem 0.45rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .status-active  { background: var(--green-dim); color: var(--green); }
+        .status-closed  { background: var(--border);    color: var(--muted); }
+        .status-variant { background: var(--red-dim);   color: var(--red); }
+
+        /* ── CHANGE PASSWORD ── */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            margin-bottom: 1rem;
+        }
+        .form-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+            font-weight: 600;
+        }
+        .form-input {
+            padding: 0.7rem 0.9rem;
+            font-size: 0.95rem;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface2);
+            color: var(--text);
+            font-family: 'IBM Plex Mono', monospace;
+            transition: border-color 0.15s;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--red);
+        }
+        .form-hint {
+            font-size: 0.7rem;
+            color: var(--faint);
+        }
+        .strength-bar {
+            height: 3px;
+            border-radius: 2px;
+            background: var(--border);
+            overflow: hidden;
+            margin-top: 0.3rem;
+        }
+        .strength-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s, background 0.3s;
+            width: 0%;
+        }
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-top: 0.25rem;
+        }
+
+        /* ── BUTTONS ── */
+        .btn {
+            padding: 0.65rem 1.2rem;
+            font-size: 0.875rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: 'IBM Plex Sans', sans-serif;
+            transition: background 0.15s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-primary { background: var(--red); color: #fff; }
+        .btn-primary:hover { background: #7a3540; }
+        .btn-ghost {
+            background: transparent;
+            color: var(--muted);
+            border: 2px solid var(--border);
+        }
+        .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+        .btn-secondary { background: var(--surface2); color: var(--text); border: 2px solid var(--border); }
+        .btn-secondary:hover { background: var(--border); }
+
+        /* ── ACTIVITY FEED ── */
+        .activity-feed { display: flex; flex-direction: column; }
+        .activity-item {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .activity-item:last-child { border-bottom: none; }
+        .activity-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-top: 0.35rem;
+            flex-shrink: 0;
+        }
+        .activity-text { flex: 1; }
+        .activity-main { font-size: 0.875rem; font-weight: 500; }
+        .activity-meta { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; font-family: 'IBM Plex Mono', monospace; }
+        .activity-time { font-size: 0.7rem; color: var(--faint); white-space: nowrap; font-family: 'IBM Plex Mono', monospace; flex-shrink: 0; }
+
+        /* ── TERMINAL INFO ── */
+        .terminal-box {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem 1.25rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--muted);
+            line-height: 1.8;
+        }
+        .terminal-line { display: flex; gap: 1rem; }
+        .terminal-key { color: var(--faint); min-width: 140px; }
+        .terminal-val { color: var(--blue); }
+        .terminal-val.green { color: var(--green); }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 680px) {
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+            .stat-cell:nth-child(2) { border-right: none; }
+            .two-col { grid-template-columns: 1fr; }
+            .identity-row { flex-direction: column; align-items: center; text-align: center; }
+            .identity-tags { justify-content: center; }
+            .field-label { min-width: 110px; }
+        }
+
+        /* ── ENTER ANIMATION ── */
+        .card {
+            animation: fadeUp 0.25s ease both;
+        }
+        .card:nth-child(1) { animation-delay: 0.05s; }
+        .card:nth-child(2) { animation-delay: 0.10s; }
+        .card:nth-child(3) { animation-delay: 0.15s; }
+        .card:nth-child(4) { animation-delay: 0.20s; }
+        .card:nth-child(5) { animation-delay: 0.25s; }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER (matches cashier page exactly) -->
+<header class="header">
+    <div class="header-left">
+        <span class="store-name">{{ store_name|default:"POS Store" }}</span>
+        <span class="date" id="live-date">{{ date }}</span>
+        <span class="cashier-name">Cashier: {{ cashier|default:"Juan dela Cruz" }}</span>
+    </div>
+    <div class="header-right">
+        <span class="time" id="live-time">{{ time }}</span>
+        <a href="{% url 'sales:pos_cashier' %}" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">← Back to POS</a>
+        <a href="{% url 'pos_logout' %}" class="btn btn-ghost" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Logout</a>
+    </div>
+</header>
+
+<main class="page">
+
+    <!-- BREADCRUMB + TITLE -->
+    <div class="page-title-bar">
+        <h1 class="page-title">My Profile</h1>
+        <span class="page-breadcrumb">
+            <a href="{% url 'sales:pos_cashier' %}">POS</a> / Profile
+        </span>
+    </div>
+
+    <!-- ① IDENTITY CARD -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-header-dot green"></span>
+            <span class="card-header-title">Account Identity</span>
+        </div>
+        <div class="card-body">
+            <div class="identity-row">
+                <div class="avatar-wrap">
+                    <!-- Initials avatar — replace with <img> if you have a photo -->
+                    <div class="avatar">{{ cashier_initials|default:"JD" }}</div>
+                    <span class="role-badge {{ user_role|default:'cashier' }}">{{ user_role|default:"Cashier" }}</span>
+                </div>
+                <div class="identity-info">
+                    <div class="identity-name">{{ full_name|default:"Juan dela Cruz" }}</div>
+                    <div class="identity-emp">EMP# {{ employee_number|default:"0001" }}</div>
+                    <div class="identity-tags">
+                        <span class="tag tag-green">● Active</span>
+                        <span class="tag tag-blue">Terminal {{ terminal_id|default:"001" }}</span>
+                        <span class="tag tag-blue">Store {{ store_id|default:"001" }}</span>
+                        {% if gender %}<span class="tag tag-muted">{{ gender }}</span>{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ② DAILY STATS -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-header-dot green"></span>
+            <span class="card-header-title">Today's Performance</span>
+        </div>
+        <div class="stat-grid">
+            <div class="stat-cell">
+                <div class="stat-label">Transactions</div>
+                <div class="stat-value blue">{{ today_txn_count|default:"0" }}</div>
+                <div class="stat-sub">completed sales</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Gross Sales</div>
+                <div class="stat-value green">₱{{ today_gross|default:"0.00" }}</div>
+                <div class="stat-sub">before discounts</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Total Discounts</div>
+                <div class="stat-value gold">₱{{ today_discounts|default:"0.00" }}</div>
+                <div class="stat-sub">applied this session</div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-label">Net Sales</div>
+                <div class="stat-value green">₱{{ today_net|default:"0.00" }}</div>
+                <div class="stat-sub">after discounts</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ③ ACCOUNT DETAILS + CHANGE PASSWORD (two columns) -->
+    <div class="two-col">
+
+        <!-- Account Info -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-header-dot blue"></span>
+                <span class="card-header-title">Account Details</span>
+            </div>
+            <div class="card-body">
+                <div class="field-list">
+                    <div class="field-row">
+                        <span class="field-label">Full Name</span>
+                        <span class="field-value">{{ full_name|default:"Juan dela Cruz" }}</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">Username</span>
+                        <span class="field-value">{{ username|default:"jdelacruz" }}</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">Employee No.</span>
+                        <span class="field-value">{{ employee_number|default:"0001" }}</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">Role</span>
+                        <span class="field-value">{{ user_role|default:"Cashier" }}</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">Gender</span>
+                        <span class="field-value">{{ gender|default:"—" }}</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">Last Login</span>
+                        <span class="field-value" style="color: var(--muted);">{{ last_login|default:"—" }}</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">Account Since</span>
+                        <span class="field-value" style="color: var(--muted);">{{ created_at|default:"—" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Change Password -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-header-dot"></span>
+                <span class="card-header-title">Change Password</span>
+            </div>
+            <div class="card-body">
+                <form method="POST" 
+                action="{% url 'sales:profile_change_password' }" 
+                id="pw-form">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label class="form-label" for="current-pw">Current Password</label>
+                        <input class="form-input" type="password" id="current-pw" name="current_password"
+                               placeholder="••••••••" autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-pw">New Password</label>
+                        <input class="form-input" type="password" id="new-pw" name="new_password"
+                               placeholder="••••••••" autocomplete="new-password">
+                        <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+                        <span class="form-hint" id="strength-label">—</span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="confirm-pw">Confirm New Password</label>
+                        <input class="form-input" type="password" id="confirm-pw" name="confirm_password"
+                               placeholder="••••••••" autocomplete="new-password">
+                        <span class="form-hint" id="match-hint"></span>
+                    </div>
+                    <div class="form-actions">
+                        <button type="reset" class="btn btn-ghost">Clear</button>
+                        <button type="submit" class="btn btn-primary" id="pw-submit" disabled>Update Password</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ④ RECENT SESSIONS -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-header-dot blue"></span>
+            <span class="card-header-title">Recent Sessions</span>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="session-table">
+                <thead>
+                    <tr>
+                        <th>Session #</th>
+                        <th>Login</th>
+                        <th>Logout</th>
+                        <th>Opening Cash</th>
+                        <th>Closing Cash</th>
+                        <th>Variance</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in recent_sessions %}
+                    <tr>
+                        <td><span class="session-num">{{ s.session_number }}</span></td>
+                        <td>{{ s.login_time|date:"M d, H:i" }}</td>
+                        <td>{{ s.logout_time|date:"M d, H:i"|default:"—" }}</td>
+                        <td><span class="session-cash">₱{{ s.opening_cash }}</span></td>
+                        <td><span class="session-cash">₱{{ s.closing_cash|default:"—" }}</span></td>
+                        <td style="color: {% if s.cash_variance and s.cash_variance < 0 %}var(--red){% elif s.cash_variance and s.cash_variance > 0 %}var(--green){% else %}var(--muted){% endif %}">
+                            {% if s.cash_variance %}₱{{ s.cash_variance }}{% else %}—{% endif %}
+                        </td>
+                        <td>
+                            <span class="session-status status-{{ s.session_status }}">{{ s.session_status }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <!-- Demo rows shown when no real data -->
+                    <tr>
+                        <td><span class="session-num">SES-0001</span></td>
+                        <td>Mar 06, 08:00</td>
+                        <td>—</td>
+                        <td><span class="session-cash">₱5,000.00</span></td>
+                        <td><span class="session-cash">—</span></td>
+                        <td style="color:var(--muted)">—</td>
+                        <td><span class="session-status status-active">active</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="session-num">SES-0002</span></td>
+                        <td>Mar 05, 08:02</td>
+                        <td>Mar 05, 20:15</td>
+                        <td><span class="session-cash">₱5,000.00</span></td>
+                        <td><span class="session-cash">₱12,480.00</span></td>
+                        <td style="color:var(--green)">₱+80.00</td>
+                        <td><span class="session-status status-closed">closed</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="session-num">SES-0003</span></td>
+                        <td>Mar 04, 07:55</td>
+                        <td>Mar 04, 20:00</td>
+                        <td><span class="session-cash">₱5,000.00</span></td>
+                        <td><span class="session-cash">₱9,820.00</span></td>
+                        <td style="color:var(--red)">₱-120.00</td>
+                        <td><span class="session-status status-closed">closed</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ⑤ RECENT ACTIVITY + TERMINAL INFO -->
+    <div class="two-col">
+
+        <!-- Activity Log -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-header-dot"></span>
+                <span class="card-header-title">Recent Activity</span>
+            </div>
+            <div class="card-body">
+                <div class="activity-feed">
+                    {% for a in recent_activity %}
+                    <div class="activity-item">
+                        <div class="activity-dot" style="background:
+                            {% if a.action_type == 'LOGIN' %}var(--green)
+                            {% elif a.action_type == 'LOGOUT' %}var(--muted)
+                            {% elif a.action_type == 'VOID' %}var(--red)
+                            {% elif a.action_type == 'DISCOUNT_AUTH' %}var(--gold)
+                            {% else %}var(--blue){% endif %}"></div>
+                        <div class="activity-text">
+                            <div class="activity-main">{{ a.action_type|capfirst }}: {{ a.action_description|truncatechars:60 }}</div>
+                            <div class="activity-meta">{{ a.table_name }} · {{ a.ip_address }}</div>
+                        </div>
+                        <div class="activity-time">{{ a.created_at|timesince }} ago</div>
+                    </div>
+                    {% empty %}
+                    <!-- Demo entries -->
+                    <div class="activity-item">
+                        <div class="activity-dot" style="background:var(--green)"></div>
+                        <div class="activity-text">
+                            <div class="activity-main">Login — session opened</div>
+                            <div class="activity-meta">cashier_sessions · 192.168.1.2</div>
+                        </div>
+                        <div class="activity-time">2h ago</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-dot" style="background:var(--blue)"></div>
+                        <div class="activity-text">
+                            <div class="activity-main">Insert — transaction TXN-00042 completed</div>
+                            <div class="activity-meta">record_transaction · 192.168.1.2</div>
+                        </div>
+                        <div class="activity-time">3h ago</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-dot" style="background:var(--gold)"></div>
+                        <div class="activity-text">
+                            <div class="activity-main">Discount auth — 10% senior on TXN-00039</div>
+                            <div class="activity-meta">discount_authorizations · 192.168.1.2</div>
+                        </div>
+                        <div class="activity-time">4h ago</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-dot" style="background:var(--red)"></div>
+                        <div class="activity-text">
+                            <div class="activity-main">Void — item voided from TXN-00037</div>
+                            <div class="activity-meta">record_transaction_details · 192.168.1.2</div>
+                        </div>
+                        <div class="activity-time">5h ago</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-dot" style="background:var(--muted)"></div>
+                        <div class="activity-text">
+                            <div class="activity-main">Logout — session closed</div>
+                            <div class="activity-meta">cashier_sessions · 192.168.1.2</div>
+                        </div>
+                        <div class="activity-time">Yesterday</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal / Store Info -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-header-dot blue"></span>
+                <span class="card-header-title">Terminal & Store</span>
+            </div>
+            <div class="card-body">
+                <div class="terminal-box">
+                    <div class="terminal-line">
+                        <span class="terminal-key">STORE_ID</span>
+                        <span class="terminal-val">{{ store_id|default:"001" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">BRANCH</span>
+                        <span class="terminal-val">{{ store_name|default:"Main Branch" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">TERMINAL_ID</span>
+                        <span class="terminal-val">{{ terminal_id|default:"001" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">TIN</span>
+                        <span class="terminal-val">{{ tin|default:"000-000-000-000" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">ADDRESS</span>
+                        <span class="terminal-val">{{ address|default:"—" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">CONTACT</span>
+                        <span class="terminal-val">{{ contact_number|default:"—" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">VAT_ENABLED</span>
+                        <span class="terminal-val green">{{ use_vat|yesno:"YES,NO" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">SESSION_NO</span>
+                        <span class="terminal-val">{{ pos_session_no|default:"SES-0001" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">TRANS_NO</span>
+                        <span class="terminal-val">{{ pos_trans_no|default:"00000001" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">BUSINESS_DATE</span>
+                        <span class="terminal-val">{{ business_date|default:"2026-03-06" }}</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-key">TIMEZONE</span>
+                        <span class="terminal-val">Asia/Manila</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</main>
+
+<!-- Live clock (same as cashier page) -->
+<script>
+    function updateClock() {
+        const now = new Date();
+        const d = now.toLocaleDateString('en-PH', { weekday:'short', year:'numeric', month:'short', day:'numeric' });
+        const t = now.toLocaleTimeString('en-PH', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        const ld = document.getElementById('live-date');
+        const lt = document.getElementById('live-time');
+        if (ld) ld.textContent = d;
+        if (lt) lt.textContent = t;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    /* ── PASSWORD STRENGTH ── */
+    const newPw     = document.getElementById('new-pw');
+    const confirmPw = document.getElementById('confirm-pw');
+    const fill      = document.getElementById('strength-fill');
+    const label     = document.getElementById('strength-label');
+    const hint      = document.getElementById('match-hint');
+    const submitBtn = document.getElementById('pw-submit');
+
+    function checkStrength(pw) {
+        let score = 0;
+        if (pw.length >= 8)  score++;
+        if (/[A-Z]/.test(pw)) score++;
+        if (/[0-9]/.test(pw)) score++;
+        if (/[^A-Za-z0-9]/.test(pw)) score++;
+        return score;
+    }
+
+    function updatePwUI() {
+        const pw  = newPw.value;
+        const cpw = confirmPw.value;
+        const sc  = checkStrength(pw);
+
+        const colors = ['', '#f85149', '#f0c060', '#60b8f0', '#6edb8f'];
+        const labels = ['—', 'Weak', 'Fair', 'Good', 'Strong'];
+        fill.style.width   = pw ? (sc * 25) + '%' : '0%';
+        fill.style.background = pw ? colors[sc] : '';
+        label.textContent  = pw ? labels[sc] : '—';
+        label.style.color  = pw ? colors[sc] : '';
+
+        if (cpw) {
+            if (pw === cpw) {
+                hint.textContent = '✓ Passwords match';
+                hint.style.color = 'var(--green)';
+            } else {
+                hint.textContent = '✗ Passwords do not match';
+                hint.style.color = 'var(--red)';
+            }
+        } else {
+            hint.textContent = '';
+        }
+
+        submitBtn.disabled = !(pw && pw === cpw && sc >= 2);
+    }
+
+    newPw.addEventListener('input', updatePwUI);
+    confirmPw.addEventListener('input', updatePwUI);
+</script>
+
+</body>
+</html>
