@@ -427,7 +427,7 @@
       if (barcodeInput) { barcodeInput.focus(); }
     }
   });
-  
+
   // ---------------------------------------------------------------------------
   // Transaction Subtotal Discount Modal (F4)
   // ---------------------------------------------------------------------------
@@ -649,7 +649,7 @@
 
     // Pull expected cash from the cart total displayed on screen
     const cartTotalEl = document.querySelector('.cart-total');
-    let expectedCash = 5000; // CHANGE::::::Default fallback if cart total not found or parseable
+    let expectedCash = 0; // CHANGE::::::Default fallback if cart total not found or parseable
     if (cartTotalEl) {
       expectedCash = parseFloat(
         cartTotalEl.textContent.replace(/[^0-9.]/g, '')

@@ -68,7 +68,16 @@
             font-size: 1rem;
         }
 
-        .main { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: 1fr 380px; grid-template-rows: 1fr; gap: 1rem; padding: 1rem; }
+        .main {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            grid-template-rows: 1fr;
+            gap: 1rem;
+            padding: 1rem;
+        }
 
         .left {
             display: flex;
@@ -99,7 +108,14 @@
             color: #6e7681;
         }
 
-        .detail-and-items-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; flex: 1; min-height: 0; overflow: hidden; }
+        .detail-and-items-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
 
         .item-detail {
             padding: 1rem;
@@ -162,7 +178,13 @@
             gap: 0.5rem;
         }
 
-        .scanned-item { padding: 0.6rem 0.75rem; border-bottom: 1px solid #2f3640; border-radius: 6px; margin: 0 2px; transition: background 0.15s, border-color 0.15s; }
+        .scanned-item {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid #2f3640;
+            border-radius: 6px;
+            margin: 0 2px;
+            transition: background 0.15s, border-color 0.15s;
+        }
 
         .scanned-item:last-child {
             border-bottom: none;
@@ -203,12 +225,46 @@
             animation: highlight 1.5s ease-out;
         }
 
-        .scanned-item-clickable { cursor: pointer; border-left: 3px solid transparent; }
-        .scanned-item-clickable:hover { background: #2d343e; border-left-color: #6edb8f; }
-        .scanned-items-hint { font-size: 0.8rem; font-weight: 600; color: #6edb8f; margin-left: 0.35rem; }
-        .scanned-item-disc { font-size: 0.8rem; color: #6edb8f; }
-        .cart-panel { display: flex; flex-direction: column; min-height: 0; background: #252b33; border-radius: 6px; border: 1px solid #2f3640; overflow: hidden; }
-        #cart-summary { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden; }
+        .scanned-item-clickable {
+            cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+
+        .scanned-item-clickable:hover {
+            background: #2d343e;
+            border-left-color: #6edb8f;
+        }
+
+        .scanned-items-hint {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #6edb8f;
+            margin-left: 0.35rem;
+        }
+
+        .scanned-item-disc {
+            font-size: 0.8rem;
+            color: #6edb8f;
+        }
+
+        .cart-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            background: #252b33;
+            border-radius: 6px;
+            border: 1px solid #2f3640;
+            overflow: hidden;
+        }
+
+        #cart-summary {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            flex: 1;
+            overflow: hidden;
+        }
+
         .cart-total {
             padding: 1rem;
             background: #2d343e;
@@ -223,7 +279,12 @@
             color: #8b949e;
         }
 
-        .cart-list { flex: 1; overflow-y: auto; min-height: 0; padding: 0.5rem; }
+        .cart-list {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+            padding: 0.5rem;
+        }
 
         .cart-line {
             padding: 0.5rem;
@@ -268,7 +329,15 @@
             background: #7a3540;
         }
 
-        .actions { flex-shrink: 0; display: flex; gap: 0.75rem; padding: 0.75rem 1.5rem; background: #252b33; border-top: 1px solid #2f3640; align-items: center; }
+        .actions {
+            flex-shrink: 0;
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.75rem 1.5rem;
+            background: #252b33;
+            border-top: 1px solid #2f3640;
+            align-items: center;
+        }
 
         .actions-divider {
             width: 1px;
@@ -1175,7 +1244,7 @@
             -webkit-appearance: none;
             margin: 0;
         }
-        
+
         .close-trans-cash-input:focus {
             border-color: #8b3d4a;
             box-shadow: 0 0 0 2px rgba(96, 184, 240, .15);
@@ -1571,30 +1640,37 @@
         </div>
     </div>
 
-<!-- Line Discount Modal (click row in Items Entered) -->
+    <!-- Line Discount Modal (click row in Items Entered) -->
     <div class="modal-overlay" id="line-disc-modal" onclick="closeLineDiscModalOutside(event)">
         <div class="modal disc-modal">
             <div class="modal-header">
                 <h2>Apply Discount to Line</h2>
                 <button class="modal-close" onclick="closeLineDiscModal()">&#10005;</button>
             </div>
-            <form id="line-disc-form" hx-post="{% url 'sales:cart_line_disc' %}" hx-target="#cart-summary" hx-swap="outerHTML" hx-trigger="submit">
+            <form id="line-disc-form" hx-post="{% url 'sales:cart_line_disc' %}" hx-target="#cart-summary"
+                hx-swap="outerHTML" hx-trigger="submit">
                 {% csrf_token %}
                 <input type="hidden" id="line-disc-rec-ctr" name="rec_ctr" value="">
                 <input type="hidden" id="line-disc-type" name="disc_type" value="">
                 <div class="disc-type-grid">
-                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="REG" data-pct="0" onclick="selectLineDiscType(this,'REG','Regular',0)">Regular %</button>
-                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="SC" data-pct="20" onclick="selectLineDiscType(this,'SC','Senior Citizen',20)">Senior Citizen (20%)</button>
-                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="PWD" data-pct="20" onclick="selectLineDiscType(this,'PWD','PWD',20)">PWD (20%)</button>
-                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="EMP" data-pct="10" onclick="selectLineDiscType(this,'EMP','Employee',10)">Employee (10%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="REG" data-pct="0"
+                        onclick="selectLineDiscType(this,'REG','Regular',0)">Regular %</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="SC" data-pct="20"
+                        onclick="selectLineDiscType(this,'SC','Senior Citizen',20)">Senior Citizen (20%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="PWD" data-pct="20"
+                        onclick="selectLineDiscType(this,'PWD','PWD',20)">PWD (20%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="EMP" data-pct="10"
+                        onclick="selectLineDiscType(this,'EMP','Employee',10)">Employee (10%)</button>
                 </div>
                 <div class="disc-pct-row">
                     <label class="disc-pct-label" for="line-disc-pct-input">Discount %:</label>
-                    <input type="number" id="line-disc-pct-input" name="disc_pct" class="disc-pct-num" value="0" min="0" max="100" step="0.01" autocomplete="off">
+                    <input type="number" id="line-disc-pct-input" name="disc_pct" class="disc-pct-num" value="0" min="0"
+                        max="100" step="0.01" autocomplete="off">
                     <span class="disc-pct-sym">%</span>
                 </div>
                 <div class="disc-modal-footer">
-                    <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove Discount</button>
+                    <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove
+                        Discount</button>
                     <button type="button" class="btn btn-secondary" onclick="closeLineDiscModal()">Cancel</button>
                     <button type="button" class="btn btn-apply-disc" onclick="applyLineDisc()">Apply</button>
                 </div>
@@ -1602,6 +1678,36 @@
         </div>
     </div>
 
+    <!-- Discount Modal (F3) -->
+    <div class="modal-overlay" id="discount-modal" onclick="closeDiscountModalOutside(event)">
+        <div class="modal disc-modal">
+            <div class="modal-header">
+                <h2>Apply Discount</h2>
+                <button class="modal-close" onclick="closeDiscountModal()">&#10005;</button>
+            </div>
+            <div class="disc-type-grid">
+                <button class="disc-type-btn" data-disc-code="REG" data-disc-pct="0"
+                    onclick="selectDiscType(this, 'REG',  'Regular',          0)">Regular %</button>
+                <button class="disc-type-btn" data-disc-code="SC" data-disc-pct="20"
+                    onclick="selectDiscType(this, 'SC',   'Senior Citizen',  20)">Senior Citizen (20%)</button>
+                <button class="disc-type-btn" data-disc-code="PWD" data-disc-pct="20"
+                    onclick="selectDiscType(this, 'PWD',  'PWD',             20)">PWD (20%)</button>
+                <button class="disc-type-btn" data-disc-code="EMP" data-disc-pct="10"
+                    onclick="selectDiscType(this, 'EMP',  'Employee',        10)">Employee (10%)</button>
+            </div>
+            <div class="disc-pct-row">
+                <label class="disc-pct-label" for="disc-pct-modal-input">Discount %:</label>
+                <input type="number" id="disc-pct-modal-input" class="disc-pct-num" value="0" min="0" max="100"
+                    step="0.01" autocomplete="off">
+                <span class="disc-pct-sym">%</span>
+            </div>
+            <div class="disc-modal-footer">
+                <button class="btn btn-remove-disc" onclick="removeDiscountAndClose()">Remove Discount</button>
+                <button class="btn btn-secondary" onclick="closeDiscountModal()">Cancel</button>
+                <button class="btn btn-apply-disc" onclick="applyDiscount()">Apply</button>
+            </div>
+        </div>
+    </div>
     <!-- Pay Modal (tender floating window) -->
     <div class="modal-overlay" id="pay-modal" onclick="closePayModalOutside(event)">
         <div class="modal pay-modal" onclick="event.stopPropagation()">
@@ -1615,69 +1721,67 @@
         </div>
     </div>
 
-<!-- Close Transaction Modal (F8) -->
-<div class="modal-overlay" id="close-trans-modal" onclick="closeCloseTransModalOutside(event)">
-    <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
-        <div class="modal-header">
-            <h2>Close Transaction</h2>
-            <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
+    <!-- Close Transaction Modal (F8) -->
+    <div class="modal-overlay" id="close-trans-modal" onclick="closeCloseTransModalOutside(event)">
+        <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Close Transaction</h2>
+                <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
+            </div>
+
+            <form id="close-trans-form" method="POST" action="{% url 'sales:close_session' %}">
+                {% csrf_token %}
+
+                <!-- Hidden fields populated by JS -->
+                <input type="hidden" name="expected_cash" id="hidden-expected-cash" value="0">
+                <input type="hidden" name="cash_variance" id="hidden-cash-variance" value="0">
+
+                <!-- Summary strip -->
+                <div class="close-trans-summary">
+                    <div class="close-trans-summary-row">
+                        <span>Expected Cash</span>
+                        <span id="close-trans-expected">₱0.00</span>
+                    </div>
+                    <div class="close-trans-summary-row">
+                        <span>Variance</span>
+                        <span id="close-trans-variance" class="close-trans-variance-val">—</span>
+                    </div>
+                </div>
+
+                <!-- Closing cash input -->
+                <div class="close-trans-input-section">
+                    <label class="close-trans-label" for="closing-cash-input">Closing Cash Amount</label>
+                    <div class="close-trans-input-row">
+                        <span class="close-trans-currency">₱</span>
+                        <input type="number" id="closing-cash-input" name="closing_cash" class="close-trans-cash-input"
+                            placeholder="0.00" min="0" step="0.01" autocomplete="off">
+                    </div>
+                </div>
+
+                <!-- Denomination breakdown -->
+                <div class="close-trans-denom-open">
+                    <button type="button" class="btn btn-secondary" onclick="openDenominationModal()">
+                        Count by Denomination
+                    </button>
+                </div>
+
+                <!-- Notes -->
+                <div class="close-trans-notes-section">
+                    <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
+                    <textarea id="close-trans-notes" name="notes" class="close-trans-notes-input" rows="2"
+                        placeholder="e.g. short due to petty cash withdrawal…"></textarea>
+                </div>
+
+                <div class="close-trans-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
+                    <button type="submit" class="btn close-trans-confirm-btn" id="close-trans-confirm-btn" disabled>
+                        Confirm Close
+                    </button>
+                </div>
+            </form>
+
         </div>
-
-        <form id="close-trans-form" method="POST" action="{% url 'sales:close_session' %}">
-            {% csrf_token %}
-
-            <!-- Hidden fields populated by JS -->
-            <input type="hidden" name="expected_cash" id="hidden-expected-cash" value="0">
-            <input type="hidden" name="cash_variance" id="hidden-cash-variance" value="0">
-
-            <!-- Summary strip -->
-            <div class="close-trans-summary">
-                <div class="close-trans-summary-row">
-                    <span>Expected Cash</span>
-                    <span id="close-trans-expected">₱0.00</span>
-                </div>
-                <div class="close-trans-summary-row">
-                    <span>Variance</span>
-                    <span id="close-trans-variance" class="close-trans-variance-val">—</span>
-                </div>
-            </div>
-
-            <!-- Closing cash input -->
-            <div class="close-trans-input-section">
-                <label class="close-trans-label" for="closing-cash-input">Closing Cash Amount</label>
-                <div class="close-trans-input-row">
-                    <span class="close-trans-currency">₱</span>
-                    <input type="number" id="closing-cash-input" name="closing_cash"
-                        class="close-trans-cash-input" placeholder="0.00"
-                        min="0" step="0.01" autocomplete="off">
-                </div>
-            </div>
-
-            <!-- Denomination breakdown -->
-            <div class="close-trans-denom-open">
-                <button type="button" class="btn btn-secondary" onclick="openDenominationModal()">
-                    Count by Denomination
-                </button>
-            </div>
-
-            <!-- Notes -->
-            <div class="close-trans-notes-section">
-                <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
-                <textarea id="close-trans-notes" name="notes" class="close-trans-notes-input"
-                    rows="2" placeholder="e.g. short due to petty cash withdrawal…"></textarea>
-            </div>
-
-            <div class="close-trans-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
-                <button type="submit" class="btn close-trans-confirm-btn"
-                    id="close-trans-confirm-btn" disabled>
-                    Confirm Close
-                </button>
-            </div>
-        </form>
-
     </div>
-</div>
 
     <!-- Close Transaction Modal -> Denomination Modal -->
     <div class="modal-overlay" id="denom-modal" onclick="closeDenominationModalOutside(event)">
