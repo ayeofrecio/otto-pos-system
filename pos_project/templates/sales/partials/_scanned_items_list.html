@@ -1,16 +1,13 @@
-<h3 class="scanned-items-title">Items Entered <span class="scanned-items-hint">(click for discount, void, refund)</span></h3>
+<h3 class="scanned-items-title">Items Entered</h3>
 <div class="scanned-items-inner">
 {% if cart_lines %}
 <div class="scanned-items-list">
     {% for line in cart_lines %}
-    <div class="scanned-item{% if forloop.last and show_new_anim %} scanned-item-new{% endif %} scanned-item-clickable" data-rec-ctr="{{ line.rec_ctr }}" onclick="openLineDiscModal({{ line.rec_ctr }})" title="Click for discount, void, or refund">
+    <div class="scanned-item{% if forloop.last and show_new_anim %} scanned-item-new{% endif %}">
         <div class="scanned-item-desc">{{ line.item_description }}</div>
         <div class="scanned-item-meta">
             {% if line.item_size or line.item_color %}
             <span class="scanned-item-variant">{{ line.item_size|default:"" }}{% if line.item_size and line.item_color %}/{% endif %}{{ line.item_color|default:"" }}</span>
-            {% endif %}
-            {% if line.item_discount %}
-            <span class="scanned-item-disc">{{ line.disc_pct|floatformat:-2 }}% disc</span>
             {% endif %}
             <span class="scanned-item-amount">&#8369;{{ line.item_price_ext|floatformat:2 }}</span>
         </div>
