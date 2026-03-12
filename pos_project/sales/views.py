@@ -222,7 +222,7 @@ def close_session(request):
         request.session.pop(key, None)
 
     # messages.success(request, "Session closed successfully.")
-    return redirect("sales:pos_login")
+    return redirect("pos_logout")
 
 # ---------------------------------------------------------------------------
 # Cashier main view
