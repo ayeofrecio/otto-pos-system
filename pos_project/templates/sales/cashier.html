@@ -1627,6 +1627,37 @@
         </div>
     </div>
 
+    <!-- Line Discount Modal (click row in Items Entered) -->
+    <div class="modal-overlay" id="line-disc-modal" onclick="closeLineDiscModalOutside(event)">
+        <div class="modal disc-modal">
+            <div class="modal-header">
+                <h2>Apply Discount to Line</h2>
+                <button class="modal-close" onclick="closeLineDiscModal()">&#10005;</button>
+            </div>
+            <form id="line-disc-form" hx-post="{% url 'sales:cart_line_disc' %}" hx-target="#cart-summary" hx-swap="outerHTML" hx-trigger="submit">
+                {% csrf_token %}
+                <input type="hidden" id="line-disc-rec-ctr" name="rec_ctr" value="">
+                <input type="hidden" id="line-disc-type" name="disc_type" value="">
+                <div class="disc-type-grid">
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="REG" data-pct="0" onclick="selectLineDiscType(this,'REG','Regular',0)">Regular %</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="SC" data-pct="20" onclick="selectLineDiscType(this,'SC','Senior Citizen',20)">Senior Citizen (20%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="PWD" data-pct="20" onclick="selectLineDiscType(this,'PWD','PWD',20)">PWD (20%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="EMP" data-pct="10" onclick="selectLineDiscType(this,'EMP','Employee',10)">Employee (10%)</button>
+                </div>
+                <div class="disc-pct-row">
+                    <label class="disc-pct-label" for="line-disc-pct-input">Discount %:</label>
+                    <input type="number" id="line-disc-pct-input" name="disc_pct" class="disc-pct-num" value="0" min="0" max="100" step="0.01" autocomplete="off">
+                    <span class="disc-pct-sym">%</span>
+                </div>
+                <div class="disc-modal-footer">
+                    <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove Discount</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeLineDiscModal()">Cancel</button>
+                    <button type="button" class="btn btn-apply-disc" onclick="applyLineDisc()">Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Pay Modal (tender floating window) -->
     <div class="modal-overlay" id="pay-modal" onclick="closePayModalOutside(event)">
         <div class="modal pay-modal" onclick="event.stopPropagation()">
@@ -1825,6 +1856,7 @@
     <script>
         const ITEM_SEARCH_URL = "{% url 'sales:item_search' %}";
         const CART_ADD_URL = "{% url 'sales:cart_add' %}";
+        const CART_LINE_DISC_URL = "{% url 'sales:cart_line_disc' %}";
         const CSRF_TOKEN = "{{ csrf_token }}";
         // Initialise trans_disc state from server session (survives page reload)
         const INITIAL_TRANS_DISC = {

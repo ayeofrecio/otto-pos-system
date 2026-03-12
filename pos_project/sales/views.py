@@ -522,6 +522,77 @@ def cart_trans_disc(request):
     })
 
 
+@login_required(login_url="sales:pos_login")
+@require_http_methods(["POST"])
+def cart_line_disc(request):
+    """Apply discount to a specific cart line by rec_ctr."""
+    try:
+        rec_ctr = int(request.POST.get("rec_ctr", 0))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    try:
+        disc_pct = Decimal(str(max(0, min(100, float(request.POST.get("disc_pct", "0") or "0")))))
+    except (ValueError, TypeError):
+        disc_pct = Decimal("0")
+    disc_type = (request.POST.get("disc_type") or "").strip()[:3]
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    line = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        rec_ctr=rec_ctr,
+    ).first()
+
+    if not line:
+        if request.headers.get("HX-Request"):
+            return render(request, "sales/partials/cart_error.html", {"error": "Line not found"}, status=404)
+        return JsonResponse({"ok": False, "error": "Line not found"}, status=404)
+
+    price = line.item_price or Decimal("0")
+    qty = line.item_qty or Decimal("1")
+    item_discount = (price * disc_pct / 100).quantize(Decimal("0.0001")) if disc_pct > 0 else Decimal("0")
+    ext = (price - item_discount) * qty
+
+    line.item_discount = item_discount
+    line.discount_code = disc_type
+    line.item_price_ext = ext
+    line.save()
+
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+
+    if request.headers.get("HX-Request"):
+        return render(
+            request,
+            "sales/partials/cart_line_disc_response.html",
+            {
+                "cart_lines": cart_lines,
+                "subtotal": subtotal,
+                "trans_disc": trans_disc,
+                "trans_disc_amt": trans_disc_amt,
+                "total": total,
+                "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+                "last_item": cart_lines.last(),
+            },
+        )
+
+    return JsonResponse({"ok": True, "total": str(total)})
+
+
 @login_required
 def pay_view(request):
     """Payment screen - select tender and complete sale."""
