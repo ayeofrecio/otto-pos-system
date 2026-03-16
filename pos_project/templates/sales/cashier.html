@@ -1168,8 +1168,11 @@
             background: #2d343e;
             border-bottom: 1px solid #2f3640;
             padding: 0.75rem 1.5rem;
-            display: flex;
-            gap: 2rem;
+
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            /* 3 columns */
+            gap: 1rem 2rem;
         }
 
         .close-trans-summary-row {
@@ -1185,6 +1188,16 @@
             font-weight: 700;
             color: #e6edf3;
         }
+
+        /* Make the last item span 2 columns */
+        .close-trans-summary-row:last-child {
+            grid-column: span 2;
+        }
+
+        .close-trans-variance-val {
+            color: #ff6b6b;
+        }
+
 
         .close-trans-variance-val.over {
             color: #6edb8f;
@@ -1495,8 +1508,9 @@
             }
 
             .close-trans-summary {
-                flex-direction: column;
-                gap: 0.5rem;
+                grid-template-columns: repeat(2, 1fr);
+                /* 2 columns on mobile */
+                gap: 0.75rem;
             }
 
             .close-trans-cash-input {
@@ -1733,14 +1747,29 @@
                 {% csrf_token %}
 
                 <!-- Hidden fields populated by JS -->
+                <input type="hidden" name="opening_cash" id="hidden-opening-cash" value="0">
+                <input type="hidden" name="paid_in_cash" id="hidden-paid-in-cash" value="0">
+                <input type="hidden" name="credit_debit_cash" id="hidden-credit-debit-cash" value="0">
                 <input type="hidden" name="expected_cash" id="hidden-expected-cash" value="0">
                 <input type="hidden" name="cash_variance" id="hidden-cash-variance" value="0">
 
                 <!-- Summary strip -->
                 <div class="close-trans-summary">
                     <div class="close-trans-summary-row">
+                        <span>Opening Cash</span>
+                        <span id="close-trans-opening-cash">₱0.00</span>
+                    </div>
+                    <div class="close-trans-summary-row">
+                        <span>Paid in Cash</span>
+                        <span id="close-trans-paid-in-cash">₱0.00</span>
+                    </div>
+                    <div class="close-trans-summary-row">
+                        <span>Credit/Debit Cash</span>
+                        <span id="close-trans-credit-debit-cash">₱0.00</span>
+                    </div>
+                    <div class="close-trans-summary-row">
                         <span>Expected Cash</span>
-                        <span id="close-trans-expected">₱0.00</span>
+                        <span id="close-trans-expected-cash">₱0.00</span>
                     </div>
                     <div class="close-trans-summary-row">
                         <span>Variance</span>

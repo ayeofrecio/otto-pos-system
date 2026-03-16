@@ -810,3 +810,50 @@ class ItemLink(models.Model):
 
     def __str__(self):
         return f'{self.icode} → {self.link_code}'
+
+
+# ---------------------------------------------------------------------------
+# Transaction Logs Payment / tender lines
+# ---------------------------------------------------------------------------
+
+# Note: In the old Clarion POS, payment lines were stored in the same file as the cart lines (TEMPTRANS), with item_code='PAYMENT' and the tender code in the discount_code field.  Here we split them into a separate Payments table for better data integrity and easier querying.
+class Payment(models.Model):
+    """
+    Payment lines for completed transactions. Linked to TransactionLog via transaction_no.
+    """
+
+    transaction_no = models.CharField(max_length=8)                # TRNBR (FK to TransactionLog)
+    pcode          = models.CharField(max_length=3)                # PCODE (FK to Tender)
+    amount         = models.DecimalField(max_digits=15, decimal_places=4, default=0)   # AMOUNT
+    tender_desc     = models.CharField(max_length=15, blank=True)  # PDESC (denormalized from Tender for easier reporting)
+
+    class Meta:
+        db_table = 'payments'
+        indexes = [
+            models.Index(fields=['transaction_no']),
+        ]
+
+    def __str__(self):
+        return f'{self.transaction_no} – {self.pcode} {self.amount}'
+    
+
+# Note: Transaction Payment / Tender counts for Z-reading continuity tracking.  Updated on each transaction close.
+class TransactionTenderCount(models.Model):
+    """
+    Tracks the count of each tender type used in a transaction, for Z-reading continuity.
+    One row per transaction per tender type.
+    """
+
+    transaction_no = models.CharField(max_length=8)                # TRNBR (FK to TransactionLog)
+    pcode          = models.CharField(max_length=3)                # PCODE (FK to Tender)
+    count          = models.PositiveIntegerField(default=0)        # COUNT
+
+    class Meta:
+        db_table = 'transaction_tender_counts'
+        unique_together = [['transaction_no', 'pcode']]
+        indexes = [
+            models.Index(fields=['transaction_no']),
+        ]
+
+    def __str__(self):
+        return f'{self.transaction_no} – {self.pcode} count: {self.count}'

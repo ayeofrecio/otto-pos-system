@@ -6,6 +6,7 @@ import datetime
 import django.utils.timezone as timezone
 from decimal import Decimal
 from pyexpat.errors import messages
+from django.http import JsonResponse
 
 from django.db import models
 from django.contrib.auth.decorators import login_required
@@ -81,6 +82,15 @@ def _get_store_name():
     except TerminalSetup.DoesNotExist:
         return "POS Store"
 
+def _get_store_details():
+    """Return store details from TerminalSetup, or defaults."""
+    try:
+        return TerminalSetup.objects.filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID
+        ).first()
+    except TerminalSetup.DoesNotExist:
+        return None
 
 def _get_next_transaction_no():
     """Get and increment the next transaction number."""
@@ -223,6 +233,25 @@ def close_session(request):
 
     # messages.success(request, "Session closed successfully.")
     return redirect("pos_logout")
+
+
+@login_required
+@require_open_session
+@require_http_methods(["GET"])
+def to_close_session_details(request):
+    user = request.user
+    session = POSSession.objects.filter(
+        cashier=user,
+        store_id=STORE_ID,
+        status="open",
+    ).order_by("-opened_at").first()
+
+    if not session:
+        return JsonResponse({"error": "No open session found."}, status=400)
+
+    return JsonResponse({
+        "opening_cash": float(session.opening_cash),
+    })
 
 # ---------------------------------------------------------------------------
 # Cashier main view
@@ -807,6 +836,9 @@ def receipt_view(request):
     if not receipt:
         return redirect("sales:pos_cashier")
 
+
+    setup_details = _get_store_details()
+
     tender_lines = receipt.get("tender_lines") or []
     if not tender_lines and receipt.get("tender"):
         tender_lines = [{
@@ -814,9 +846,10 @@ def receipt_view(request):
             "amount": receipt.get("amount_tendered", receipt["total"]),
             "is_cash": receipt.get("is_cash", False)
         }]
+        
 
     context = {
-        "store_name": _get_store_name(),
+        "store_name": setup_details.header01 or "OTTO Store",
         "transaction_no": receipt["transaction_no"],
         "date": receipt["date"],
         "time": receipt["time"],
@@ -840,10 +873,9 @@ def receipt_view(request):
             return str(val)
 
 
-    # 🔥 PRINT TO EPSON TM-U220
     try:
         printer = serial.Serial(
-            port='COM1',   # CHANGE if needed
+            port=setup_details.print_port,
             baudrate=9600,
             bytesize=8,
             parity='N',
@@ -863,11 +895,15 @@ def receipt_view(request):
         # HEADER
         # =============================
         printer.write(b'\x1b\x61\x01')  # center align
-        write_line(context["store_name"])
+        write_line(setup_details.header01 or "OTTO Store")
+        write_line(setup_details.header02 or "Main Branch")
+        write_line(setup_details.header03 or "123 Main St")
+        write_line(setup_details.header04 or "Tel: 555-1234")
+        write_line(setup_details.header05 or "TIN: 123-456-789")
+        write_line(setup_details.header06 or "SIR No: 000000")
         printer.write(b'\x1b\x61\x00')  # left align
 
-        write_line(context["date"])
-        write_line(context["time"])
+
         write_line(f"Receipt #{context['transaction_no']}")
         separator()
 
@@ -882,7 +918,7 @@ def receipt_view(request):
             write_line(f"{line.get('qty')} x {format_money(line.get('price'))}".ljust(20) + f"{ext}".rjust(12))
 
             if line.get("disc_pct"):
-                write_line(f"  {line.get('disc_pct')}% discount -{format_money(line.get('disc_total'))}")
+                write_line(f"  {line.get('disc_pct')}% discount - {format_money(line.get('disc_total'))}")
                 write_line(f"  Net: {ext}")
 
         # =============================
@@ -899,7 +935,7 @@ def receipt_view(request):
         # =============================
         separator()
         printer.write(b'\x1b\x45\x01')  # bold on
-        write_line(f"TOTAL: {format_money(context['total'])}")
+        write_line(f"TOTAL:" + f"{format_money(context['total'])}".rjust(20))
         printer.write(b'\x1b\x45\x00')  # bold off
         separator()
 
@@ -918,7 +954,17 @@ def receipt_view(request):
             printer.write(b'\x1b\x45\x00')
 
         # =============================
-        # FOOTER
+        # FOOTER 1
+        # =============================
+        separator()
+        write_line(setup_details.footer01 or "Thank you for shopping!")
+        write_line(setup_details.footer02 or "Please come again!")
+        write_line(setup_details.footer03 or "Visit our website: www.ottostore.com")
+        write_line(setup_details.footer04 or "Follow us on social media @ottostore")
+
+
+        # =============================
+        # FOOTER 2
         # =============================
         separator()
         printer.write(b'\x1b\x61\x01')  # center align
@@ -977,3 +1023,4 @@ def item_search(request):
             })
 
     return JsonResponse({"results": results})
+

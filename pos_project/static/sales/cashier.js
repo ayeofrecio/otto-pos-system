@@ -646,24 +646,79 @@
   window.openCloseTransModal = function () {
     const modal = document.getElementById('close-trans-modal');
     if (!modal) { return; }
-
+    
     // Pull expected cash from the cart total displayed on screen
-    const cartTotalEl = document.querySelector('.cart-total');
-    let expectedCash = 0; // CHANGE::::::Default fallback if cart total not found or parseable
-    if (cartTotalEl) {
-      expectedCash = parseFloat(
-        cartTotalEl.textContent.replace(/[^0-9.]/g, '')
-      ) || 0;
-    }
+    // const cartTotalEl = document.querySelector('.cart-total');
+    // let expectedCash = 0; // CHANGE::::::Default fallback if cart total not found or parseable
+    // if (cartTotalEl) {
+    //   expectedCash = parseFloat(
+    //     cartTotalEl.textContent.replace(/[^0-9.]/g, '')
+    //   ) || 0;
+    // }
+    let opening_cashCash = 0;
+    let paid_in_cash = 0;
+    let credit_debit_cash = 0;
 
+    fetch('/pos/to-close-session-details/', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': CSRF_TOKEN
+      }
+    })
+      .then(response => response.json())
+      .then(data => {
+        opening_cashCash = parseFloat(data.opening_cash) || 0;
+        paid_in_cash = parseFloat(data.paid_in_cash) || 0;
+        credit_debit_cash = parseFloat(data.credit_debit_cash) || 0;
+
+
+        // Store for variance calc
+        modal._opening_cashCash = opening_cashCash;
+        modal._paid_in_cash = paid_in_cash;
+        modal._credit_debit_cash = credit_debit_cash;
+
+        const opening_cashEl = document.getElementById('close-trans-opening-cash');
+        const paid_in_cashEl = document.getElementById('close-trans-paid-in-cash');
+        const credit_debit_cashEl = document.getElementById('close-trans-credit-debit-cash');
+
+        if (opening_cashEl) {
+          opening_cashEl.textContent = '₱' + opening_cashCash.toLocaleString('en-PH', {
+            minimumFractionDigits: 2
+          });
+        }
+        if (paid_in_cashEl) {
+          paid_in_cashEl.textContent = '₱' + paid_in_cash.toLocaleString('en-PH', {
+            minimumFractionDigits: 2
+          });
+        }
+        if (credit_debit_cashEl) {
+          credit_debit_cashEl.textContent = '₱' + credit_debit_cash.toLocaleString('en-PH', {
+            minimumFractionDigits: 2
+          });
+        }
+
+      })
+      .catch(err => console.error('Close session failed:', err));
     // Store for variance calc
-    modal._expectedCash = expectedCash;
+    modal._opening_cashCash = opening_cashCash;
+    modal._paid_in_cash = paid_in_cash;
+    modal._credit_debit_cash = credit_debit_cash;
 
-    const expectedEl = document.getElementById('close-trans-expected');
-    if (expectedEl) {
-      expectedEl.textContent = '₱' + expectedCash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    const opening_cashEl = document.getElementById('close-trans-opening-cash');
+    const paid_in_cashEl = document.getElementById('close-trans-paid-in-cash');
+    const credit_debit_cashEl = document.getElementById('close-trans-credit-debit-cash');
+  
+    if (opening_cashEl) {
+      opening_cashEl.textContent = '₱' + opening_cashCash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
     }
-
+    if (paid_in_cashEl) {
+      paid_in_cashEl.textContent = '₱' + paid_in_cash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+    if (credit_debit_cashEl) {
+      credit_debit_cashEl.textContent = '₱' + credit_debit_cash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+    
     // Reset variance display
     const varianceEl = document.getElementById('close-trans-variance');
     if (varianceEl) {
@@ -710,9 +765,9 @@
   if (closingCashInput) {
     closingCashInput.addEventListener('input', function () {
       const modal = document.getElementById('close-trans-modal');
-      const expected = modal ? (modal._expectedCash || 0) : 0; // #TODO: Change this if you pull expected cash from somewhere else
+      const opening_cash = modal ? (modal._opening_cashCash || 0) : 0; // #TODO: Change this if you pull opening_cash cash from somewhere else
       const actual = parseFloat(closingCashInput.value) || 0;
-      const variance = actual - expected;
+      const variance = actual - opening_cash;
       const varianceEl = document.getElementById('close-trans-variance');
       const confirmBtn = document.getElementById('close-trans-confirm-btn');
 
@@ -792,10 +847,13 @@
     const closingCash = parseFloat(cashInput ? cashInput.value : 0) || 0;
     if (closingCash < 0) return;
 
-    const expected = modal ? (modal._expectedCash || 0) : 0;
-    const variance = closingCash - expected;
+    const opening_cash = modal ? (modal._opening_cashCash || 0) : 0;
+    const variance = closingCash - opening_cash;
 
     // Sync hidden fields so they POST alongside the form
+    document.getElementById('hidden-opening-cash').value = opening_cash.toFixed(2);
+    document.getElementById('hidden-paid-in-cash').value = paid_in_cash.toFixed(2);
+    document.getElementById('hidden-credit-debit-cash').value = credit_debit_cash.toFixed(2);
     document.getElementById('hidden-expected-cash').value = expected.toFixed(2);
     document.getElementById('hidden-cash-variance').value = variance.toFixed(2);
 
