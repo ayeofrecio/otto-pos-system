@@ -826,6 +826,9 @@ class Payment(models.Model):
     pcode          = models.CharField(max_length=3)                # PCODE (FK to Tender)
     amount         = models.DecimalField(max_digits=15, decimal_places=4, default=0)   # AMOUNT
     tender_desc     = models.CharField(max_length=15, blank=True)  # PDESC (denormalized from Tender for easier reporting)
+    # Need to add another field for the payment reference number (e.g. last 4 digits of card) to replace the old discount_code field in TEMPTRANS, which was repurposed for tender code in payment lines.
+    # Transaction number for payments will be the same as the transaction header, so we can link them via transaction_no.
+    payment_reference = models.CharField(max_length=20, blank=True)  # PAYMENT_REFERENCE
 
     class Meta:
         db_table = 'payments'
@@ -857,3 +860,89 @@ class TransactionTenderCount(models.Model):
 
     def __str__(self):
         return f'{self.transaction_no} – {self.pcode} count: {self.count}'
+
+
+# ---------------------------------------------------------------------------
+# For Checking Terminal Setup and Configuration
+# ---------------------------------------------------------------------------
+class TerminalConfiguration(models.Model):
+
+    store_id = models.CharField(max_length=3)
+    terminal_id = models.CharField(max_length=3)
+
+    vat = models.DecimalField(max_digits=8, decimal_places=4, default=0)
+
+    open_time = models.TimeField(default=datetime.time(9,0))
+    cutoff_time = models.TimeField(default=datetime.time(4,0))
+
+    class Meta:
+        db_table = "terminal_configurations"
+        unique_together = [["store_id","terminal_id"]]
+
+    def __str__(self):
+        return f"{self.store_id}/{self.terminal_id}"
+
+class TerminalReceiptHeader(models.Model):
+
+    terminal = models.ForeignKey(
+        TerminalConfiguration,
+        on_delete=models.CASCADE,
+        related_name="headers"
+    )
+
+    line_number = models.PositiveSmallIntegerField()
+    header_text = models.CharField(max_length=40)
+
+    class Meta:
+        db_table = "terminal_receipt_headers"
+        ordering = ["line_number"]
+
+class TerminalReceiptFooter(models.Model):
+
+    terminal = models.ForeignKey(
+        TerminalConfiguration,
+        on_delete=models.CASCADE,
+        related_name="footers"
+    )
+
+    line_number = models.PositiveSmallIntegerField()
+    footer_text = models.CharField(max_length=40)
+
+    class Meta:
+        db_table = "terminal_receipt_footers"
+        ordering = ["line_number"]
+
+class TerminalPort(models.Model):
+
+    PORT_TYPES = [
+        ("PRINTER","Printer"),
+        ("DRAWER","Cash Drawer"),
+        ("DISPLAY","Pole Display"),
+    ]
+
+    terminal = models.ForeignKey(
+        TerminalConfiguration,
+        on_delete=models.CASCADE,
+        related_name="ports"
+    )
+
+    port_type = models.CharField(max_length=10, choices=PORT_TYPES)
+    port_name = models.CharField(max_length=10)
+
+    class Meta:
+        db_table = "terminal_ports"
+
+class TerminalDisplayCode(models.Model):
+
+    terminal = models.ForeignKey(
+        TerminalConfiguration,
+        on_delete=models.CASCADE,
+        related_name="display_codes"
+    )
+
+    code_group = models.CharField(max_length=2)
+    code_value = models.CharField(max_length=5, blank=True)
+    code_length = models.CharField(max_length=2, blank=True)
+
+    class Meta:
+        db_table = "terminal_display_codes"
