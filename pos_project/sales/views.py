@@ -3,16 +3,19 @@ POS Cashier views: login, cashier screen, cart operations.
 """
 
 import datetime
+import django.utils.timezone as timezone
 from decimal import Decimal
+from pyexpat.errors import messages
 
 from django.db import models
-from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import ensure_csrf_cookie
 
+from users.models import POSSession
+
+from .decorators import require_open_session
 from .models import Item, ItemDetail, TempTransaction, TransactionLog, POSTransCounter, Tender, TerminalSetup, Color, Size
 from .services import get_business_date
 
@@ -25,6 +28,7 @@ from setup.pos_keys import get_pos_keys
 
 STORE_ID = "001"
 TERMINAL_ID = "001"
+
 
 
 # ---------------------------------------------------------------------------
@@ -95,44 +99,136 @@ def _get_next_transaction_no():
         pass
     return "00000001"
 
-
-
-
 # ---------------------------------------------------------------------------
-# Login / Logout
+# Open session view
 # ---------------------------------------------------------------------------
 
-@ensure_csrf_cookie
-def pos_login(request):
-    """Cashier login page."""
-    if request.user.is_authenticated:
+@login_required
+def open_session(request):
+    user = request.user
+
+    # Prevent multiple open sessions
+    if POSSession.objects.filter(cashier=user, status="open").exists():
+        messages.info(request, "You already have an open session.")
         return redirect("sales:pos_cashier")
 
     if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "")
-        if username and password:
-            user = authenticate(request, username=username, password=password)
-            if user:
-                login(request, user)
-                next_url = request.GET.get("next") or "sales:pos_cashier"
-                return redirect(next_url)
-        return render(request, "sales/login.html", {"error": "Invalid username or password.", "store_name": _get_store_name()})
+        opening_cash = request.POST.get("opening_cash")
 
-    return render(request, "sales/login.html", {"store_name": _get_store_name()})
+        # Validate opening cash
+        try:
+            opening_cash = float(opening_cash) # I CHANGE ITO ACCORDING SA EXPECTED AMOUNT 
+        except (TypeError, ValueError):
+            messages.error(request, "Invalid opening cash amount.")
+            return redirect("sales:open_session")
+
+        # Create new POS session
+        POSSession.objects.create(
+            cashier=user,
+            terminal_id="001",
+            store_id="001",
+            business_date=datetime.date.today(),
+            opening_cash=opening_cash,
+            status="open"
+        )
+
+        # messages.success(request, "POS session opened successfully.")
+        return redirect("sales:pos_cashier")
+
+    return render(request, "sales/open_session.html")
 
 
-def pos_logout(request):
-    """Cashier logout."""
-    logout(request)
-    return redirect("sales:pos_login")
+# ---------------------------------------------------------------------------
+# Close session view
+# ---------------------------------------------------------------------------
 
+@login_required
+@require_http_methods(["POST"])
+def close_session(request):
+    user = request.user
+
+    # Find the active cashier session for this user + terminal + store
+    session = POSSession.objects.filter(
+        cashier=user,
+        store_id=STORE_ID,       # your existing constant
+        status="open",
+    ).order_by("-opened_at").first()
+
+    if not session:
+        messages.error(request, "No active session found to close.")
+        return redirect("sales:pos_cashier")
+
+    # --- Parse POST values ---
+    def parse_decimal(val, default=0):
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return default
+
+    closing_cash  = parse_decimal(request.POST.get("closing_cash"))
+    expected_cash = parse_decimal(request.POST.get("expected_cash"))
+    cash_variance = parse_decimal(request.POST.get("cash_variance"))
+    notes         = request.POST.get("notes", "").strip()
+    print(session)
+    print(closing_cash)
+    print(expected_cash)
+    print(cash_variance)
+    if closing_cash < 0:
+        messages.error(request, "Closing cash cannot be negative.")
+        return redirect("sales:pos_cashier")
+
+    # --- Update and close the session ---
+    session.closing_cash  = closing_cash
+    session.expected_cash = expected_cash
+    session.cash_variance = cash_variance
+    session.notes         = notes or None
+    session.closed_at   = timezone.now()
+    session.status = "closed"
+    session.save(update_fields=[
+        "closing_cash", 
+        # "expected_cash",
+        # "cash_variance",
+        # "notes",
+        "closed_at", 
+        "status", 
+        # "updated_at",
+    ])
+
+    # --- Audit trail entry ---
+    # AuditTrail.objects.create(
+    #     user_id=user.pk,
+    #     username=user.username,
+    #     action_type="LOGOUT",
+    #     action_description=(
+    #         f"Session closed. Closing cash: {closing_cash:.2f}, "
+    #         f"Expected: {expected_cash:.2f}, Variance: {cash_variance:.2f}"
+    #     ),
+    #     table_name="cashier_sessions",
+    #     record_id=str(session.pk),
+    #     new_values={
+    #         "closing_cash":  closing_cash,
+    #         "expected_cash": expected_cash,
+    #         "cash_variance": cash_variance,
+    #         "session_status": "closed",
+    #     },
+    #     terminal_id=TERMINAL_ID,
+    #     store_id=STORE_ID,
+    # )
+
+    # Clear session keys set during this POS session
+    for key in ("pos_trans_no", "pos_trans_disc_pct",
+                "pos_trans_disc_type", "pos_trans_disc_label", "last_receipt"):
+        request.session.pop(key, None)
+
+    # messages.success(request, "Session closed successfully.")
+    return redirect("pos_logout")
 
 # ---------------------------------------------------------------------------
 # Cashier main view
 # ---------------------------------------------------------------------------
 
-@login_required(login_url="sales:pos_login")
+@login_required
+@require_open_session
 def cashier_view(request):
     """Main POS cashier screen."""
     user_id = _get_user_id(request)
@@ -186,7 +282,7 @@ def cashier_view(request):
 # Cart API (HTMX / JSON)
 # ---------------------------------------------------------------------------
 
-@login_required(login_url="sales:pos_login")
+@login_required
 @require_http_methods(["POST"])
 def cart_add(request):
     """Add item by barcode. Returns HTML fragment for HTMX or JSON."""
@@ -314,7 +410,7 @@ def cart_add(request):
     })
 
 
-@login_required(login_url="sales:pos_login")
+@login_required
 @require_http_methods(["POST"])
 def cart_remove(request):
     """Remove a cart line by rec_ctr."""
@@ -367,7 +463,7 @@ def cart_remove(request):
     return JsonResponse({"ok": True, "total": str(total)})
 
 
-@login_required(login_url="sales:pos_login")
+@login_required
 def cart_new(request):
     """Start a new transaction (clear cart, get new receipt number)."""
     user_id = _get_user_id(request)
@@ -379,7 +475,7 @@ def cart_new(request):
             terminal_id=TERMINAL_ID,
             store_id=STORE_ID,
             transaction_no=trans_no,
-        ).delete()
+        ).delete() # This needs to be configured to suspend instead of delete in case we want to support suspended transactions in the future
 
     new_trans = _get_next_transaction_no()
     request.session["pos_trans_no"] = new_trans
@@ -388,7 +484,7 @@ def cart_new(request):
     return redirect("sales:pos_cashier")
 
 
-@login_required(login_url="sales:pos_login")
+@login_required
 @require_http_methods(["POST"])
 def cart_trans_disc(request):
     """Set or clear transaction-level discount. Returns updated cart-summary HTML."""
@@ -497,7 +593,7 @@ def cart_line_disc(request):
     return JsonResponse({"ok": True, "total": str(total)})
 
 
-@login_required(login_url="sales:pos_login")
+@login_required
 def pay_view(request):
     """Payment screen - select tender and complete sale."""
     user_id = _get_user_id(request)
@@ -563,7 +659,7 @@ def _parse_tender_entries(request):
         return []
 
 
-@login_required(login_url="sales:pos_login")
+@login_required
 @require_http_methods(["POST"])
 def payment_complete(request):
     """Complete payment with tender entries. Supports multiple tenders. Only completes when total tendered >= amount due."""
@@ -671,7 +767,40 @@ def payment_complete(request):
     return redirect("sales:receipt")
 
 
-@login_required(login_url="sales:pos_login")
+# @login_required
+# def receipt_view(request):
+#     """Display receipt after payment. Data comes from session."""
+#     receipt = request.session.get("last_receipt")
+#     if not receipt:
+#         return redirect("sales:pos_cashier")
+
+#     tender_lines = receipt.get("tender_lines") or []
+#     if not tender_lines and receipt.get("tender"):
+#         # Legacy single-tender format
+#         tender_lines = [{"desc": receipt["tender"], "amount": receipt.get("amount_tendered", receipt["total"]), "is_cash": receipt.get("is_cash", False)}]
+
+#     context = {
+#         "store_name": _get_store_name(),
+#         "transaction_no": receipt["transaction_no"],
+#         "date": receipt["date"],
+#         "time": receipt["time"],
+#         "subtotal": receipt.get("subtotal", receipt["total"]),
+#         "trans_disc_pct": receipt.get("trans_disc_pct", "0"),
+#         "trans_disc_label": receipt.get("trans_disc_label", ""),
+#         "trans_disc_amt": receipt.get("trans_disc_amt", "0"),
+#         "total": receipt["total"],
+#         "tender": receipt.get("tender", ""),
+#         "tender_lines": tender_lines,
+#         "is_cash": receipt.get("is_cash", False),
+#         "amount_tendered": receipt.get("amount_tendered", ""),
+#         "change_amount": receipt.get("change_amount", ""),
+#         "lines": receipt["lines"],
+#     }
+#     return render(request, "sales/receipt.html", context)
+
+
+
+@login_required
 def receipt_view(request):
     """Display receipt after payment. Data comes from session."""
     receipt = request.session.get("last_receipt")
@@ -680,8 +809,11 @@ def receipt_view(request):
 
     tender_lines = receipt.get("tender_lines") or []
     if not tender_lines and receipt.get("tender"):
-        # Legacy single-tender format
-        tender_lines = [{"desc": receipt["tender"], "amount": receipt.get("amount_tendered", receipt["total"]), "is_cash": receipt.get("is_cash", False)}]
+        tender_lines = [{
+            "desc": receipt["tender"],
+            "amount": receipt.get("amount_tendered", receipt["total"]),
+            "is_cash": receipt.get("is_cash", False)
+        }]
 
     context = {
         "store_name": _get_store_name(),
@@ -700,10 +832,113 @@ def receipt_view(request):
         "change_amount": receipt.get("change_amount", ""),
         "lines": receipt["lines"],
     }
+
+    def format_money(val):
+        try:
+            return f"{float(val):,.2f}"
+        except:
+            return str(val)
+
+
+    # 🔥 PRINT TO EPSON TM-U220
+    try:
+        printer = serial.Serial(
+            port='COM1',   # CHANGE if needed
+            baudrate=9600,
+            bytesize=8,
+            parity='N',
+            stopbits=1,
+            timeout=1
+        )
+
+        time.sleep(1)
+
+        def write_line(text=""):
+            printer.write((text + "\n").encode("utf-8"))
+
+        def separator():
+            write_line("-" * 32)
+
+        # =============================
+        # HEADER
+        # =============================
+        printer.write(b'\x1b\x61\x01')  # center align
+        write_line(context["store_name"])
+        printer.write(b'\x1b\x61\x00')  # left align
+
+        write_line(context["date"])
+        write_line(context["time"])
+        write_line(f"Receipt #{context['transaction_no']}")
+        separator()
+
+        # =============================
+        # ITEMS
+        # =============================
+        for line in context["lines"]:
+            desc = line.get("description", "")
+            ext = format_money(line.get("ext", 0))
+
+            write_line(f"{desc[:28]}")
+            write_line(f"{line.get('qty')} x {format_money(line.get('price'))}".ljust(20) + f"{ext}".rjust(12))
+
+            if line.get("disc_pct"):
+                write_line(f"  {line.get('disc_pct')}% discount -{format_money(line.get('disc_total'))}")
+                write_line(f"  Net: {ext}")
+
+        # =============================
+        # TRANSACTION DISCOUNT
+        # =============================
+        if context["trans_disc_amt"] and context["trans_disc_amt"] not in ["0", "0.0000"]:
+            separator()
+            write_line(f"Subtotal: {format_money(context['subtotal'])}")
+            write_line(f"{context['trans_disc_label']} ({context['trans_disc_pct']}%)")
+            write_line(f"-{format_money(context['trans_disc_amt'])}")
+
+        # =============================
+        # TOTAL
+        # =============================
+        separator()
+        printer.write(b'\x1b\x45\x01')  # bold on
+        write_line(f"TOTAL: {format_money(context['total'])}")
+        printer.write(b'\x1b\x45\x00')  # bold off
+        separator()
+
+        # =============================
+        # TENDER LINES
+        # =============================
+        for t in context["tender_lines"]:
+            write_line(f"{t['desc']}: {format_money(t['amount'])}")
+
+        if context["amount_tendered"]:
+            write_line(f"Total Tendered: {format_money(context['amount_tendered'])}")
+
+        if context["is_cash"] and context["change_amount"] not in ["", "0", "0.0000"]:
+            printer.write(b'\x1b\x45\x01')
+            write_line(f"CHANGE: {format_money(context['change_amount'])}")
+            printer.write(b'\x1b\x45\x00')
+
+        # =============================
+        # FOOTER
+        # =============================
+        separator()
+        printer.write(b'\x1b\x61\x01')  # center align
+        write_line("Thank you for your purchase!")
+        write_line("Please come again")
+        printer.write(b'\x1b\x61\x00')
+
+        write_line("\n\n\n")
+
+        # Cut paper
+        printer.write(b'\x1d\x56\x00')
+
+        printer.close()
+
+    except Exception as e:
+        print("❌ Printer Error:", e)
     return render(request, "sales/receipt.html", context)
 
 
-@login_required(login_url="sales:pos_login")
+@login_required
 def item_search(request):
     """Search items by description, code, or barcode. Returns JSON."""
     q = (request.GET.get("q") or "").strip()
