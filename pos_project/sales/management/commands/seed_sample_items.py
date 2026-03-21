@@ -56,5 +56,5 @@ class Command(BaseCommand):
         self.stdout.write("  8901234567890 - Nike Air Max Size 9 Black")
         self.stdout.write("  8901234567891 - Nike Air Max Size 10 Black")
         self.stdout.write("  8901234567892 - Adidas Ultraboost Size 9 White")
-        self.stdout.write("  8901234567893 - Converse Chuck Taylor Size 8 Red")
+        self.stdout.write("  8901234567891 - Converse Chuck Taylor Size 8 Red")
         self.stdout.write("  Or type: SHOE001, SHOE002, SHOE003 (item codes)")

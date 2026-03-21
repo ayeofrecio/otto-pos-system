@@ -1,6 +1,10 @@
 /**
  * POS Cashier - barcode handling, live time, toast dismiss, item search
  */
+document.addEventListener('keydown', function (evt) {
+  console.log('key:', evt.key, '| code:', evt.code);
+
+
 (function () {
   'use strict';
 
@@ -125,17 +129,23 @@
       return;
     }
 
-    if (evt.key === 'F3') {
+    if (evt.key === POS_KEYS.iDisc) {
       evt.preventDefault();
       window.openDiscountModal();
       return;
     }
 
-    if (evt.key === 'F4') {
+    if (evt.key === POS_KEYS.stDisc) {
       evt.preventDefault();
       window.openTransDiscModal();
       return;
     }
+
+    // if (evt.key === POS_KEYS.stDisc) {
+    //   evt.preventDefault();
+    //   window.openPayModal();
+    //   return;
+    // }
 
     if (evt.key === '*' && qtyInput && document.activeElement === barcodeInput && !barcodeInput.value) {
       evt.preventDefault();
@@ -514,6 +524,11 @@
     if (evt.target === document.getElementById('pay-modal')) {
       window.closePayModal();
     }
+  };
+
+  window.openPayModal = function () {
+    const btn = document.getElementById('pay-trigger-btn');
+    if (btn) { btn.click(); }
   };
 
   // Close modal on Escape

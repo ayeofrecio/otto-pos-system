@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     # POS apps
     'sales.apps.SalesConfig',
     'reports.apps.ReportsConfig',
+    'setup.apps.SetupConfig', 
 ]
 
 MIDDLEWARE = [

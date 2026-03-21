@@ -408,6 +408,29 @@
         const CART_ADD_URL = "{% url 'sales:cart_add' %}";
         const CART_LINE_DISC_URL = "{% url 'sales:cart_line_disc' %}";
         const CSRF_TOKEN = "{{ csrf_token }}";
+        const POS_KEYS = {
+            iDisc:    "{{ pos_keys.pIDiscKey|escapejs }}",
+            iView:    "{{ pos_keys.pIViewKey|escapejs }}",
+            stDisc:   "{{ pos_keys.pSTDiscKey|escapejs }}",
+            prOver:   "{{ pos_keys.pPrOverKey|escapejs }}",
+            iRet:     "{{ pos_keys.pIRetKey|escapejs }}",
+            iVoid:    "{{ pos_keys.pIVoidKey|escapejs }}",
+            iVoidA:   "{{ pos_keys.pIVoidAKey|escapejs }}",
+            voidTr:   "{{ pos_keys.pVoidTrKey|escapejs }}",
+            iSusRt:   "{{ pos_keys.pISusRtKey|escapejs }}",
+            stat:     "{{ pos_keys.pStatKey|escapejs }}",
+            subTot:   "{{ pos_keys.pSubTotKey|escapejs }}",
+            paymnt:   "{{ pos_keys.pPaymntKey|escapejs }}",
+            iQty:     "{{ pos_keys.pIQtyKey|escapejs }}",
+            tsRep:    "{{ pos_keys.pTSRepKey|escapejs }}",
+            zRead:    "{{ pos_keys.pZReadKey|escapejs }}",
+            jRep:     "{{ pos_keys.pJRepKey|escapejs }}",
+            sOff:     "{{ pos_keys.pSOffKey|escapejs }}",
+            menu:     "{{ pos_keys.pMenuKey|escapejs }}",
+            sman:     "{{ pos_keys.pSManKey|escapejs }}",
+            cWithD:   "{{ pos_keys.pCWithDKey|escapejs }}",
+            resendTxt:"{{ pos_keys.pResendTxt|escapejs }}",
+        };
         // Initialise trans_disc state from server session (survives page reload)
         const INITIAL_TRANS_DISC = {
             pct:   {{ trans_disc.pct|default:0 }},
