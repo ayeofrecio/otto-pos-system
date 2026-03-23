@@ -20,9 +20,8 @@ from .decorators import require_open_session
 from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TransactionLog, POSTransCounter, Tender, TerminalSetup, Color, Size
 from .services import get_business_date
 
-# For printing (Serial type of POS Printer)
-import serial
-import time
+from setup.pos_keys import get_pos_keys
+
 
 #  for debugging
 from pprint import pprint
@@ -312,6 +311,7 @@ def cashier_view(request):
         "total": total,
         "item_count": item_count,
         "last_item": last_line,
+        "pos_keys": get_pos_keys(), 
     }
     return render(request, "sales/cashier.html", context)
 

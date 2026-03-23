@@ -1,6 +1,10 @@
 /**
  * POS Cashier - barcode handling, live time, toast dismiss, item search
  */
+document.addEventListener('keydown', function (evt) {
+  console.log('key:', evt.key, '| code:', evt.code);
+
+
 (function () {
   'use strict';
 
@@ -161,23 +165,23 @@
       return;
     }
 
-    if (evt.key === 'F3') {
+    if (evt.key === POS_KEYS.iDisc) {
       evt.preventDefault();
       window.openDiscountModal();
       return;
     }
 
-    if (evt.key === 'F4') {
+    if (evt.key === POS_KEYS.stDisc) {
       evt.preventDefault();
       window.openTransDiscModal();
       return;
     }
 
-    if (evt.key === 'F8') {
-      evt.preventDefault();
-      window.openCloseTransModal();
-      return;
-    }
+    // if (evt.key === POS_KEYS.stDisc) {
+    //   evt.preventDefault();
+    //   window.openPayModal();
+    //   return;
+    // }
 
     if (evt.key === '*' && qtyInput && document.activeElement === barcodeInput && !barcodeInput.value) {
       evt.preventDefault();
@@ -429,6 +433,105 @@
   });
 
   // ---------------------------------------------------------------------------
+  // Line Discount Modal (click row in Items Entered)
+  // ---------------------------------------------------------------------------
+  var lineDiscRecCtr = null;
+  var lineDiscType = '';
+
+  window.openLineDiscModal = function (recCtr) {
+    lineDiscRecCtr = recCtr;
+    lineDiscType = 'REG';
+    const modal = document.getElementById('line-disc-modal');
+    const recInput = document.getElementById('line-disc-rec-ctr');
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const typeInput = document.getElementById('line-disc-type');
+    if (!modal || !recInput) { return; }
+    recInput.value = recCtr;
+    typeInput.value = 'REG';
+    pctInput.value = 0;
+    refreshLineDiscTypeBtns('REG');
+    modal.classList.add('open');
+    setTimeout(function () { if (pctInput) { pctInput.focus(); pctInput.select(); } }, 80);
+  };
+
+  window.closeLineDiscModal = function () {
+    const modal = document.getElementById('line-disc-modal');
+    if (modal) { modal.classList.remove('open'); }
+    lineDiscRecCtr = null;
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closeLineDiscModalOutside = function (evt) {
+    if (evt.target === document.getElementById('line-disc-modal')) {
+      window.closeLineDiscModal();
+    }
+  };
+
+  window.selectLineDiscType = function (btn, code, label, defaultPct) {
+    lineDiscType = code;
+    refreshLineDiscTypeBtns(code);
+    const typeInput = document.getElementById('line-disc-type');
+    const pctInput = document.getElementById('line-disc-pct-input');
+    if (typeInput) { typeInput.value = code; }
+    if (pctInput) {
+      if (defaultPct > 0) { pctInput.value = defaultPct; }
+      pctInput.focus();
+      pctInput.select();
+    }
+  };
+
+  function refreshLineDiscTypeBtns(selectedCode) {
+    document.querySelectorAll('.line-disc-type-btn').forEach(function (btn) {
+      btn.classList.toggle('selected', btn.getAttribute('data-code') === selectedCode);
+    });
+  }
+
+  window.applyLineDisc = function () {
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const pct = parseFloat(pctInput ? pctInput.value : 0) || 0;
+    if (pct <= 0) {
+      window.removeLineDiscAndClose();
+      return;
+    }
+    const form = document.getElementById('line-disc-form');
+    if (form) {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+    window.closeLineDiscModal();
+  };
+
+  window.removeLineDiscAndClose = function () {
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const typeInput = document.getElementById('line-disc-type');
+    if (pctInput) { pctInput.value = 0; }
+    if (typeInput) { typeInput.value = ''; }
+    const form = document.getElementById('line-disc-form');
+    if (form) {
+      const recInput = document.getElementById('line-disc-rec-ctr');
+      if (recInput && recInput.value) {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      }
+    }
+    window.closeLineDiscModal();
+  };
+
+  const lineDiscPctInput = document.getElementById('line-disc-pct-input');
+  if (lineDiscPctInput) {
+    lineDiscPctInput.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Enter') { evt.preventDefault(); window.applyLineDisc(); }
+    });
+  }
+
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath || '';
+    if (path.indexOf('/cart/line-disc') !== -1) {
+      const barcodeInput = document.getElementById('barcode-input');
+      if (barcodeInput) { barcodeInput.focus(); }
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // Transaction Subtotal Discount Modal (F4)
   // ---------------------------------------------------------------------------
   // Initialise from server-rendered state so it survives page reload
@@ -557,6 +660,11 @@
     if (evt.target === document.getElementById('pay-modal')) {
       window.closePayModal();
     }
+  };
+
+  window.openPayModal = function () {
+    const btn = document.getElementById('pay-trigger-btn');
+    if (btn) { btn.click(); }
   };
 
   // Close modal on Escape
