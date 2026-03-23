@@ -17,19 +17,19 @@ ROLE_LEVELS = {
 }
 
 
-# ---------------------------------------------------------
-# Helper: safely get user profile
-# ---------------------------------------------------------
+# # ---------------------------------------------------------
+# # Helper: safely get user profile
+# # ---------------------------------------------------------
 
-def _get_profile(user):
-    """
-    Safely retrieve profile.
-    Returns None if profile does not exist.
-    """
-    try:
-        return user.profile
-    except (AttributeError, Users.DoesNotExist):
-        return None
+# def _get_profile(user):
+#     """
+#     Safely retrieve profile.
+#     Returns None if profile does not exist.
+#     """
+#     try:
+#         return user.profile
+#     except (AttributeError, Users.DoesNotExist):
+#         return None
 
 
 # ---------------------------------------------------------
@@ -37,28 +37,18 @@ def _get_profile(user):
 # ---------------------------------------------------------
 
 def role_required(min_role_level):
-    """
-    Generic decorator for role-based access control.
-
-    Example:
-        @role_required(ROLE_LEVELS[Users.ROLE_MANAGER])
-    """
 
     def decorator(view_func):
 
         def check(user):
 
-            # Must be logged in
             if not user.is_authenticated:
                 return False
 
-            profile = _get_profile(user)
-
-            # Profile must exist and user must not be suspended
-            if not profile or profile.is_suspended:
+            if user.is_suspended:
                 return False
 
-            user_level = ROLE_LEVELS.get(profile.role, 0)
+            user_level = ROLE_LEVELS.get(user.role, 0)
 
             return user_level >= min_role_level
 

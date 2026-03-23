@@ -67,6 +67,7 @@ document.addEventListener('keydown', function (evt) {
     }
   });
 
+
   // Capture barcode value just before htmx submits (needed for search prefill on not-found)
   var lastScannedBarcode = '';
   const barcodeFormEl = document.getElementById('barcode-form');
@@ -331,6 +332,105 @@ document.addEventListener('keydown', function (evt) {
       if (evt.key === 'Enter') { evt.preventDefault(); window.applyDiscount(); }
     });
   }
+
+   // ---------------------------------------------------------------------------
+  // Line Discount Modal (click row in Items Entered)
+  // ---------------------------------------------------------------------------
+  var lineDiscRecCtr = null;
+  var lineDiscType = '';
+
+  window.openLineDiscModal = function (recCtr) {
+    lineDiscRecCtr = recCtr;
+    lineDiscType = 'REG';
+    const modal = document.getElementById('line-disc-modal');
+    const recInput = document.getElementById('line-disc-rec-ctr');
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const typeInput = document.getElementById('line-disc-type');
+    if (!modal || !recInput) { return; }
+    recInput.value = recCtr;
+    typeInput.value = 'REG';
+    pctInput.value = 0;
+    refreshLineDiscTypeBtns('REG');
+    modal.classList.add('open');
+    setTimeout(function () { if (pctInput) { pctInput.focus(); pctInput.select(); } }, 80);
+  };
+
+  window.closeLineDiscModal = function () {
+    const modal = document.getElementById('line-disc-modal');
+    if (modal) { modal.classList.remove('open'); }
+    lineDiscRecCtr = null;
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closeLineDiscModalOutside = function (evt) {
+    if (evt.target === document.getElementById('line-disc-modal')) {
+      window.closeLineDiscModal();
+    }
+  };
+
+  window.selectLineDiscType = function (btn, code, label, defaultPct) {
+    lineDiscType = code;
+    refreshLineDiscTypeBtns(code);
+    const typeInput = document.getElementById('line-disc-type');
+    const pctInput = document.getElementById('line-disc-pct-input');
+    if (typeInput) { typeInput.value = code; }
+    if (pctInput) {
+      if (defaultPct > 0) { pctInput.value = defaultPct; }
+      pctInput.focus();
+      pctInput.select();
+    }
+  };
+
+  function refreshLineDiscTypeBtns(selectedCode) {
+    document.querySelectorAll('.line-disc-type-btn').forEach(function (btn) {
+      btn.classList.toggle('selected', btn.getAttribute('data-code') === selectedCode);
+    });
+  }
+
+  window.applyLineDisc = function () {
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const pct = parseFloat(pctInput ? pctInput.value : 0) || 0;
+    if (pct <= 0) {
+      window.removeLineDiscAndClose();
+      return;
+    }
+    const form = document.getElementById('line-disc-form');
+    if (form) {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+    window.closeLineDiscModal();
+  };
+
+  window.removeLineDiscAndClose = function () {
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const typeInput = document.getElementById('line-disc-type');
+    if (pctInput) { pctInput.value = 0; }
+    if (typeInput) { typeInput.value = ''; }
+    const form = document.getElementById('line-disc-form');
+    if (form) {
+      const recInput = document.getElementById('line-disc-rec-ctr');
+      if (recInput && recInput.value) {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      }
+    }
+    window.closeLineDiscModal();
+  };
+
+  const lineDiscPctInput = document.getElementById('line-disc-pct-input');
+  if (lineDiscPctInput) {
+    lineDiscPctInput.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Enter') { evt.preventDefault(); window.applyLineDisc(); }
+    });
+  }
+
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath || '';
+    if (path.indexOf('/cart/line-disc') !== -1) {
+      const barcodeInput = document.getElementById('barcode-input');
+      if (barcodeInput) { barcodeInput.focus(); }
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // Line Discount Modal (click row in Items Entered)
@@ -654,24 +754,79 @@ document.addEventListener('keydown', function (evt) {
   window.openCloseTransModal = function () {
     const modal = document.getElementById('close-trans-modal');
     if (!modal) { return; }
-
+    
     // Pull expected cash from the cart total displayed on screen
-    const cartTotalEl = document.querySelector('.cart-total');
-    let expectedCash = 5000; // CHANGE::::::Default fallback if cart total not found or parseable
-    if (cartTotalEl) {
-      expectedCash = parseFloat(
-        cartTotalEl.textContent.replace(/[^0-9.]/g, '')
-      ) || 0;
-    }
+    // const cartTotalEl = document.querySelector('.cart-total');
+    // let expectedCash = 0; // CHANGE::::::Default fallback if cart total not found or parseable
+    // if (cartTotalEl) {
+    //   expectedCash = parseFloat(
+    //     cartTotalEl.textContent.replace(/[^0-9.]/g, '')
+    //   ) || 0;
+    // }
+    let opening_cashCash = 0;
+    let paid_in_cash = 0;
+    let credit_debit_cash = 0;
 
+    fetch('/pos/to-close-session-details/', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': CSRF_TOKEN
+      }
+    })
+      .then(response => response.json())
+      .then(data => {
+        opening_cashCash = parseFloat(data.opening_cash) || 0;
+        paid_in_cash = parseFloat(data.paid_in_cash) || 0;
+        credit_debit_cash = parseFloat(data.credit_debit_cash) || 0;
+
+
+        // Store for variance calc
+        modal._opening_cashCash = opening_cashCash;
+        modal._paid_in_cash = paid_in_cash;
+        modal._credit_debit_cash = credit_debit_cash;
+
+        const opening_cashEl = document.getElementById('close-trans-opening-cash');
+        const paid_in_cashEl = document.getElementById('close-trans-paid-in-cash');
+        const credit_debit_cashEl = document.getElementById('close-trans-credit-debit-cash');
+
+        if (opening_cashEl) {
+          opening_cashEl.textContent = '₱' + opening_cashCash.toLocaleString('en-PH', {
+            minimumFractionDigits: 2
+          });
+        }
+        if (paid_in_cashEl) {
+          paid_in_cashEl.textContent = '₱' + paid_in_cash.toLocaleString('en-PH', {
+            minimumFractionDigits: 2
+          });
+        }
+        if (credit_debit_cashEl) {
+          credit_debit_cashEl.textContent = '₱' + credit_debit_cash.toLocaleString('en-PH', {
+            minimumFractionDigits: 2
+          });
+        }
+
+      })
+      .catch(err => console.error('Close session failed:', err));
     // Store for variance calc
-    modal._expectedCash = expectedCash;
+    modal._opening_cashCash = opening_cashCash;
+    modal._paid_in_cash = paid_in_cash;
+    modal._credit_debit_cash = credit_debit_cash;
 
-    const expectedEl = document.getElementById('close-trans-expected');
-    if (expectedEl) {
-      expectedEl.textContent = '₱' + expectedCash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    const opening_cashEl = document.getElementById('close-trans-opening-cash');
+    const paid_in_cashEl = document.getElementById('close-trans-paid-in-cash');
+    const credit_debit_cashEl = document.getElementById('close-trans-credit-debit-cash');
+  
+    if (opening_cashEl) {
+      opening_cashEl.textContent = '₱' + opening_cashCash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
     }
-
+    if (paid_in_cashEl) {
+      paid_in_cashEl.textContent = '₱' + paid_in_cash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+    if (credit_debit_cashEl) {
+      credit_debit_cashEl.textContent = '₱' + credit_debit_cash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+    
     // Reset variance display
     const varianceEl = document.getElementById('close-trans-variance');
     if (varianceEl) {
@@ -718,9 +873,9 @@ document.addEventListener('keydown', function (evt) {
   if (closingCashInput) {
     closingCashInput.addEventListener('input', function () {
       const modal = document.getElementById('close-trans-modal');
-      const expected = modal ? (modal._expectedCash || 0) : 0; // #TODO: Change this if you pull expected cash from somewhere else
+      const opening_cash = modal ? (modal._opening_cashCash || 0) : 0; // #TODO: Change this if you pull opening_cash cash from somewhere else
       const actual = parseFloat(closingCashInput.value) || 0;
-      const variance = actual - expected;
+      const variance = actual - opening_cash;
       const varianceEl = document.getElementById('close-trans-variance');
       const confirmBtn = document.getElementById('close-trans-confirm-btn');
 
@@ -800,10 +955,13 @@ document.addEventListener('keydown', function (evt) {
     const closingCash = parseFloat(cashInput ? cashInput.value : 0) || 0;
     if (closingCash < 0) return;
 
-    const expected = modal ? (modal._expectedCash || 0) : 0;
-    const variance = closingCash - expected;
+    const opening_cash = modal ? (modal._opening_cashCash || 0) : 0;
+    const variance = closingCash - opening_cash;
 
     // Sync hidden fields so they POST alongside the form
+    document.getElementById('hidden-opening-cash').value = opening_cash.toFixed(2);
+    document.getElementById('hidden-paid-in-cash').value = paid_in_cash.toFixed(2);
+    document.getElementById('hidden-credit-debit-cash').value = credit_debit_cash.toFixed(2);
     document.getElementById('hidden-expected-cash').value = expected.toFixed(2);
     document.getElementById('hidden-cash-variance').value = variance.toFixed(2);
 
