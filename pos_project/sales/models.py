@@ -3,71 +3,90 @@ from decimal import Decimal
 
 from django.db import models
 
-class TransactionLog(models.Model):
-    """
-    Equivalent of the Clarion TLOG table.
-    One row per transaction line item. The transaction header fields
-    (user_id, terminal_id, store_id, transaction_no, transaction_date)
-    repeat on every line belonging to the same transaction.
-    Used as the Phase 0 migration target for import_clarion.py.
-    """
 
-    # --- Clarion: USERID, USERID2, TERMID, STOREID ---
+class TransactionHeader(models.Model):
+    """
+    One row per transaction. Replaces the repeated header fields
+    that lived on every line in the old flat TLOG/TEMPTRANS structure.
+    """
+    session = models.ForeignKey(
+        'users.POSSession',
+        on_delete=models.CASCADE,
+        related_name='transaction_headers'
+    )
+
+    # Clarion identity fields — kept here for migration traceability
     user_id            = models.CharField(max_length=10)               # USERID
     user_id2           = models.CharField(max_length=4,  blank=True)   # USERID2
     terminal_id        = models.CharField(max_length=3)                # TERMID
     store_id           = models.CharField(max_length=3)                # STOREID
 
-    # --- Transaction header ---
-    transaction_no     = models.CharField(max_length=8)                # TRNBR
+    transaction_no     = models.CharField(max_length=8, db_index=True) # TRNBR
     transaction_date   = models.DateField()                            # TRDATE
-    transaction_date_r = models.DateField(null=True, blank=True)       # TRDATER (return/void date)
+    transaction_date_r = models.DateField(null=True, blank=True)       # TRDATER
     transaction_time   = models.CharField(max_length=5,  blank=True)   # TRTIME
     transaction_type   = models.CharField(max_length=1,  blank=True)   # TRTYPE
     return_code        = models.CharField(max_length=1,  blank=True)   # RCODE
     item_ref           = models.CharField(max_length=8,  blank=True)   # TRREF1
 
-    # --- Item detail ---
-    item_code          = models.CharField(max_length=15, blank=True)   # ITEMCODE
-    item_description   = models.CharField(max_length=25, blank=True)   # IDESC
-    item_qty           = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # IQTY
-    item_uom           = models.CharField(max_length=6,  blank=True)   # IUOM
-    item_supplier      = models.CharField(max_length=6,  blank=True)   # ISUPP
-    item_department    = models.CharField(max_length=4,  blank=True)   # IDEPT
-    item_class         = models.CharField(max_length=4,  blank=True)   # ICLASS
-    item_size          = models.CharField(max_length=3,  blank=True)   # ISIZE
-    item_color         = models.CharField(max_length=3,  blank=True)   # ICOLOR
-    item_type          = models.CharField(max_length=1,  blank=True)   # ITYPE
-
-    # --- Pricing ---
-    item_cost          = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # ICOST
-    item_price         = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # IPRICE
-    item_discount      = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # IDISC
-    discount_code      = models.CharField(max_length=3,  blank=True)   # IDISCCODE
-    item_price_ext     = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # IPRICEE (extended/net price)
-
-    # --- Tags / flags ---
-    tag1               = models.CharField(max_length=1,  blank=True)   # ITAG1
-    tag2               = models.CharField(max_length=1,  blank=True)   # ITAG2
-    tag3               = models.CharField(max_length=1,  blank=True)   # ITAG3
-    tag4               = models.CharField(max_length=1,  blank=True)   # ITAG4
-    promo_tag          = models.CharField(max_length=1,  blank=True)   # PTAG
-
-    # --- Service / table ---
     table_id           = models.CharField(max_length=3,  blank=True)   # TABLEID
     served_by          = models.CharField(max_length=20, blank=True)   # SERVEBY
-    customer_count     = models.CharField(max_length=10, blank=True)   # CUSTCNT (STRING in Clarion)
+    customer_count     = models.CharField(max_length=10, blank=True)   # CUSTCNT
 
     class Meta:
-        db_table = 'tlog'
+        db_table = 'transaction_header'
         indexes = [
             models.Index(fields=['transaction_no', 'transaction_date']),
             models.Index(fields=['store_id', 'terminal_id', 'transaction_date']),
+        ]
+
+    def __str__(self):
+        return f'{self.transaction_no} / {self.transaction_date}'
+
+
+
+class TransactionItem(models.Model):
+    """
+    One row per line item. FK to TransactionHeader instead of
+    repeating header fields on every row.
+    """
+    header = models.ForeignKey(
+        TransactionHeader,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+
+    item_code          = models.CharField(max_length=15, blank=True)   # ITEMCODE
+    item_description   = models.CharField(max_length=25, blank=True)   # IDESC
+    item_qty           = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    item_uom           = models.CharField(max_length=6,  blank=True)
+    item_supplier      = models.CharField(max_length=6,  blank=True)
+    item_department    = models.CharField(max_length=4,  blank=True)
+    item_class         = models.CharField(max_length=4,  blank=True)
+    item_size          = models.CharField(max_length=3,  blank=True)
+    item_color         = models.CharField(max_length=3,  blank=True)
+    item_type          = models.CharField(max_length=1,  blank=True)
+
+    item_cost          = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    item_price         = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    item_discount      = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    discount_code      = models.CharField(max_length=3,  blank=True)
+    item_price_ext     = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+
+    tag1               = models.CharField(max_length=1,  blank=True)
+    tag2               = models.CharField(max_length=1,  blank=True)
+    tag3               = models.CharField(max_length=1,  blank=True)
+    tag4               = models.CharField(max_length=1,  blank=True)
+    promo_tag          = models.CharField(max_length=1,  blank=True)
+
+    class Meta:
+        db_table = 'transaction_item'
+        indexes = [
             models.Index(fields=['item_code']),
         ]
 
     def __str__(self):
-        return f'{self.transaction_no} / {self.transaction_date} / {self.item_code}'
+        return f'{self.header.transaction_no} / {self.item_code}'
 
 
 class AccountingSummary(models.Model):
@@ -201,7 +220,7 @@ class AccountingSummary(models.Model):
 # SETUP  →  Terminal / store configuration
 # (will move to settings_app once that app is built)
 # ---------------------------------------------------------------------------
-
+# TO BE REMOVED: This is currently used as the Phase 0 migration target for import_clarion.py, but will be replaced by TerminalConfiguration once the Setup app is built. The fields will be split into related tables for receipt headers/footers and ports, but the TerminalConfiguration model will still have a one-to-one relationship with TerminalSetup for the tax and business hours fields.
 class TerminalSetup(models.Model):
     """
     Equivalent of the Clarion SETUP table.
@@ -344,6 +363,8 @@ class TempTransaction(models.Model):
 
     def __str__(self):
         return f'{self.transaction_no} / {self.item_code}'
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -819,25 +840,29 @@ class ItemLink(models.Model):
 # Note: In the old Clarion POS, payment lines were stored in the same file as the cart lines (TEMPTRANS), with item_code='PAYMENT' and the tender code in the discount_code field.  Here we split them into a separate Payments table for better data integrity and easier querying.
 class Payment(models.Model):
     """
-    Payment lines for completed transactions. Linked to TransactionLog via transaction_no.
+    Payment lines. One transaction can have multiple tender types
+    (e.g. partial cash + card split). Linked to TransactionHeader,
+    not to individual items.
     """
+    header = models.ForeignKey(
+        TransactionHeader,
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
 
-    transaction_no = models.CharField(max_length=8)                # TRNBR (FK to TransactionLog)
-    pcode          = models.CharField(max_length=3)                # PCODE (FK to Tender)
-    amount         = models.DecimalField(max_digits=15, decimal_places=4, default=0)   # AMOUNT
-    tender_desc     = models.CharField(max_length=15, blank=True)  # PDESC (denormalized from Tender for easier reporting)
-    # Need to add another field for the payment reference number (e.g. last 4 digits of card) to replace the old discount_code field in TEMPTRANS, which was repurposed for tender code in payment lines.
-    # Transaction number for payments will be the same as the transaction header, so we can link them via transaction_no.
-    payment_reference = models.CharField(max_length=20, blank=True)  # PAYMENT_REFERENCE
+    pcode             = models.CharField(max_length=3)
+    amount            = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    tender_desc       = models.CharField(max_length=15, blank=True)
+    payment_reference = models.CharField(max_length=20, blank=True)
 
     class Meta:
-        db_table = 'payments'
+        db_table = 'payment'
         indexes = [
-            models.Index(fields=['transaction_no']),
+            models.Index(fields=['header']),
         ]
 
     def __str__(self):
-        return f'{self.transaction_no} – {self.pcode} {self.amount}'
+        return f'{self.header.transaction_no} – {self.pcode} {self.amount}'
     
 
 # Note: Transaction Payment / Tender counts for Z-reading continuity tracking.  Updated on each transaction close.
@@ -867,11 +892,17 @@ class TransactionTenderCount(models.Model):
 # ---------------------------------------------------------------------------
 class TerminalConfiguration(models.Model):
 
+    CONNECTION_TYPES = [
+        ("SERIAL","Serial"),
+        ("USB","USB"),
+        ("NETWORK","Network"),
+    ]
+    
     store_id = models.CharField(max_length=3)
     terminal_id = models.CharField(max_length=3)
-
+    branch_name = models.CharField(max_length=20, blank=True)
     vat = models.DecimalField(max_digits=8, decimal_places=4, default=0)
-
+    print_in = models.CharField(max_length=10, choices=CONNECTION_TYPES, default="SERIAL")
     open_time = models.TimeField(default=datetime.time(9,0))
     cutoff_time = models.TimeField(default=datetime.time(4,0))
 
@@ -899,10 +930,22 @@ class TerminalReceiptHeader(models.Model):
 
 class TerminalReceiptFooter(models.Model):
 
+    FOOTER_TYPE_CHOICES = [
+        ("customer", "Customer Copy"),
+        ("record", "Record Copy"),
+        ("both", "Both Copies"),
+    ]
+
     terminal = models.ForeignKey(
         TerminalConfiguration,
         on_delete=models.CASCADE,
         related_name="footers"
+    )
+
+    footer_type = models.CharField(
+        max_length=10,
+        choices=FOOTER_TYPE_CHOICES,
+        default="customer"
     )
 
     line_number = models.PositiveSmallIntegerField()
@@ -912,12 +955,20 @@ class TerminalReceiptFooter(models.Model):
         db_table = "terminal_receipt_footers"
         ordering = ["line_number"]
 
+
 class TerminalPort(models.Model):
 
     PORT_TYPES = [
         ("PRINTER","Printer"),
         ("DRAWER","Cash Drawer"),
         ("DISPLAY","Pole Display"),
+    ]
+
+    CONNECTION_TYPES = [
+        ("SERIAL","Serial"),
+        ("USB","USB"),
+        ("NETWORK","Network"),
+        ("WINDOWS","Windows"),
     ]
 
     terminal = models.ForeignKey(
@@ -927,10 +978,20 @@ class TerminalPort(models.Model):
     )
 
     port_type = models.CharField(max_length=10, choices=PORT_TYPES)
-    port_name = models.CharField(max_length=10)
+    connection_type = models.CharField(max_length=10, choices=CONNECTION_TYPES)
+    
+    # General field (existing)
+    port_name = models.CharField(max_length=50, blank=True, null=True)
+
+    # New fields for multi-connection support
+    baudrate = models.IntegerField(blank=True, null=True)
+    ip_address = models.CharField(max_length=50, blank=True, null=True)
+    port_no = models.IntegerField(blank=True, null=True)
+    printer_name = models.CharField(max_length=100, blank=True, null=True)
 
     class Meta:
         db_table = "terminal_ports"
+
 
 class TerminalDisplayCode(models.Model):
 

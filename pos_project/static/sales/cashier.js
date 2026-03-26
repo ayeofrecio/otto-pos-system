@@ -1,8 +1,8 @@
 /**
  * POS Cashier - barcode handling, live time, toast dismiss, item search
  */
-document.addEventListener('keydown', function (evt) {
-  console.log('key:', evt.key, '| code:', evt.code);
+// document.addEventListener('keydown', function (evt) {
+//   console.log('key:', evt.key, '| code:', evt.code);
 
 
 (function () {
@@ -516,12 +516,12 @@ document.addEventListener('keydown', function (evt) {
     window.closeLineDiscModal();
   };
 
-  const lineDiscPctInput = document.getElementById('line-disc-pct-input');
-  if (lineDiscPctInput) {
-    lineDiscPctInput.addEventListener('keydown', function (evt) {
-      if (evt.key === 'Enter') { evt.preventDefault(); window.applyLineDisc(); }
-    });
-  }
+  // const lineDiscPctInput = document.getElementById('line-disc-pct-input');
+  // if (lineDiscPctInput) {
+  //   lineDiscPctInput.addEventListener('keydown', function (evt) {
+  //     if (evt.key === 'Enter') { evt.preventDefault(); window.applyLineDisc(); }
+  //   });
+  // }
 
   document.body.addEventListener('htmx:afterRequest', function (evt) {
     const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath || '';
@@ -1072,3 +1072,4 @@ document.addEventListener('keydown', function (evt) {
     });
   }
 })();
+// })
