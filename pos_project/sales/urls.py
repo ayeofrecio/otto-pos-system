@@ -22,4 +22,5 @@ urlpatterns = [
     path("open-session/", views.open_session, name="open_session"),
     path("close-session/", views.close_session, name="close_session"),
     path("to-close-session-details/", views.to_close_session_details, name="to_close_session_details"),
+    path('debug-json/', views.debug_sessions_json, name='debug_sessions_json'),
 ]
