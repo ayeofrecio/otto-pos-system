@@ -102,13 +102,48 @@ def _get_user_id(request):
 # ----------------------------------------------------------------------------
 # Getting the current session's store_id and terminal_id from the POSSession model instead of the user model allows for more flexible assignment of terminals to users and better tracking of sessions across different terminals. This way, the store_id and terminal_id are tied to the actual POS session rather than the user account, which can be useful in scenarios where users may operate multiple terminals or when terminals are shared among users. The helper functions can be updated to retrieve this information from the current open session for the logged-in user, ensuring that all operations are correctly associated with the active session's store and terminal.
 # ----------------------------------------------------------------------------
-def _get_current_session(request):
-    """Get the current open POS session for the logged-in user."""
-    user = request.user
-    if not user.is_authenticated:
+def get_current_session(request):
+    """Return the current open POS session of the logged-in user."""
+    if not request.user.is_authenticated:
         return None
-    return POSSession.objects.filter(cashier=user, status="open").order_by("-opened_at").first()
 
+    return POSSession.objects.filter(
+        cashier=request.user,
+        status=POSSession.STATUS_OPEN
+    ).order_by("-opened_at").first()
+
+
+def get_current_session_or_error(request):
+    """Return current session or raise API error response."""
+    session = get_current_session(request)
+
+    if not session:
+        raise Exception("No active POS session found for this user.")
+
+    return session
+
+def validate_session_owner(request, session):
+    """Ensure session belongs to the logged-in user."""
+    if not request.user.is_authenticated:
+        raise Exception("User not authenticated.")
+
+    if session.cashier != request.user:
+        raise Exception("Unauthorized: Session does not belong to this user.")
+
+    return True
+
+def get_session_by_id(request, session_id):
+    """Fetch session safely and ensure ownership."""
+    try:
+        session = POSSession.objects.select_related("cashier").get(
+            id=session_id
+        )
+    except POSSession.DoesNotExist:
+        raise Exception("Session not found.")
+
+    validate_session_owner(request, session)
+
+    return session
 
 # ---------------------------------------------------------------------------
 # Store and terminal info helpers
@@ -658,7 +693,7 @@ def payment_complete(request):
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
     tender_entries = _parse_tender_entries(request)
-    current_session = _get_current_session(request)
+    current_session = get_current_session(request)
 
     if not tender_entries:
         return redirect("sales:pay")
@@ -792,390 +827,16 @@ def payment_complete(request):
 
     return redirect("sales:receipt")
 
-@login_required
-@require_open_session
-def receipt_view(request):
-    """Display receipt after payment. Data comes from session."""
-    receipt = request.session.get("last_receipt")
-    if not receipt:
-        return redirect("sales:pos_cashier")
-
-    setup_details = _get_store_details()
-    terminal_config = TerminalConfiguration.objects.prefetch_related(
-            'headers', 
-            models.Prefetch(
-                'footers',
-                queryset=TerminalReceiptFooter.objects.filter(
-                    footer_type__in=["customer","both"]
-                ).order_by("line_number"),
-                to_attr="customer_footers"
-                ), 
-            'ports', 
-            'display_codes'
-        ).filter(
-            store_id=STORE_ID,
-            terminal_id=TERMINAL_ID
-        ).first()
-
-    if not terminal_config:
-        print("terminal_config is None")
-        return
-    
-    tender_lines = receipt.get("tender_lines") or []
-    if not tender_lines and receipt.get("tender"):
-        tender_lines = [{
-            "desc": receipt["tender"],
-            "amount": receipt.get("amount_tendered", receipt["total"]),
-            "is_cash": receipt.get("is_cash", False)
-        }]
-    
-
-    context = {
-        "store_name": setup_details.header01 or "OTTO Store",
-        "transaction_no": receipt["transaction_no"],
-        "date": receipt["date"],
-        "time": receipt["time"],
-        "subtotal": receipt.get("subtotal", receipt["total"]),
-        "trans_disc_pct": receipt.get("trans_disc_pct", "0"),
-        "trans_disc_label": receipt.get("trans_disc_label", ""),
-        "trans_disc_amt": receipt.get("trans_disc_amt", "0"),
-        "total": receipt["total"],
-        "tender": receipt.get("tender", ""),
-        "tender_lines": tender_lines,
-        "is_cash": receipt.get("is_cash", False),
-        "amount_tendered": receipt.get("amount_tendered", ""),
-        "change_amount": receipt.get("change_amount", ""),
-        "lines": receipt["lines"],
-    }
-
-    def format_money(val):
-        try:
-            return f"{float(val):,.2f}"
-        except:
-            return str(val)
-
-    def format_qty(val):
-        try: 
-            return f"{float(val):,.0f}"
-        except:
-            return str(val)
-
-    def justify_dynamic_tender(val): # example GCASH, and gcash has 5 letters and i wanna deduct it to 40
-        try:
-            if not isinstance(val, str):
-                return 0
-            return max(0, 40 - len(val) - 2)
-        except Exception:
-            return 0
-
-    try:
-        # =============================
-        # CONFIG LOAD
-        # =============================
-        ports = {p.port_type: p for p in terminal_config.ports.all()}
-        display_codes = {d.code_group: d for d in terminal_config.display_codes.all()}
-
-        # Paper width (default 40)
-        paper_width = 40
-        if "PW" in display_codes and display_codes["PW"].code_value:
-            try:
-                paper_width = int(display_codes["PW"].code_value)
-            except:
-                pass
-
-        # Column sizes (dynamic based on paper)
-        if paper_width >= 48:
-            LEFT_WIDTH = 32
-            RIGHT_WIDTH = paper_width - LEFT_WIDTH
-        else:
-            LEFT_WIDTH = 22
-            RIGHT_WIDTH = paper_width - LEFT_WIDTH
-
-        # =============================
-        # PRINTER CONNECTION
-        # =============================
-        printer_port = ports.get("PRINTER")
-        if not printer_port:
-            raise Exception("Printer port not configured")
-
-        printer = serial.Serial(
-            port=printer_port.port_name,
-            baudrate=9600,
-            bytesize=8,
-            parity='N',
-            stopbits=1,
-            timeout=1
-        )
-
-        time.sleep(1)
-
-        def write_line(text=""):
-            printer.write((text + "\n").encode("utf-8"))
-
-        def separator():
-            write_line("-" * paper_width)
-
-        def align_lr(left="", right=""):
-            left = str(left)
-            right = str(right)
-            return left.ljust(paper_width - len(right)) + right
-
-        def item_line(desc, qty, price, total):
-            return (
-                f"{qty} x {price}".ljust(LEFT_WIDTH) +
-                f"{total}".rjust(RIGHT_WIDTH)
-            )
-
-        # =============================
-        # LOGO PRINT (ESC/POS)
-        # =============================
-        # Requires logo stored in printer NV memory
-        try:
-            printer.write(b'\x1b\x61\x01')  # center
-            printer.write(b'\x1d\x28\x4c\x02\x00\x30\x45')  # print NV logo
-            write_line()
-        except:
-            pass
-
-        # =============================
-        # HEADER (DB)
-        # =============================
-        printer.write(b'\x1b\x61\x01')  # center
-
-        headers = terminal_config.headers.all().order_by("line_number")
-        if headers.exists():
-            for h in headers:
-                write_line(h.header_text)
-        else:
-            write_line("OTTO Store")
-
-        printer.write(b'\x1b\x61\x00')  # left
-
-        write_line(f"Receipt #: {context['transaction_no']}")
-        separator()
-
-        # =============================
-        # ITEMS (ALIGNED LIKE SM)
-        # =============================
-        for line in context["lines"]:
-            desc = line.get("description", "")[:paper_width]
-            qty = format_qty(line.get("qty"))
-            price = format_money(line.get("price"))
-            total = format_money(line.get("ext"))
-
-            write_line(desc)
-            write_line(item_line(qty, price, total))
-
-            if line.get("disc_pct"):
-                write_line(f"  {line.get('disc_pct')}% - {format_money(line.get('disc_total'))}")
-
-        # =============================
-        # DISCOUNT
-        # =============================
-        if context["trans_disc_amt"] not in ["0", "0.0000", None, ""]:
-            separator()
-            write_line(align_lr("Subtotal", format_money(context["subtotal"])))
-            write_line(f"{context['trans_disc_label']} ({context['trans_disc_pct']}%)")
-            write_line(align_lr("Discount", f"-{format_money(context['trans_disc_amt'])}"))
-
-        # =============================
-        # TOTAL
-        # =============================
-        separator()
-        printer.write(b'\x1b\x45\x01')  # bold
-        write_line(align_lr("TOTAL", format_money(context["total"])))
-        printer.write(b'\x1b\x45\x00')
-        separator()
-
-        # =============================
-        # TENDER
-        # =============================
-        for t in context["tender_lines"]:
-            write_line(align_lr(t["desc"], format_money(t["amount"])))
-
-        if context["amount_tendered"]:
-            write_line(align_lr("Tendered", format_money(context["amount_tendered"])))
-
-        if context["is_cash"] and context["change_amount"] not in ["", "0", "0.0000"]:
-            printer.write(b'\x1b\x45\x01')
-            write_line(align_lr("CHANGE", format_money(context["change_amount"])))
-            printer.write(b'\x1b\x45\x00')
-
-        # =============================
-        # FOOTER (DB)
-        # =============================
-        separator()
-        printer.write(b'\x1b\x61\x01')  # center
-
-        footers = terminal_config.footers.all().order_by("line_number")
-        if footers.exists():
-            for f in footers:
-                write_line(f.footer_text)
-        else:
-            write_line("Thank you for your purchase!")
-
-        printer.write(b'\x1b\x61\x00')
-
-        # =============================
-        # OPEN CASH DRAWER
-        # =============================
-        drawer_port = ports.get("DRAWER")
-        if drawer_port:
-            try:
-                # Standard ESC/POS pulse
-                printer.write(b'\x1b\x70\x00\x19\xfa')
-            except:
-                pass
-
-        # =============================
-        # FEED & CUT
-        # =============================
-        write_line("\n" * 5)
-        printer.write(b'\x1d\x56\x00')
-
-        printer.close()
-
-    except Exception as e:
-        print("❌ Printer Error:", e)
-    
-    return render(request, "sales/receipt.html", context)
-
-@login_required
-def item_search(request):
-    """Search items by description, code, or barcode. Returns JSON."""
-    q = (request.GET.get("q") or "").strip()
-    if len(q) < 2:
-        return JsonResponse({"results": []})
-
-    from django.db.models import Q
-
-    # Search Item master by description or code (exclude inactive items)
-    items = Item.objects.filter(
-        Q(short_desc__icontains=q) | Q(long_desc__icontains=q) | Q(icode__icontains=q)
-    ).exclude(inactive="Y").order_by("short_desc")[:30]
-
-    results = []
-    for item in items:
-        # Get all variants (barcodes) for this item
-        variants = ItemDetail.objects.filter(icode=item.icode).order_by("size", "color")
-        if variants.exists():
-            for v in variants:
-                results.append({
-                    "barcode": v.barcode,
-                    "code": item.icode,
-                    "description": item.short_desc or item.long_desc,
-                    "size": v.size,
-                    "color": v.color,
-                    "price": str(v.price or item.price),
-                })
-        else:
-            results.append({
-                "barcode": item.icode,
-                "code": item.icode,
-                "description": item.short_desc or item.long_desc,
-                "size": item.size or "",
-                "color": item.color or "",
-                "price": str(item.price),
-            })
-
-    return JsonResponse({"results": results})
-
-
-
-# ---------------------------------------------------------------------------
-# Close session view
-# ---------------------------------------------------------------------------
 
 @login_required
 @require_open_session
-@require_http_methods(["POST"])
-def close_session(request):
-    user = request.user
-
-    # Find the active cashier session for this user + terminal + store
-    session = POSSession.objects.filter(
-        cashier=user,
-        store_id=STORE_ID,       # your existing constant
-        status="open",
-    ).order_by("-opened_at").first()
-
-    if not session:
-        messages.error(request, "No active session found to close.")
-        return redirect("sales:pos_cashier")
-
-    # --- Parse POST values ---
-    def parse_decimal(val, default=0):
-        try:
-            return float(val)
-        except (TypeError, ValueError):
-            return default
-
-    closing_cash  = parse_decimal(request.POST.get("closing_cash"))
-    expected_cash = parse_decimal(request.POST.get("expected_cash"))
-    cash_variance = parse_decimal(request.POST.get("cash_variance"))
-    notes         = request.POST.get("notes", "").strip()
-    print(session)
-    print(closing_cash)
-    print(expected_cash)
-    print(cash_variance)
-    if closing_cash < 0:
-        messages.error(request, "Closing cash cannot be negative.")
-        return redirect("sales:pos_cashier")
-
-    # --- Update and close the session ---
-    session.closing_cash  = closing_cash
-    session.expected_cash = expected_cash
-    session.cash_variance = cash_variance
-    session.notes         = notes or None
-    session.closed_at   = timezone.now()
-    session.status = "closed"
-    session.save(update_fields=[
-        "closing_cash", 
-        # "expected_cash",
-        # "cash_variance",
-        # "notes",
-        "closed_at", 
-        "status", 
-        # "updated_at",
-    ])
-
-    # --- Audit trail entry ---
-    # AuditTrail.objects.create(
-    #     user_id=user.pk,
-    #     username=user.username,
-    #     action_type="LOGOUT",
-    #     action_description=(
-    #         f"Session closed. Closing cash: {closing_cash:.2f}, "
-    #         f"Expected: {expected_cash:.2f}, Variance: {cash_variance:.2f}"
-    #     ),
-    #     table_name="cashier_sessions",
-    #     record_id=str(session.pk),
-    #     new_values={
-    #         "closing_cash":  closing_cash,
-    #         "expected_cash": expected_cash,
-    #         "cash_variance": cash_variance,
-    #         "session_status": "closed",
-    #     },
-    #     terminal_id=TERMINAL_ID,
-    #     store_id=STORE_ID,
-    # )
-
-    # Clear session keys set during this POS session
-    for key in ("pos_trans_no", "pos_trans_disc_pct",
-                "pos_trans_disc_type", "pos_trans_disc_label", "last_receipt"):
-        request.session.pop(key, None)
-
-    # messages.success(request, "Session closed successfully.")
-    return redirect("pos_logout")
-
-
-@login_required
-@require_open_session
-def print_reading(session_id: int):
+def _print_reading(request):
     """
     Print a Z-Reading report for the given POSSession.
     Uses serial port from TerminalConfiguration, same as receipt printing.
     """
+
+
     # =============================
     # SETUP & CONFIG
     # =============================
@@ -1202,8 +863,11 @@ def print_reading(session_id: int):
         return
 
     try:
+        session = get_current_session_or_error(request)
+
+        _print_reading(session.id)
         session = POSSession.objects.select_related('cashier').get(
-            id=session_id,
+            id=session.id,
             status="open",
         )
     except POSSession.DoesNotExist:
@@ -1216,7 +880,7 @@ def print_reading(session_id: int):
             {"error": "Multiple open POS sessions found for the provided session ID."},
             status=500,
         )
-    print(f"Generating Z-Reading for session {session_id} (Cashier: {session.cashier.username})")
+    print(f"Generating Z-Reading for session {session.id} (Cashier: {session.cashier.username})")
     # All transaction headers for this session
     headers_qs = TransactionHeader.objects.filter(session=session)
 
@@ -1517,6 +1181,490 @@ def print_reading(session_id: int):
     printer.close()
 
 
+def _open_printer(printer_port):
+    """
+    Open a printer connection based on the port's connection_type.
+    Returns an open connection object with a .write(bytes) method.
+    Raises ValueError for unsupported or misconfigured connection types.
+    """
+    connection_type = printer_port.connection_type
+ 
+    if connection_type == "SERIAL":
+        if not printer_port.port_name:
+            raise ValueError("Serial printer port_name is not configured.")
+        conn = serial.Serial(
+            port=printer_port.port_name,
+            baudrate=printer_port.baudrate or 9600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout=1,
+        )
+        time.sleep(1)
+        return conn
+ 
+    elif connection_type == "USB":
+        # USB serial — treat like serial but without baudrate requirement
+        if not printer_port.port_name:
+            raise ValueError("USB printer port_name is not configured.")
+        conn = serial.Serial(
+            port=printer_port.port_name,
+            baudrate=printer_port.baudrate or 9600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout=1,
+        )
+        time.sleep(1)
+        return conn
+ 
+    elif connection_type == "NETWORK":
+        if not printer_port.ip_address or not printer_port.port_no:
+            raise ValueError("Network printer ip_address and port_no must be configured.")
+        conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        conn.connect((printer_port.ip_address, printer_port.port_no))
+        conn.settimeout(5)
+        # Wrap socket so it exposes a .write() and .close() interface
+        return _SocketPrinterWrapper(conn)
+ 
+    elif connection_type == "WINDOWS":
+        # Windows GDI / raw print — not yet implemented
+        raise NotImplementedError(
+            f"Windows printer support is not yet implemented "
+            f"(port: {printer_port.printer_name!r})."
+        )
+ 
+    else:
+        raise ValueError(f"Unsupported printer connection_type: {connection_type!r}")
+ 
+ 
+class _SocketPrinterWrapper:
+    """Thin wrapper so a network socket exposes the same .write()/.close() API as serial.Serial."""
+ 
+    def __init__(self, sock):
+        self._sock = sock
+ 
+    def write(self, data: bytes):
+        self._sock.sendall(data)
+ 
+    def close(self):
+        self._sock.close()
+ 
+ 
+def _print_receipt(printer, terminal_config, context):
+    """
+    Send the full receipt byte-stream to the already-open printer connection.
+    Isolated from the view so it can be tested or reused independently.
+    """
+    ports = {p.port_type: p for p in terminal_config.ports.all()}
+    display_codes = {d.code_group: d for d in terminal_config.display_codes.all()}
+ 
+    # ── Paper width ──────────────────────────────────────────────────────────
+    paper_width = 40
+    if "PW" in display_codes and display_codes["PW"].code_value:
+        try:
+            paper_width = int(display_codes["PW"].code_value)
+        except ValueError:
+            pass
+ 
+    # ── Column sizes ─────────────────────────────────────────────────────────
+    if paper_width >= 48:
+        LEFT_WIDTH = 32
+    else:
+        LEFT_WIDTH = 22
+    RIGHT_WIDTH = paper_width - LEFT_WIDTH
+ 
+    # ── Helpers ──────────────────────────────────────────────────────────────
+    def write_line(text=""):
+        printer.write((text + "\n").encode("utf-8"))
+ 
+    def separator():
+        write_line("-" * paper_width)
+ 
+    def align_lr(left="", right=""):
+        left, right = str(left), str(right)
+        return left.ljust(paper_width - len(right)) + right
+ 
+    def item_line(qty, price, total):
+        return f"{qty} x {price}".ljust(LEFT_WIDTH) + f"{total}".rjust(RIGHT_WIDTH)
+ 
+    def format_money(val):
+        try:
+            return f"{float(val):,.2f}"
+        except (TypeError, ValueError):
+            return str(val)
+ 
+    def format_qty(val):
+        try:
+            return f"{float(val):,.0f}"
+        except (TypeError, ValueError):
+            return str(val)
+ 
+    # ── Header ───────────────────────────────────────────────────────────────
+    printer.write(b"\x1b\x61\x01")  # center
+    headers = terminal_config.headers.all().order_by("line_number")
+    if headers.exists():
+        for h in headers:
+            write_line(h.header_text)
+    else:
+        write_line("OTTO Store")
+ 
+    printer.write(b"\x1b\x61\x00")  # left
+    write_line(f"Receipt #: {context['transaction_no']}")
+    separator()
+ 
+    # ── Items ─────────────────────────────────────────────────────────────────
+    for line in context["lines"]:
+        desc = line.get("description", "")[:paper_width]
+        qty = format_qty(line.get("qty"))
+        price = format_money(line.get("price"))
+        total = format_money(line.get("ext"))
+ 
+        write_line(desc)
+        write_line(item_line(qty, price, total))
+ 
+        if line.get("disc_pct"):
+            write_line(f"  {line['disc_pct']}% - {format_money(line.get('disc_total'))}")
+ 
+    # ── Transaction discount ──────────────────────────────────────────────────
+    if context["trans_disc_amt"] not in ("0", "0.0000", None, ""):
+        separator()
+        write_line(align_lr("Subtotal", format_money(context["subtotal"])))
+        write_line(f"{context['trans_disc_label']} ({context['trans_disc_pct']}%)")
+        write_line(align_lr("Discount", f"-{format_money(context['trans_disc_amt'])}"))
+ 
+    # ── Total ─────────────────────────────────────────────────────────────────
+    separator()
+    printer.write(b"\x1b\x45\x01")  # bold on
+    write_line(align_lr("TOTAL", format_money(context["total"])))
+    printer.write(b"\x1b\x45\x00")  # bold off
+    separator()
+ 
+    # ── Tender lines ──────────────────────────────────────────────────────────
+    for t in context["tender_lines"]:
+        write_line(align_lr(t["desc"], format_money(t["amount"])))
+ 
+    if context["amount_tendered"]:
+        write_line(align_lr("Tendered", format_money(context["amount_tendered"])))
+ 
+    if context["is_cash"] and context["change_amount"] not in ("", "0", "0.0000"):
+        printer.write(b"\x1b\x45\x01")
+        write_line(align_lr("CHANGE", format_money(context["change_amount"])))
+        printer.write(b"\x1b\x45\x00")
+ 
+    # ── Footer ────────────────────────────────────────────────────────────────
+    separator()
+    printer.write(b"\x1b\x61\x01")  # center
+ 
+    # FIX: customer_footers is a plain list (set via to_attr), not a queryset
+    footers = terminal_config.footers.all()
+    if footers:
+        for f in sorted(footers, key=lambda x: x.line_number):
+            write_line(f.footer_text)
+    else:
+        write_line("Thank you for your purchase!")
+    # footers = terminal_config.footers.all().order_by("line_number")
+    # if footers.exists():
+    #     for f in footers:
+    #         write_line(f.footer_text)
+    # else:
+    #     write_line("Thank you for your purchase!")
+ 
+    printer.write(b"\x1b\x61\x00")  # left
+ 
+    # ── Cash drawer pulse ─────────────────────────────────────────────────────
+    drawer_port = ports.get("DRAWER")
+    if drawer_port:
+        try:
+            printer.write(b"\x1b\x70\x00\x19\xfa")
+        except Exception as e:
+            print(f"⚠️  Cash drawer pulse failed: {e}")
+ 
+    # ── Feed & cut ────────────────────────────────────────────────────────────
+    write_line("\n" * 5)
+    printer.write(b"\x1d\x56\x00")
+ 
+ 
+@login_required
+@require_open_session
+def receipt_view(request):
+    """Display receipt after payment. Data comes from session."""
+
+    receipt = request.session.get("last_receipt")
+    if not receipt:
+        return redirect("sales:pos_cashier")
+ 
+    setup_details = _get_store_details()
+ 
+    terminal_config = (
+        TerminalConfiguration.objects.prefetch_related(
+            "headers",
+            models.Prefetch(
+                "footers",
+                queryset=TerminalReceiptFooter.objects.filter(
+                    footer_type__in=["customer", "both"]
+                ).order_by("line_number"),
+                to_attr="customer_footers",  # resolves to a plain list, not a queryset
+            ),
+            # "footers",
+            "ports",
+            "display_codes",
+        )
+        .filter(store_id=STORE_ID, terminal_id=TERMINAL_ID)
+        .first()
+    )
+     # =============================
+    # PORT CONFIG
+    # =============================
+    ports = {p.port_type: p for p in terminal_config.ports.all()}
+    display_codes = {d.code_group: d for d in terminal_config.display_codes.all()}
+
+    # Print all TerminalConfiguration details
+    print("\n=== TERMINAL CONFIGURATION ===")
+    print(f"ID: {terminal_config.id}")
+    print(f"Store ID: {terminal_config.store_id}")
+    print(f"Terminal ID: {terminal_config.terminal_id}")
+    # print(f"Created At: {terminal_config.created_at}")
+    # print(f"Updated At: {terminal_config.updated_at}")
+    
+    # Print all headers
+    print("\n=== HEADERS ===")
+    headers = terminal_config.headers.all()
+    for h in headers:
+        print(f"  ID: {h.id}, Line: {h.line_number}, Text: {h.header_text}")
+    
+    # Print all footers
+    print("\n=== FOOTERS ===")
+    footers = terminal_config.footers.all()
+    for f in footers:
+        print(f"  ID: {f.id}, Type: {f.footer_type}, Line: {f.line_number}, Text: {f.footer_text}")
+    
+    # Print customer footers (from prefetch)
+    print("\n=== CUSTOMER FOOTERS (prefetched) ===")
+    customer_footers = terminal_config.footers.all()
+    if customer_footers:
+        for cf in customer_footers:
+            print(f"  ID: {cf.id}, Type: {cf.footer_type}, Line: {cf.line_number}, Text: {cf.footer_text}")
+    else:
+        print("  No customer footers found")
+    
+    # Print all ports
+    print("\n=== ALL PORTS ===")
+    for port_type, port_obj in ports.items():
+        print(f"\n  Port Type: {port_type}")
+        print(f"    ID: {port_obj.id}")
+        print(f"    Port Name: {port_obj.port_name}")
+        print(f"    Connection Type: {port_obj.connection_type}")
+        print(f"    Baudrate: {port_obj.baudrate}")
+        print(f"    IP Address: {port_obj.ip_address}")
+        print(f"    Port No: {port_obj.port_no}")
+        print(f"    Printer Name: {port_obj.printer_name}")
+    
+    # Print display codes
+    print("\n=== DISPLAY CODES ===")
+    for code_group, code_obj in display_codes.items():
+        print(f"\n  Code Group: {code_group}")
+        print(f"    ID: {code_obj.id}")
+        print(f"    Code Value: {code_obj.code_value}")
+        print(f"    Code Description: {code_obj.code_description}")
+    
+    # Print printer port details
+    print("\n=== PRINTER PORT DETAIL ===")
+    printer_port = ports.get("PRINTER")
+    if printer_port:
+        print(f"  Port Type: PRINTER")
+        print(f"  Port Name: {printer_port.port_name}")
+        print(f"  Connection Type: {printer_port.connection_type}")
+        print(f"  Baudrate: {printer_port.baudrate}")
+        print(f"  IP Address: {printer_port.ip_address}")
+        print(f"  Port No: {printer_port.port_no}")
+        print(f"  Printer Name: {printer_port.printer_name}")
+    else:
+        print("  ❌ No PRINTER port found!")
+    
+    print("\n")
+
+    paper_width = 40
+    if "PW" in display_codes and display_codes["PW"].code_value:
+        try:
+            paper_width = int(display_codes["PW"].code_value)
+        except:
+            pass
+
+    if not printer_port:
+        raise Exception("Printer port not configured")
+    
+    if not terminal_config:
+        # FIX: must return an HttpResponse, not bare None
+        print("terminal_config is None")
+        return redirect("sales:pos_cashier")
+ 
+    # ── Normalise tender lines ────────────────────────────────────────────────
+    tender_lines = receipt.get("tender_lines") or []
+    if not tender_lines and receipt.get("tender"):
+        tender_lines = [
+            {
+                "desc": receipt["tender"],
+                "amount": receipt.get("amount_tendered", receipt["total"]),
+                "is_cash": receipt.get("is_cash", False),
+            }
+        ]
+ 
+    context = {
+        "store_name": setup_details.header01 or "OTTO Store",
+        "transaction_no": receipt["transaction_no"],
+        "date": receipt["date"],
+        "time": receipt["time"],
+        "subtotal": receipt.get("subtotal", receipt["total"]),
+        "trans_disc_pct": receipt.get("trans_disc_pct", "0"),
+        "trans_disc_label": receipt.get("trans_disc_label", ""),
+        "trans_disc_amt": receipt.get("trans_disc_amt", "0"),
+        "total": receipt["total"],
+        "tender": receipt.get("tender", ""),
+        "tender_lines": tender_lines,
+        "is_cash": receipt.get("is_cash", False),
+        "amount_tendered": receipt.get("amount_tendered", ""),
+        "change_amount": receipt.get("change_amount", ""),
+        "lines": receipt["lines"],
+    }
+ 
+ 
+        
+    _print_reading(request)
+
+    return render(request, "sales/receipt.html", context)
+
+
+@login_required
+def item_search(request):
+    """Search items by description, code, or barcode. Returns JSON."""
+    q = (request.GET.get("q") or "").strip()
+    if len(q) < 2:
+        return JsonResponse({"results": []})
+
+    from django.db.models import Q
+
+    # Search Item master by description or code (exclude inactive items)
+    items = Item.objects.filter(
+        Q(short_desc__icontains=q) | Q(long_desc__icontains=q) | Q(icode__icontains=q)
+    ).exclude(inactive="Y").order_by("short_desc")[:30]
+
+    results = []
+    for item in items:
+        # Get all variants (barcodes) for this item
+        variants = ItemDetail.objects.filter(icode=item.icode).order_by("size", "color")
+        if variants.exists():
+            for v in variants:
+                results.append({
+                    "barcode": v.barcode,
+                    "code": item.icode,
+                    "description": item.short_desc or item.long_desc,
+                    "size": v.size,
+                    "color": v.color,
+                    "price": str(v.price or item.price),
+                })
+        else:
+            results.append({
+                "barcode": item.icode,
+                "code": item.icode,
+                "description": item.short_desc or item.long_desc,
+                "size": item.size or "",
+                "color": item.color or "",
+                "price": str(item.price),
+            })
+
+    return JsonResponse({"results": results})
+
+
+# ---------------------------------------------------------------------------
+# Close session view
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def close_session(request):
+    user = request.user
+
+    # Find the active cashier session for this user + terminal + store
+    session = POSSession.objects.filter(
+        cashier=user,
+        store_id=STORE_ID,       # your existing constant
+        status="open",
+    ).order_by("-opened_at").first()
+
+    if not session:
+        messages.error(request, "No active session found to close.")
+        return redirect("sales:pos_cashier")
+
+    # --- Parse POST values ---
+    def parse_decimal(val, default=0):
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return default
+
+    closing_cash  = parse_decimal(request.POST.get("closing_cash"))
+    expected_cash = parse_decimal(request.POST.get("expected_cash"))
+    cash_variance = parse_decimal(request.POST.get("cash_variance"))
+    notes         = request.POST.get("notes", "").strip()
+    print(session)
+    print(closing_cash)
+    print(expected_cash)
+    print(cash_variance)
+    if closing_cash < 0:
+        messages.error(request, "Closing cash cannot be negative.")
+        return redirect("sales:pos_cashier")
+
+    # --- Update and close the session ---
+    session.closing_cash  = closing_cash
+    session.expected_cash = expected_cash
+    session.cash_variance = cash_variance
+    session.notes         = notes or None
+    session.closed_at   = timezone.now()
+    session.status = "closed"
+    session.save(update_fields=[
+        "closing_cash", 
+        # "expected_cash",
+        # "cash_variance",
+        # "notes",
+        "closed_at", 
+        "status", 
+        # "updated_at",
+    ])
+
+    # --- Audit trail entry ---
+    # AuditTrail.objects.create(
+    #     user_id=user.pk,
+    #     username=user.username,
+    #     action_type="LOGOUT",
+    #     action_description=(
+    #         f"Session closed. Closing cash: {closing_cash:.2f}, "
+    #         f"Expected: {expected_cash:.2f}, Variance: {cash_variance:.2f}"
+    #     ),
+    #     table_name="cashier_sessions",
+    #     record_id=str(session.pk),
+    #     new_values={
+    #         "closing_cash":  closing_cash,
+    #         "expected_cash": expected_cash,
+    #         "cash_variance": cash_variance,
+    #         "session_status": "closed",
+    #     },
+    #     terminal_id=TERMINAL_ID,
+    #     store_id=STORE_ID,
+    # )
+
+    # Clear session keys set during this POS session
+    for key in ("pos_trans_no", "pos_trans_disc_pct",
+                "pos_trans_disc_type", "pos_trans_disc_label", "last_receipt"):
+        request.session.pop(key, None)
+
+    # messages.success(request, "Session closed successfully.")
+    return redirect("pos_logout")
+
+
+
+
 def debug_sessions_json(request):
     sessions = POSSession.objects.prefetch_related(
         'transaction_headers__items', 'transaction_headers__payments'
@@ -1570,3 +1718,54 @@ def debug_sessions_json(request):
 
     # Optional: also return it in browser
     return JsonResponse(data, safe=False)
+
+
+
+
+    # # ── Print ─────────────────────────────────────────────────────────────────
+    # ports = {p.port_type: p for p in terminal_config.ports.all()}
+    # printer_port = ports.get("PRINTER")
+    # # Print all port details
+    # print("\n=== ALL PORTS ===")
+    # for port_type, port_obj in ports.items():
+    #     print(f"\nPort Type: {port_type}")
+    #     print(f"  Port Name: {port_obj.port_name}")
+    #     print(f"  Connection Type: {port_obj.connection_type}")
+    #     print(f"  Baudrate: {port_obj.baudrate}")
+    #     print(f"  IP Address: {port_obj.ip_address}")
+    #     print(f"  Port No: {port_obj.port_no}")
+    #     print(f"  Printer Name: {port_obj.printer_name}")
+    
+    # # Print printer port details
+    # print("\n=== PRINTER PORT ===")
+    # if printer_port:
+    #     print(f"Port Type: PRINTER")
+    #     print(f"  Port Name: {printer_port.port_name}")
+    #     print(f"  Connection Type: {printer_port.connection_type}")
+    #     print(f"  Baudrate: {printer_port.baudrate}")
+    #     print(f"  IP Address: {printer_port.ip_address}")
+    #     print(f"  Port No: {printer_port.port_no}")
+    #     print(f"  Printer Name: {printer_port.printer_name}")
+    # else:
+    #     print("❌ No PRINTER port found!")
+    
+    # print("\n")
+
+    # if not printer_port:
+    #     print("❌ Printer port not configured")
+    # else:
+    #     printer = None
+    #     try:
+    #         # FIX: connection_type-aware printer open; baudrate read from DB
+    #         printer = _open_printer(printer_port)
+    #         _print_receipt(printer, terminal_config, context)
+    #     except NotImplementedError as e:
+    #         print(f"❌ Printer not supported: {e}")
+    #     except Exception as e:
+    #         print(f"❌ Printer error: {e}")
+    #     finally:
+    #         if printer is not None:
+    #             try:
+    #                 printer.close()
+    #             except Exception:
+    #                 pass
