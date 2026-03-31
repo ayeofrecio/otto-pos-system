@@ -950,6 +950,8 @@ class TerminalReceiptFooter(models.Model):
 
     line_number = models.PositiveSmallIntegerField()
     footer_text = models.CharField(max_length=40)
+    is_centered = models.BooleanField(default=False)
+    is_left_align = models.BooleanField(default=False)
 
     class Meta:
         db_table = "terminal_receipt_footers"
