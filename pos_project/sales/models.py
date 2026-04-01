@@ -853,7 +853,8 @@ class Payment(models.Model):
     pcode             = models.CharField(max_length=3)
     amount            = models.DecimalField(max_digits=15, decimal_places=4, default=0)
     tender_desc       = models.CharField(max_length=15, blank=True)
-    payment_reference = models.CharField(max_length=20, blank=True)
+    # holder            = models.CharField(max_length=50, null=True)
+    payment_reference = models.CharField(max_length=20, null=True)
 
     class Meta:
         db_table = 'payment'
@@ -923,6 +924,7 @@ class TerminalReceiptHeader(models.Model):
 
     line_number = models.PositiveSmallIntegerField()
     header_text = models.CharField(max_length=40)
+    is_capitalized = models.BooleanField(default=False)
 
     class Meta:
         db_table = "terminal_receipt_headers"

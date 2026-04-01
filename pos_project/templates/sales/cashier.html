@@ -1772,6 +1772,11 @@
         <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <h2>Close Transaction</h2>
+                <button class="btn btn-secondary" onclick="fetch('/pos/z-reading/', {
+                    method: 'GET',
+                    headers: {'X-CSRFToken': CSRF_TOKEN}
+                }).then(r => r.json()).then(d => alert(d.message || d.error))">
+                    Print Z-Reading</button>
                 <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
             </div>
 

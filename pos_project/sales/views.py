@@ -829,715 +829,6 @@ def payment_complete(request):
     return redirect("sales:receipt")
 
 
-
-
-# @login_required
-# @require_open_session
-# def _print_reading(request):
-#     """
-#     Print a Z-Reading report for the given POSSession.
-#     Uses serial port from TerminalConfiguration, same as receipt printing.
-#     """
-
-
-#     # =============================
-#     # SETUP & CONFIG
-#     # =============================
-#     setup_details = _get_store_details()
-
-#     terminal_config = TerminalConfiguration.objects.prefetch_related(
-#         'headers',
-#         models.Prefetch(
-#             'footers',
-#             queryset=TerminalReceiptFooter.objects.filter(
-#                 footer_type__in=["customer", "both"]
-#             ).order_by("line_number"),
-#             to_attr="customer_footers"
-#         ),
-#         'ports',
-#         'display_codes'
-#     ).filter(
-#         store_id=STORE_ID,
-#         terminal_id=TERMINAL_ID
-#     ).first()
-
-#     if not terminal_config:
-#         print("terminal_config is None")
-#         return
-
-#     try:
-#         session = get_current_session_or_error(request)
-
-#         _print_reading(session.id)
-#         session = POSSession.objects.select_related('cashier').get(
-#             id=session.id,
-#             status="open",
-#         )
-#     except POSSession.DoesNotExist:
-#         return JsonResponse(
-#             {"error": "Open POS session not found for the provided session ID."},
-#             status=404,
-#         )
-#     except POSSession.MultipleObjectsReturned:
-#         return JsonResponse(
-#             {"error": "Multiple open POS sessions found for the provided session ID."},
-#             status=500,
-#         )
-#     print(f"Generating Z-Reading for session {session.id} (Cashier: {session.cashier.username})")
-#     # All transaction headers for this session
-#     headers_qs = TransactionHeader.objects.filter(session=session)
-
-#     # SI range
-#     si_numbers = headers_qs.order_by('transaction_no').values_list('transaction_no', flat=True)
-#     beg_si = si_numbers.first() or "00000000"
-#     end_si = si_numbers.last() or "00000000"
-
-#     # Negative entries — based on transaction_type or return_code conventions
-#     # Adjust field values to match your actual data ('V', 'R', etc.)
-#     void_line_items = headers_qs.filter(transaction_type='L').aggregate(
-#         total=Sum('items__item_price_ext'), count=Count('id')
-#     )
-#     void_transactions = headers_qs.filter(transaction_type='V').aggregate(
-#         total=Sum('items__item_price_ext'), count=Count('id')
-#     )
-#     void_previous = headers_qs.filter(transaction_type='P').aggregate(
-#         total=Sum('items__item_price_ext'), count=Count('id')
-#     )
-#     item_returns = headers_qs.filter(return_code='R').aggregate(
-#         total=Sum('items__item_price_ext'), count=Count('id')
-#     )
-
-#     # Cash withdrawals — adjust pcode to your actual cash withdrawal code
-#     cash_withdrawals = Payment.objects.filter(
-#         header__session=session, pcode='CW'
-#     ).aggregate(total=Sum('amount'), count=Count('id'))
-
-#     total_neg = sum(filter(None, [
-#         void_line_items['total'],
-#         void_transactions['total'],
-#         void_previous['total'],
-#         item_returns['total'],
-#         cash_withdrawals['total'],
-#     ]))
-
-#     # Sales transactions only (exclude voids/returns for gross sales)
-#     sales_headers = headers_qs.exclude(
-#         transaction_type__in=['V', 'L', 'P']
-#     ).exclude(return_code='R')
-
-#     gross_sales = TransactionItem.objects.filter(
-#         header__in=sales_headers
-#     ).aggregate(total=Sum('item_price_ext'))['total'] or Decimal('0')
-
-#     # Discounts
-#     item_disc = TransactionItem.objects.filter(
-#         header__in=sales_headers,
-#         discount_code__in=['ID']  # adjust to your item discount code
-#     ).aggregate(total=Sum('item_discount'), count=Count('id'))
-
-#     item_amt_disc = TransactionItem.objects.filter(
-#         header__in=sales_headers,
-#         discount_code__in=['IA']  # adjust to your item amount discount code
-#     ).aggregate(total=Sum('item_discount'), count=Count('id'))
-
-#     senior_disc = TransactionItem.objects.filter(
-#         header__in=sales_headers,
-#         discount_code__in=['SC']  # adjust to your senior discount code
-#     ).aggregate(total=Sum('item_discount'), count=Count('id'))
-
-#     senior_amt_disc = TransactionItem.objects.filter(
-#         header__in=sales_headers,
-#         discount_code__in=['SA']
-#     ).aggregate(total=Sum('item_discount'), count=Count('id'))
-
-#     total_disc = sum(filter(None, [
-#         item_disc['total'],
-#         item_amt_disc['total'],
-#         senior_disc['total'],
-#         senior_amt_disc['total'],
-#     ]))
-
-#     # Customer count & item count
-#     customer_count = sales_headers.aggregate(
-#         total=Sum('customer_count')
-#     )['total'] or 0
-
-#     total_items_sold = TransactionItem.objects.filter(
-#         header__in=sales_headers
-#     ).aggregate(total=Sum('item_qty'))['total'] or 0
-
-#     # Tender breakdown — group by tender_desc
-#     tender_breakdown = Payment.objects.filter(
-#         header__in=sales_headers
-#     ).values('tender_desc', 'pcode').annotate(
-#         total=Sum('amount'),
-#         count=Count('id')
-#     ).order_by('tender_desc')
-
-#     # GC Sales (Gift Certificate) — adjust pcode as needed
-#     gc_sales = Payment.objects.filter(
-#         header__in=sales_headers, pcode='GC'
-#     ).aggregate(total=Sum('amount'), count=Count('id'))
-
-#     net_sales = gross_sales - Decimal(str(total_disc))
-
-#     # Grand totals (you may pull these from a separate GrandTotal model)
-#     # Replace with actual old/new grand total logic
-#     old_grand_total = Decimal('75198919.10')  # TODO: fetch from your GrandTotal model
-#     new_grand_total = old_grand_total + gross_sales
-
-#     total_neg_entries_amt = Decimal(str(total_neg or 0))
-
-#     # VAT computation (12% VAT inclusive)
-#     VAT_RATE = Decimal('0.12')
-#     vatable_sales = net_sales / (1 + VAT_RATE)
-#     vat_amount = net_sales - vatable_sales
-#     non_vat = Decimal('0')  # adjust if you track non-vat sales separately
-
-#     # =============================
-#     # PORT CONFIG
-#     # =============================
-#     ports = {p.port_type: p for p in terminal_config.ports.all()}
-#     display_codes = {d.code_group: d for d in terminal_config.display_codes.all()}
-
-#     paper_width = 40
-#     if "PW" in display_codes and display_codes["PW"].code_value:
-#         try:
-#             paper_width = int(display_codes["PW"].code_value)
-#         except:
-#             pass
-
-#     printer_port = ports.get("PRINTER")
-#     if not printer_port:
-#         raise Exception("Printer port not configured")
-
-#     printer = serial.Serial(
-#         port=printer_port.port_name,
-#         baudrate=9600,
-#         bytesize=8,
-#         parity='N',
-#         stopbits=1,
-#         timeout=1
-#     )
-#     time.sleep(1)
-
-#     # =============================
-#     # HELPERS
-#     # =============================
-#     def write_line(text=""):
-#         printer.write((text + "\n").encode("utf-8"))
-
-#     def separator(char="-"):
-#         write_line(char * paper_width)
-
-#     def fmt_money(val):
-#         try:
-#             return f"{float(val):>15,.2f}"
-#         except:
-#             return f"{'0.00':>15}"
-
-#     def fmt_count(val):
-#         try:
-#             return f"{int(val):>5}"
-#         except:
-#             return f"{'0':>5}"
-
-#     def neg_row(label, amount, count):
-#         """
-#         Format:  '     Label          0.00    0'
-#         Label is indented 5 spaces, amount right-aligned, count right-aligned.
-#         """
-#         label_col = f"     {label}"
-#         amt_str   = f"{float(amount):>10,.2f}"
-#         cnt_str   = f"{int(count):>5}"
-#         return f"{label_col:<{paper_width - 16}}{amt_str}{cnt_str}"
-
-#     def summary_row(label, amount, count=None):
-#         """
-#         Format:  'LABEL               10,432.60    7'
-#         or       'LABEL               10,432.60'  (no count)
-#         """
-#         amt_str = f"{float(amount):>10,.2f}"
-#         if count is not None:
-#             cnt_str = f"{int(count):>5}"
-#             return f"{label:<{paper_width - 16}}{amt_str}{cnt_str}"
-#         else:
-#             return f"{label:<{paper_width - 11}}{amt_str}"
-
-#     def center(text):
-#         return text.center(paper_width)
-
-#     # =============================
-#     # PRINT HEADER (DB)
-#     # =============================
-#     printer.write(b'\x1b\x61\x01')  # center align
-#     headers = terminal_config.headers.all().order_by("line_number")
-#     if headers.exists():
-#         for h in headers:
-#             write_line(h.header_text)
-#     else:
-#         write_line(setup_details.header01 or "OTTO Store")
-
-#     write_line(center("***** Z-Reading Report *****"))
-#     printer.write(b'\x1b\x61\x00')  # left align
-
-#     # =============================
-#     # TERMINAL INFO
-#     # =============================
-#     write_line(f"StoreId    : {session.store_id}")
-#     write_line(f"Terminal No: {session.terminal_id}")
-#     write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
-#     write_line(f"Date       : {session.business_date.strftime('%m/%d/%Y')}")
-#     write_line(f"BEG. SI    : {beg_si}")
-#     write_line(f"END. SI    : {end_si}")
-
-#     # =============================
-#     # NEGATIVE ENTRIES
-#     # =============================
-#     write_line("Negative Entries")
-#     write_line(neg_row("Void Line Item",   void_line_items['total']  or 0, void_line_items['count']  or 0))
-#     write_line(neg_row("Void Transaction", void_transactions['total'] or 0, void_transactions['count'] or 0))
-#     write_line(neg_row("Void Previous",    void_previous['total']    or 0, void_previous['count']    or 0))
-#     write_line(neg_row("Item Returns",     item_returns['total']     or 0, item_returns['count']     or 0))
-#     write_line(neg_row("Cash Withdrawal",  cash_withdrawals['total'] or 0, cash_withdrawals['count'] or 0))
-#     separator()
-#     write_line(summary_row("Total", total_neg_entries_amt))
-
-#     # =============================
-#     # GROSS SALES & DISCOUNTS
-#     # =============================
-#     write_line(summary_row("GROSS SALES", gross_sales))
-#     write_line("Less:Discounts")
-#     write_line(neg_row("Item Disc.",     item_disc['total']     or 0, item_disc['count']     or 0))
-#     write_line(neg_row("Item Amt Disc.", item_amt_disc['total'] or 0, item_amt_disc['count'] or 0))
-#     write_line(neg_row("Senior % Disc.", senior_disc['total']   or 0, senior_disc['count']   or 0))
-#     write_line(neg_row("     Amt.Disc.", senior_amt_disc['total'] or 0, senior_amt_disc['count'] or 0))
-#     separator()
-#     write_line(summary_row("Total", total_disc))
-
-#     # =============================
-#     # COUNTS
-#     # =============================
-#     write_line(f"{'Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>16}")
-#     write_line(f"{'Total Item Sold':<{paper_width - 16}}{fmt_count(total_items_sold):>16}")
-#     separator()
-
-#     # =============================
-#     # TENDER BREAKDOWN
-#     # =============================
-#     for t in tender_breakdown:
-#         desc  = (t['tender_desc'] or t['pcode'] or "CASH").upper()
-#         total = t['total'] or 0
-#         count = t['count'] or 0
-#         write_line(neg_row(desc, total, count))  # reuse neg_row layout
-
-#     write_line(neg_row("GC SALES", gc_sales['total'] or 0, gc_sales['count'] or 0))
-#     separator()
-#     write_line(summary_row("NET SALES", net_sales))
-#     separator()
-
-#     # =============================
-#     # TERMINAL SUMMARY
-#     # =============================
-#     printer.write(b'\x1b\x61\x01')
-#     write_line(center("Terminal Summary Total"))
-#     printer.write(b'\x1b\x61\x00')
-#     separator()
-#     separator()
-#     write_line(summary_row("OLD GRAND TOTAL", old_grand_total))
-#     write_line(summary_row("NEW GRAND TOTAL", new_grand_total))
-#     separator()
-#     write_line(f"{'Total Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>16}")
-#     write_line(f"{'Total Item Sold':<{paper_width - 16}}{fmt_count(total_items_sold):>16}")
-#     write_line(summary_row("Total Neg. Entries", total_neg_entries_amt))
-#     write_line(summary_row("Total Gross Sales",  gross_sales))
-#     write_line(summary_row("Total Discounts",    total_disc))
-#     write_line(summary_row("Less Withdrawals:",  cash_withdrawals['total'] or 0))
-#     write_line(summary_row("Total Daily Sales",  net_sales))
-#     separator("=")
-
-#     # =============================
-#     # VAT SUMMARY
-#     # =============================
-#     write_line(summary_row("Non-Vat:", non_vat))
-#     write_line(summary_row("Vatable:", vatable_sales))
-#     write_line(summary_row("V.A.T. Amount:", vat_amount))
-
-#     # =============================
-#     # FOOTER (DB)
-#     # =============================
-#     separator()
-#     printer.write(b'\x1b\x61\x01')
-#     footers = terminal_config.customer_footers
-#     if footers:
-#         for f in footers:
-#             write_line(f.footer_text)
-#     else:
-#         write_line("Thank you!")
-#     printer.write(b'\x1b\x61\x00')
-
-#     # =============================
-#     # FEED & CUT
-#     # =============================
-#     write_line("\n" * 5)
-#     printer.write(b'\x1d\x56\x00')
-#     printer.close()
-
-
-# def _open_printer(printer_port):
-#     """
-#     Open a printer connection based on the port's connection_type.
-#     Returns an open connection object with a .write(bytes) method.
-#     Raises ValueError for unsupported or misconfigured connection types.
-#     """
-#     connection_type = printer_port.connection_type
- 
-#     if connection_type == "SERIAL":
-#         if not printer_port.port_name:
-#             raise ValueError("Serial printer port_name is not configured.")
-#         conn = serial.Serial(
-#             port=printer_port.port_name,
-#             baudrate=printer_port.baudrate or 9600,
-#             bytesize=8,
-#             parity="N",
-#             stopbits=1,
-#             timeout=1,
-#         )
-#         time.sleep(1)
-#         return conn
- 
-#     elif connection_type == "USB":
-#         # USB serial — treat like serial but without baudrate requirement
-#         if not printer_port.port_name:
-#             raise ValueError("USB printer port_name is not configured.")
-#         conn = serial.Serial(
-#             port=printer_port.port_name,
-#             baudrate=printer_port.baudrate or 9600,
-#             bytesize=8,
-#             parity="N",
-#             stopbits=1,
-#             timeout=1,
-#         )
-#         time.sleep(1)
-#         return conn
- 
-#     elif connection_type == "NETWORK":
-#         if not printer_port.ip_address or not printer_port.port_no:
-#             raise ValueError("Network printer ip_address and port_no must be configured.")
-#         conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#         conn.connect((printer_port.ip_address, printer_port.port_no))
-#         conn.settimeout(5)
-#         # Wrap socket so it exposes a .write() and .close() interface
-#         return _SocketPrinterWrapper(conn)
- 
-#     elif connection_type == "WINDOWS":
-#         # Windows GDI / raw print — not yet implemented
-#         raise NotImplementedError(
-#             f"Windows printer support is not yet implemented "
-#             f"(port: {printer_port.printer_name!r})."
-#         )
- 
-#     else:
-#         raise ValueError(f"Unsupported printer connection_type: {connection_type!r}")
- 
- 
-# class _SocketPrinterWrapper:
-#     """Thin wrapper so a network socket exposes the same .write()/.close() API as serial.Serial."""
- 
-#     def __init__(self, sock):
-#         self._sock = sock
- 
-#     def write(self, data: bytes):
-#         self._sock.sendall(data)
- 
-#     def close(self):
-#         self._sock.close()
- 
- 
-# def _print_receipt(printer, terminal_config, context):
-#     """
-#     Send the full receipt byte-stream to the already-open printer connection.
-#     Isolated from the view so it can be tested or reused independently.
-#     """
-#     ports = {p.port_type: p for p in terminal_config.ports.all()}
-#     display_codes = {d.code_group: d for d in terminal_config.display_codes.all()}
- 
-#     # ── Paper width ──────────────────────────────────────────────────────────
-#     paper_width = 40
-#     if "PW" in display_codes and display_codes["PW"].code_value:
-#         try:
-#             paper_width = int(display_codes["PW"].code_value)
-#         except ValueError:
-#             pass
- 
-#     # ── Column sizes ─────────────────────────────────────────────────────────
-#     if paper_width >= 48:
-#         LEFT_WIDTH = 32
-#     else:
-#         LEFT_WIDTH = 22
-#     RIGHT_WIDTH = paper_width - LEFT_WIDTH
- 
-#     # ── Helpers ──────────────────────────────────────────────────────────────
-#     def write_line(text=""):
-#         printer.write((text + "\n").encode("utf-8"))
- 
-#     def separator():
-#         write_line("-" * paper_width)
- 
-#     def align_lr(left="", right=""):
-#         left, right = str(left), str(right)
-#         return left.ljust(paper_width - len(right)) + right
- 
-#     def item_line(qty, price, total):
-#         return f"{qty} x {price}".ljust(LEFT_WIDTH) + f"{total}".rjust(RIGHT_WIDTH)
- 
-#     def format_money(val):
-#         try:
-#             return f"{float(val):,.2f}"
-#         except (TypeError, ValueError):
-#             return str(val)
- 
-#     def format_qty(val):
-#         try:
-#             return f"{float(val):,.0f}"
-#         except (TypeError, ValueError):
-#             return str(val)
- 
-#     # ── Header ───────────────────────────────────────────────────────────────
-#     printer.write(b"\x1b\x61\x01")  # center
-#     headers = terminal_config.headers.all().order_by("line_number")
-#     if headers.exists():
-#         for h in headers:
-#             write_line(h.header_text)
-#     else:
-#         write_line("OTTO Store")
- 
-#     printer.write(b"\x1b\x61\x00")  # left
-#     write_line(f"Receipt #: {context['transaction_no']}")
-#     separator()
- 
-#     # ── Items ─────────────────────────────────────────────────────────────────
-#     for line in context["lines"]:
-#         desc = line.get("description", "")[:paper_width]
-#         qty = format_qty(line.get("qty"))
-#         price = format_money(line.get("price"))
-#         total = format_money(line.get("ext"))
- 
-#         write_line(desc)
-#         write_line(item_line(qty, price, total))
- 
-#         if line.get("disc_pct"):
-#             write_line(f"  {line['disc_pct']}% - {format_money(line.get('disc_total'))}")
- 
-#     # ── Transaction discount ──────────────────────────────────────────────────
-#     if context["trans_disc_amt"] not in ("0", "0.0000", None, ""):
-#         separator()
-#         write_line(align_lr("Subtotal", format_money(context["subtotal"])))
-#         write_line(f"{context['trans_disc_label']} ({context['trans_disc_pct']}%)")
-#         write_line(align_lr("Discount", f"-{format_money(context['trans_disc_amt'])}"))
- 
-#     # ── Total ─────────────────────────────────────────────────────────────────
-#     separator()
-#     printer.write(b"\x1b\x45\x01")  # bold on
-#     write_line(align_lr("TOTAL", format_money(context["total"])))
-#     printer.write(b"\x1b\x45\x00")  # bold off
-#     separator()
- 
-#     # ── Tender lines ──────────────────────────────────────────────────────────
-#     for t in context["tender_lines"]:
-#         write_line(align_lr(t["desc"], format_money(t["amount"])))
- 
-#     if context["amount_tendered"]:
-#         write_line(align_lr("Tendered", format_money(context["amount_tendered"])))
- 
-#     if context["is_cash"] and context["change_amount"] not in ("", "0", "0.0000"):
-#         printer.write(b"\x1b\x45\x01")
-#         write_line(align_lr("CHANGE", format_money(context["change_amount"])))
-#         printer.write(b"\x1b\x45\x00")
- 
-#     # ── Footer ────────────────────────────────────────────────────────────────
-#     separator()
-#     printer.write(b"\x1b\x61\x01")  # center
- 
-#     # FIX: customer_footers is a plain list (set via to_attr), not a queryset
-#     footers = terminal_config.footers.all()
-#     if footers:
-#         for f in sorted(footers, key=lambda x: x.line_number):
-#             write_line(f.footer_text)
-#     else:
-#         write_line("Thank you for your purchase!")
-#     # footers = terminal_config.footers.all().order_by("line_number")
-#     # if footers.exists():
-#     #     for f in footers:
-#     #         write_line(f.footer_text)
-#     # else:
-#     #     write_line("Thank you for your purchase!")
- 
-#     printer.write(b"\x1b\x61\x00")  # left
- 
-#     # ── Cash drawer pulse ─────────────────────────────────────────────────────
-#     drawer_port = ports.get("DRAWER")
-#     if drawer_port:
-#         try:
-#             printer.write(b"\x1b\x70\x00\x19\xfa")
-#         except Exception as e:
-#             print(f"⚠️  Cash drawer pulse failed: {e}")
- 
-#     # ── Feed & cut ────────────────────────────────────────────────────────────
-#     write_line("\n" * 5)
-#     printer.write(b"\x1d\x56\x00")
- 
- 
-# @login_required
-# @require_open_session
-# def receipt_view(request):
-#     """Display receipt after payment. Data comes from session."""
-
-#     receipt = request.session.get("last_receipt")
-#     if not receipt:
-#         return redirect("sales:pos_cashier")
- 
-#     setup_details = _get_store_details()
- 
-#     terminal_config = (
-#         TerminalConfiguration.objects.prefetch_related(
-#             "headers",
-#             models.Prefetch(
-#                 "footers",
-#                 queryset=TerminalReceiptFooter.objects.filter(
-#                     footer_type__in=["customer", "both"]
-#                 ).order_by("line_number"),
-#                 to_attr="customer_footers",  # resolves to a plain list, not a queryset
-#             ),
-#             # "footers",
-#             "ports",
-#             "display_codes",
-#         )
-#         .filter(store_id=STORE_ID, terminal_id=TERMINAL_ID)
-#         .first()
-#     )
-#      # =============================
-#     # PORT CONFIG
-#     # =============================
-#     ports = {p.port_type: p for p in terminal_config.ports.all()}
-#     display_codes = {d.code_group: d for d in terminal_config.display_codes.all()}
-
-#     # Print all TerminalConfiguration details
-#     print("\n=== TERMINAL CONFIGURATION ===")
-#     print(f"ID: {terminal_config.id}")
-#     print(f"Store ID: {terminal_config.store_id}")
-#     print(f"Terminal ID: {terminal_config.terminal_id}")
-#     # print(f"Created At: {terminal_config.created_at}")
-#     # print(f"Updated At: {terminal_config.updated_at}")
-    
-#     # Print all headers
-#     print("\n=== HEADERS ===")
-#     headers = terminal_config.headers.all()
-#     for h in headers:
-#         print(f"  ID: {h.id}, Line: {h.line_number}, Text: {h.header_text}")
-    
-#     # Print all footers
-#     print("\n=== FOOTERS ===")
-#     footers = terminal_config.footers.all()
-#     for f in footers:
-#         print(f"  ID: {f.id}, Type: {f.footer_type}, Line: {f.line_number}, Text: {f.footer_text}")
-    
-#     # Print customer footers (from prefetch)
-#     print("\n=== CUSTOMER FOOTERS (prefetched) ===")
-#     customer_footers = terminal_config.footers.all()
-#     if customer_footers:
-#         for cf in customer_footers:
-#             print(f"  ID: {cf.id}, Type: {cf.footer_type}, Line: {cf.line_number}, Text: {cf.footer_text}")
-#     else:
-#         print("  No customer footers found")
-    
-#     # Print all ports
-#     print("\n=== ALL PORTS ===")
-#     for port_type, port_obj in ports.items():
-#         print(f"\n  Port Type: {port_type}")
-#         print(f"    ID: {port_obj.id}")
-#         print(f"    Port Name: {port_obj.port_name}")
-#         print(f"    Connection Type: {port_obj.connection_type}")
-#         print(f"    Baudrate: {port_obj.baudrate}")
-#         print(f"    IP Address: {port_obj.ip_address}")
-#         print(f"    Port No: {port_obj.port_no}")
-#         print(f"    Printer Name: {port_obj.printer_name}")
-    
-#     # Print display codes
-#     print("\n=== DISPLAY CODES ===")
-#     for code_group, code_obj in display_codes.items():
-#         print(f"\n  Code Group: {code_group}")
-#         print(f"    ID: {code_obj.id}")
-#         print(f"    Code Value: {code_obj.code_value}")
-#         print(f"    Code Description: {code_obj.code_description}")
-    
-#     # Print printer port details
-#     print("\n=== PRINTER PORT DETAIL ===")
-#     printer_port = ports.get("PRINTER")
-#     if printer_port:
-#         print(f"  Port Type: PRINTER")
-#         print(f"  Port Name: {printer_port.port_name}")
-#         print(f"  Connection Type: {printer_port.connection_type}")
-#         print(f"  Baudrate: {printer_port.baudrate}")
-#         print(f"  IP Address: {printer_port.ip_address}")
-#         print(f"  Port No: {printer_port.port_no}")
-#         print(f"  Printer Name: {printer_port.printer_name}")
-#     else:
-#         print("  ❌ No PRINTER port found!")
-    
-#     print("\n")
-
-#     paper_width = 40
-#     if "PW" in display_codes and display_codes["PW"].code_value:
-#         try:
-#             paper_width = int(display_codes["PW"].code_value)
-#         except:
-#             pass
-
-#     if not printer_port:
-#         raise Exception("Printer port not configured")
-    
-#     if not terminal_config:
-#         # FIX: must return an HttpResponse, not bare None
-#         print("terminal_config is None")
-#         return redirect("sales:pos_cashier")
- 
-#     # ── Normalise tender lines ────────────────────────────────────────────────
-#     tender_lines = receipt.get("tender_lines") or []
-#     if not tender_lines and receipt.get("tender"):
-#         tender_lines = [
-#             {
-#                 "desc": receipt["tender"],
-#                 "amount": receipt.get("amount_tendered", receipt["total"]),
-#                 "is_cash": receipt.get("is_cash", False),
-#             }
-#         ]
- 
-#     context = {
-#         "store_name": setup_details.header01 or "OTTO Store",
-#         "transaction_no": receipt["transaction_no"],
-#         "date": receipt["date"],
-#         "time": receipt["time"],
-#         "subtotal": receipt.get("subtotal", receipt["total"]),
-#         "trans_disc_pct": receipt.get("trans_disc_pct", "0"),
-#         "trans_disc_label": receipt.get("trans_disc_label", ""),
-#         "trans_disc_amt": receipt.get("trans_disc_amt", "0"),
-#         "total": receipt["total"],
-#         "tender": receipt.get("tender", ""),
-#         "tender_lines": tender_lines,
-#         "is_cash": receipt.get("is_cash", False),
-#         "amount_tendered": receipt.get("amount_tendered", ""),
-#         "change_amount": receipt.get("change_amount", ""),
-#         "lines": receipt["lines"],
-#     }
- 
- 
-        
-#     _print_reading(request)
-
-#     return render(request, "sales/receipt.html", context)
-
-
 @login_required
 def item_search(request):
     """Search items by description, code, or barcode. Returns JSON."""
@@ -1688,7 +979,11 @@ def debug_sessions_json(request):
 
         for header in session.transaction_headers.all():
             header_data = {
+                "id": header.id,
                 "transaction_no": header.transaction_no,
+                "transaction_time": header.transaction_date,
+                "transaction_type": header.transaction_type,
+                "served_by": header.served_by,
                 "date": str(header.transaction_date),
                 "items": [],
                 "payments": []
@@ -1700,6 +995,9 @@ def debug_sessions_json(request):
                     "description": item.item_description,
                     "qty": float(item.item_qty),
                     "price": float(item.item_price),
+                    "item_discount": item.item_discount,
+                    "discount_code": item.discount_code,
+
                 }
                 header_data["items"].append(item_data)
 
@@ -1716,64 +1014,7 @@ def debug_sessions_json(request):
 
         data.append(session_data)
 
-    # 🔥 PRINT TO TERMINAL
-    # print(json.dumps(data, indent=4))
-
-    # Optional: also return it in browser
     return JsonResponse(data, safe=False)
-
-
-
-
-    # # ── Print ─────────────────────────────────────────────────────────────────
-    # ports = {p.port_type: p for p in terminal_config.ports.all()}
-    # printer_port = ports.get("PRINTER")
-    # # Print all port details
-    # print("\n=== ALL PORTS ===")
-    # for port_type, port_obj in ports.items():
-    #     print(f"\nPort Type: {port_type}")
-    #     print(f"  Port Name: {port_obj.port_name}")
-    #     print(f"  Connection Type: {port_obj.connection_type}")
-    #     print(f"  Baudrate: {port_obj.baudrate}")
-    #     print(f"  IP Address: {port_obj.ip_address}")
-    #     print(f"  Port No: {port_obj.port_no}")
-    #     print(f"  Printer Name: {port_obj.printer_name}")
-    
-    # # Print printer port details
-    # print("\n=== PRINTER PORT ===")
-    # if printer_port:
-    #     print(f"Port Type: PRINTER")
-    #     print(f"  Port Name: {printer_port.port_name}")
-    #     print(f"  Connection Type: {printer_port.connection_type}")
-    #     print(f"  Baudrate: {printer_port.baudrate}")
-    #     print(f"  IP Address: {printer_port.ip_address}")
-    #     print(f"  Port No: {printer_port.port_no}")
-    #     print(f"  Printer Name: {printer_port.printer_name}")
-    # else:
-    #     print("❌ No PRINTER port found!")
-    
-    # print("\n")
-
-    # if not printer_port:
-    #     print("❌ Printer port not configured")
-    # else:
-    #     printer = None
-    #     try:
-    #         # FIX: connection_type-aware printer open; baudrate read from DB
-    #         printer = _open_printer(printer_port)
-    #         _print_receipt(printer, terminal_config, context)
-    #     except NotImplementedError as e:
-    #         print(f"❌ Printer not supported: {e}")
-    #     except Exception as e:
-    #         print(f"❌ Printer error: {e}")
-    #     finally:
-    #         if printer is not None:
-    #             try:
-    #                 printer.close()
-    #             except Exception:
-    #                 pass
-
-
 
     
 # =============================================================================
@@ -1931,16 +1172,33 @@ def _print_receipt(printer, terminal_config, context, session):
             return f"{float(val):,.0f}"
         except (TypeError, ValueError):
             return str(val)
- 
+        
+    def set_text_size(width=1, height=1):
+        width = max(1, min(width, 8))
+        height = max(1, min(height, 8))
+
+        n = ((width - 1) << 4) | (height - 1)
+        printer.write(b"\x1d\x21" + bytes([n]))
+
     # ── Header ───────────────────────────────────────────────────────────────
+    printer.write(b"\x1b\x40")  # ESC @ → Initialize printer
     printer.write(b"\x1b\x61\x01")  # center
     db_headers = list(terminal_config.headers.all().order_by("line_number"))
     for h in db_headers:
-        write_line(h.header_text)
+        if h.is_capitalized:
+            printer.write(b"\x1b\x21\x10")
+            write_line(h.header_text)
+            printer.write(b"\x1b\x40")  # ESC @ → Initialize printer
+        elif h.is_capitalized == False:
+            printer.write(b"\x1b\x61\x01")  # center
+            write_line(h.header_text)
     if not db_headers:
         write_line("OTTO Store")
  
+    
     write_line("\nSALES INVOICE\n")
+    
+    # printer.write(b"\x1b\x21\x00")
     printer.write(b"\x1b\x61\x00")  # left
     write_line(f"SI #: {context['transaction_no']}")
     write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
@@ -2009,7 +1267,7 @@ def _print_receipt(printer, terminal_config, context, session):
     else:
         printer.write(b"\x1b\x61\x00")
         write_line("Thank you for your purchase!")
- 
+    write_line("\n\n")
  
     # ── Cash drawer pulse ─────────────────────────────────────────────────────
     if ports.get("DRAWER"):
@@ -2139,7 +1397,7 @@ def _do_print_z_reading(session):
             write_line(setup_details.header01 or "OTTO Store")
         
         write_line(center("\n***** Z-Reading Report *****\n"))
-        
+
         printer.write(b"\x1b\x61\x00")
         
         # ── Terminal info ─────────────────────────────────────────────────────
@@ -2147,8 +1405,8 @@ def _do_print_z_reading(session):
         write_line(f"Terminal No: {session.terminal_id}")
         write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
         write_line(f"Date       : {session.business_date.strftime('%m/%d/%Y')}")
-        write_line(f"BEG. SI    : {beg_si}")
-        write_line(f"END. SI    : {end_si}")
+        write_line(f"\nBEG. SI    : {beg_si}")
+        write_line(f"END. SI    : {end_si}\n")
  
         # ── Negative entries ──────────────────────────────────────────────────
         write_line("Negative Entries")
@@ -2161,8 +1419,8 @@ def _do_print_z_reading(session):
         write_line(summary_row("Total", total_neg_entries_amt))
  
         # ── Gross sales & discounts ───────────────────────────────────────────
-        write_line(summary_row("GROSS SALES", gross_sales))
-        write_line("Less:Discounts")
+        write_line(summary_row("\nGROSS SALES", gross_sales))
+        write_line("\nLess:Discounts")
         write_line(neg_row("Item Disc.",     item_disc["total"],       item_disc["count"]))
         write_line(neg_row("Item Amt Disc.", item_amt_disc["total"],   item_amt_disc["count"]))
         write_line(neg_row("Senior % Disc.", senior_disc["total"],     senior_disc["count"]))
@@ -2171,7 +1429,7 @@ def _do_print_z_reading(session):
         write_line(summary_row("Total", total_disc))
  
         # ── Counts ────────────────────────────────────────────────────────────
-        write_line(f"{'Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>16}")
+        write_line(f"\n{'Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>16}")
         write_line(f"{'Total Item Sold':<{paper_width - 16}}{fmt_count(total_items_sold):>16}")
         separator()
  
@@ -2179,17 +1437,18 @@ def _do_print_z_reading(session):
         for t in tender_breakdown:
             desc = (t["tender_desc"] or t["pcode"] or "CASH").upper()
             write_line(neg_row(desc, t["total"], t["count"]))
-        write_line(neg_row("GC SALES", gc_sales["total"], gc_sales["count"]))
+        # write_line(neg_row("GC SALES", gc_sales["total"], gc_sales["count"]))
         separator()
         write_line(summary_row("NET SALES", net_sales))
+        write_line("")
         separator()
  
         # ── Terminal summary ──────────────────────────────────────────────────
-        printer.write(b"\x1b\x61\x01")
         write_line(center("Terminal Summary Total"))
         printer.write(b"\x1b\x61\x00")
         separator()
         separator()
+        write_line("")
         write_line(summary_row("OLD GRAND TOTAL", old_grand_total))
         write_line(summary_row("NEW GRAND TOTAL", new_grand_total))
         separator()
@@ -2206,9 +1465,8 @@ def _do_print_z_reading(session):
         write_line(summary_row("Non-Vat:",       non_vat))
         write_line(summary_row("Vatable:",       vatable_sales))
         write_line(summary_row("V.A.T. Amount:", vat_amount))
- 
+  
         # ── Footer ────────────────────────────────────────────────────────────
-        separator()
         printer.write(b"\x1b\x61\x01")
         footers = _get_report_footers(terminal_config)
 
