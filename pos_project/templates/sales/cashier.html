@@ -18,10 +18,14 @@
             margin: 0;
             background: #1e2328;
             color: #e6edf3;
-            min-height: 100vh;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
 
         .header {
+            flex-shrink: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -66,11 +70,14 @@
         }
 
         .main {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
             display: grid;
             grid-template-columns: 1fr 380px;
+            grid-template-rows: 1fr;
             gap: 1rem;
             padding: 1rem;
-            min-height: calc(100vh - 140px);
         }
 
         .left {
@@ -107,7 +114,8 @@
             grid-template-columns: 1fr 1fr;
             gap: 1rem;
             flex: 1;
-            min-height: 200px;
+            min-height: 0;
+            overflow: hidden;
         }
 
         .item-detail {
@@ -150,6 +158,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 0;
         }
 
         .scanned-items-title {
@@ -171,8 +180,11 @@
         }
 
         .scanned-item {
-            padding: 0.6rem 0;
+            padding: 0.6rem 0.75rem;
             border-bottom: 1px solid #2f3640;
+            border-radius: 6px;
+            margin: 0 2px;
+            transition: background 0.15s, border-color 0.15s;
         }
 
         .scanned-item:last-child {
@@ -214,12 +226,43 @@
             animation: highlight 1.5s ease-out;
         }
 
+        .scanned-item-clickable {
+            cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+
+        .scanned-item-clickable:hover {
+            background: #2d343e;
+            border-left-color: #6edb8f;
+        }
+
+        .scanned-items-hint {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #6edb8f;
+            margin-left: 0.35rem;
+        }
+
+        .scanned-item-disc {
+            font-size: 0.8rem;
+            color: #6edb8f;
+        }
+
         .cart-panel {
             display: flex;
             flex-direction: column;
+            min-height: 0;
             background: #252b33;
             border-radius: 6px;
             border: 1px solid #2f3640;
+            overflow: hidden;
+        }
+
+        #cart-summary {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            flex: 1;
             overflow: hidden;
         }
 
@@ -240,7 +283,7 @@
         .cart-list {
             flex: 1;
             overflow-y: auto;
-            max-height: 400px;
+            min-height: 0;
             padding: 0.5rem;
         }
 
@@ -288,6 +331,7 @@
         }
 
         .actions {
+            flex-shrink: 0;
             display: flex;
             gap: 0.75rem;
             padding: 0.75rem 1.5rem;
@@ -1125,8 +1169,11 @@
             background: #2d343e;
             border-bottom: 1px solid #2f3640;
             padding: 0.75rem 1.5rem;
-            display: flex;
-            gap: 2rem;
+
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            /* 3 columns */
+            gap: 1rem 2rem;
         }
 
         .close-trans-summary-row {
@@ -1142,6 +1189,16 @@
             font-weight: 700;
             color: #e6edf3;
         }
+
+        /* Make the last item span 2 columns */
+        .close-trans-summary-row:last-child {
+            grid-column: span 2;
+        }
+
+        .close-trans-variance-val {
+            color: #ff6b6b;
+        }
+
 
         .close-trans-variance-val.over {
             color: #6edb8f;
@@ -1201,7 +1258,7 @@
             -webkit-appearance: none;
             margin: 0;
         }
-        
+
         .close-trans-cash-input:focus {
             border-color: #8b3d4a;
             box-shadow: 0 0 0 2px rgba(96, 184, 240, .15);
@@ -1452,8 +1509,9 @@
             }
 
             .close-trans-summary {
-                flex-direction: column;
-                gap: 0.5rem;
+                grid-template-columns: repeat(2, 1fr);
+                /* 2 columns on mobile */
+                gap: 0.75rem;
             }
 
             .close-trans-cash-input {
@@ -1597,6 +1655,44 @@
         </div>
     </div>
 
+    <!-- Line Discount Modal (click row in Items Entered) -->
+    <div class="modal-overlay" id="line-disc-modal" onclick="closeLineDiscModalOutside(event)">
+        <div class="modal disc-modal">
+            <div class="modal-header">
+                <h2>Apply Discount to Line</h2>
+                <button class="modal-close" onclick="closeLineDiscModal()">&#10005;</button>
+            </div>
+            <form id="line-disc-form" hx-post="{% url 'sales:cart_line_disc' %}" hx-target="#cart-summary"
+                hx-swap="outerHTML" hx-trigger="submit">
+                {% csrf_token %}
+                <input type="hidden" id="line-disc-rec-ctr" name="rec_ctr" value="">
+                <input type="hidden" id="line-disc-type" name="disc_type" value="">
+                <div class="disc-type-grid">
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="REG" data-pct="0"
+                        onclick="selectLineDiscType(this,'REG','Regular',0)">Regular %</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="SC" data-pct="20"
+                        onclick="selectLineDiscType(this,'SC','Senior Citizen',20)">Senior Citizen (20%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="PWD" data-pct="20"
+                        onclick="selectLineDiscType(this,'PWD','PWD',20)">PWD (20%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="EMP" data-pct="10"
+                        onclick="selectLineDiscType(this,'EMP','Employee',10)">Employee (10%)</button>
+                </div>
+                <div class="disc-pct-row">
+                    <label class="disc-pct-label" for="line-disc-pct-input">Discount %:</label>
+                    <input type="number" id="line-disc-pct-input" name="disc_pct" class="disc-pct-num" value="0" min="0"
+                        max="100" step="0.01" autocomplete="off">
+                    <span class="disc-pct-sym">%</span>
+                </div>
+                <div class="disc-modal-footer">
+                    <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove
+                        Discount</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeLineDiscModal()">Cancel</button>
+                    <button type="button" class="btn btn-apply-disc" onclick="applyLineDisc()">Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Discount Modal (F3) -->
     <div class="modal-overlay" id="discount-modal" onclick="closeDiscountModalOutside(event)">
         <div class="modal disc-modal">
@@ -1672,69 +1768,87 @@
         </div>
     </div>
 
-<!-- Close Transaction Modal (F8) -->
-<div class="modal-overlay" id="close-trans-modal" onclick="closeCloseTransModalOutside(event)">
-    <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
-        <div class="modal-header">
-            <h2>Close Transaction</h2>
-            <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
+    <!-- Close Transaction Modal (F8) -->
+    <div class="modal-overlay" id="close-trans-modal" onclick="closeCloseTransModalOutside(event)">
+        <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Close Transaction</h2>
+                <button class="btn btn-secondary" onclick="fetch('/pos/x-reading/', {
+                    method: 'GET',
+                    headers: {'X-CSRFToken': CSRF_TOKEN}
+                }).then(r => r.json()).then(d => alert(d.message || d.error))">
+                    Print X-Reading</button>
+                <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
+            </div>
+
+            <form id="close-trans-form" method="POST" action="{% url 'sales:close_session' %}">
+                {% csrf_token %}
+
+                <!-- Hidden fields populated by JS -->
+                <input type="hidden" name="opening_cash" id="hidden-opening-cash" value="0">
+                <input type="hidden" name="paid_in_cash" id="hidden-paid-in-cash" value="0">
+                <input type="hidden" name="credit_debit_cash" id="hidden-credit-debit-cash" value="0">
+                <input type="hidden" name="expected_cash" id="hidden-expected-cash" value="0">
+                <input type="hidden" name="cash_variance" id="hidden-cash-variance" value="0">
+
+                <!-- Summary strip -->
+                <div class="close-trans-summary">
+                    <div class="close-trans-summary-row">
+                        <span>Opening Cash</span>
+                        <span id="close-trans-opening-cash">₱0.00</span>
+                    </div>
+                    <div class="close-trans-summary-row">
+                        <span>Paid in Cash</span>
+                        <span id="close-trans-paid-in-cash">₱0.00</span>
+                    </div>
+                    <div class="close-trans-summary-row">
+                        <span>Credit/Debit Cash</span>
+                        <span id="close-trans-credit-debit-cash">₱0.00</span>
+                    </div>
+                    <div class="close-trans-summary-row">
+                        <span>Expected Cash</span>
+                        <span id="close-trans-expected-cash">₱0.00</span>
+                    </div>
+                    <div class="close-trans-summary-row">
+                        <span>Variance</span>
+                        <span id="close-trans-variance" class="close-trans-variance-val">—</span>
+                    </div>
+                </div>
+
+                <!-- Closing cash input -->
+                <div class="close-trans-input-section">
+                    <label class="close-trans-label" for="closing-cash-input">Closing Cash Amount</label>
+                    <div class="close-trans-input-row">
+                        <span class="close-trans-currency">₱</span>
+                        <input type="number" id="closing-cash-input" name="closing_cash" class="close-trans-cash-input"
+                            placeholder="0.00" min="0" step="0.01" autocomplete="off">
+                    </div>
+                </div>
+
+                <!-- Denomination breakdown -->
+                <div class="close-trans-denom-open">
+                    <button type="button" class="btn btn-secondary" onclick="openDenominationModal()">
+                        Count by Denomination
+                    </button>
+                </div>
+
+                <!-- Notes -->
+                <div class="close-trans-notes-section">
+                    <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
+                    <textarea id="close-trans-notes" name="notes" class="close-trans-notes-input" rows="2"
+                        placeholder="e.g. short due to petty cash withdrawal…"></textarea>
+                </div>
+
+                <div class="close-trans-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
+                    <button type="submit" class="btn close-trans-confirm-btn" id="close-trans-confirm-btn" disabled>
+                        Confirm Close
+                    </button>
+                </div>
+            </form>
+
         </div>
-
-        <form id="close-trans-form" method="POST" action="{% url 'sales:close_session' %}">
-            {% csrf_token %}
-
-            <!-- Hidden fields populated by JS -->
-            <input type="hidden" name="expected_cash" id="hidden-expected-cash" value="0">
-            <input type="hidden" name="cash_variance" id="hidden-cash-variance" value="0">
-
-            <!-- Summary strip -->
-            <div class="close-trans-summary">
-                <div class="close-trans-summary-row">
-                    <span>Expected Cash</span>
-                    <span id="close-trans-expected">₱0.00</span>
-                </div>
-                <div class="close-trans-summary-row">
-                    <span>Variance</span>
-                    <span id="close-trans-variance" class="close-trans-variance-val">—</span>
-                </div>
-            </div>
-
-            <!-- Closing cash input -->
-            <div class="close-trans-input-section">
-                <label class="close-trans-label" for="closing-cash-input">Closing Cash Amount</label>
-                <div class="close-trans-input-row">
-                    <span class="close-trans-currency">₱</span>
-                    <input type="number" id="closing-cash-input" name="closing_cash"
-                        class="close-trans-cash-input" placeholder="0.00"
-                        min="0" step="0.01" autocomplete="off">
-                </div>
-            </div>
-
-            <!-- Denomination breakdown -->
-            <div class="close-trans-denom-open">
-                <button type="button" class="btn btn-secondary" onclick="openDenominationModal()">
-                    Count by Denomination
-                </button>
-            </div>
-
-            <!-- Notes -->
-            <div class="close-trans-notes-section">
-                <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
-                <textarea id="close-trans-notes" name="notes" class="close-trans-notes-input"
-                    rows="2" placeholder="e.g. short due to petty cash withdrawal…"></textarea>
-            </div>
-
-            <div class="close-trans-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
-                <button type="submit" class="btn close-trans-confirm-btn"
-                    id="close-trans-confirm-btn" disabled>
-                    Confirm Close
-                </button>
-            </div>
-        </form>
-
     </div>
-</div>
 
     <!-- Close Transaction Modal -> Denomination Modal -->
     <div class="modal-overlay" id="denom-modal" onclick="closeDenominationModalOutside(event)">
@@ -1826,7 +1940,6 @@
             </div>
         </div>
     </div>
-
 
 
     <footer class="actions">

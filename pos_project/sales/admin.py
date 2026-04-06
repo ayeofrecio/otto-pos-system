@@ -15,23 +15,66 @@ from .models import (
     Tender,
     TempTransaction,
     TerminalSetup,
-    TransactionLog,
+    TransactionHeader,
+    TransactionItem,
+    Payment,
 )
 
 
-@admin.register(TransactionLog)
-class TransactionLogAdmin(admin.ModelAdmin):
+@admin.register(TransactionHeader)
+class TransactionHeaderAdmin(admin.ModelAdmin):
     list_display = (
         'transaction_no', 'transaction_date', 'transaction_time',
         'transaction_type', 'store_id', 'terminal_id', 'user_id',
-        'item_code', 'item_description', 'item_qty', 'item_price',
-        'item_discount', 'item_price_ext',
+        'item_count', 'total_amount',
     )
     list_filter = ('store_id', 'terminal_id', 'transaction_type', 'transaction_date')
-    search_fields = ('transaction_no', 'item_code', 'item_description', 'user_id')
+    search_fields = ('transaction_no', 'user_id', 'table_id', 'served_by')
     date_hierarchy = 'transaction_date'
     ordering = ('-transaction_date', 'transaction_no')
-    readonly_fields = [f.name for f in TransactionLog._meta.get_fields()]
+    readonly_fields = [f.name for f in TransactionHeader._meta.get_fields()
+                       if not f.is_relation]
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related('items', 'payments')
+
+    @admin.display(description='Items')
+    def item_count(self, obj):
+        return obj.items.count()
+
+    @admin.display(description='Total')
+    def total_amount(self, obj):
+        total = sum(p.amount for p in obj.payments.all())
+        return f'{total:,.2f}'
+
+
+@admin.register(TransactionItem)
+class TransactionItemAdmin(admin.ModelAdmin):
+    list_display = (
+        'header', 'item_code', 'item_description',
+        'item_qty', 'item_uom', 'item_price',
+        'item_discount', 'item_price_ext',
+    )
+    list_filter = ('item_department', 'item_class', 'item_type')
+    search_fields = ('item_code', 'item_description', 'header__transaction_no')
+    ordering = ('header__transaction_date', 'header__transaction_no')
+    readonly_fields = [f.name for f in TransactionItem._meta.get_fields()
+                       if not f.is_relation]
+    raw_id_fields = ('header',)
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        'header', 'pcode', 'tender_desc', 'amount', 'payment_reference',
+    )
+    list_filter = ('pcode',)
+    search_fields = ('header__transaction_no', 'pcode', 'payment_reference')
+    ordering = ('header__transaction_date',)
+    readonly_fields = [f.name for f in Payment._meta.get_fields()
+                       if not f.is_relation]
+    raw_id_fields = ('header',)
 
 
 @admin.register(AccountingSummary)

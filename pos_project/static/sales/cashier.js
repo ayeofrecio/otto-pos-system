@@ -1,6 +1,8 @@
 /**
  * POS Cashier - barcode handling, live time, toast dismiss, item search
  */
+// document.addEventListener('keydown', function (evt) {
+//   console.log('key:', evt.key, '| code:', evt.code);
 
 
 (function () {
@@ -64,6 +66,7 @@
       if (cartList) { cartList.scrollTop = cartList.scrollHeight; }
     }
   });
+
 
   // Capture barcode value just before htmx submits (needed for search prefill on not-found)
   var lastScannedBarcode = '';
@@ -330,7 +333,7 @@
     });
   }
 
-  // ---------------------------------------------------------------------------
+   // ---------------------------------------------------------------------------
   // Line Discount Modal (click row in Items Entered)
   // ---------------------------------------------------------------------------
   var lineDiscRecCtr = null;
@@ -420,6 +423,105 @@
       if (evt.key === 'Enter') { evt.preventDefault(); window.applyLineDisc(); }
     });
   }
+
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath || '';
+    if (path.indexOf('/cart/line-disc') !== -1) {
+      const barcodeInput = document.getElementById('barcode-input');
+      if (barcodeInput) { barcodeInput.focus(); }
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Line Discount Modal (click row in Items Entered)
+  // ---------------------------------------------------------------------------
+  var lineDiscRecCtr = null;
+  var lineDiscType = '';
+
+  window.openLineDiscModal = function (recCtr) {
+    lineDiscRecCtr = recCtr;
+    lineDiscType = 'REG';
+    const modal = document.getElementById('line-disc-modal');
+    const recInput = document.getElementById('line-disc-rec-ctr');
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const typeInput = document.getElementById('line-disc-type');
+    if (!modal || !recInput) { return; }
+    recInput.value = recCtr;
+    typeInput.value = 'REG';
+    pctInput.value = 0;
+    refreshLineDiscTypeBtns('REG');
+    modal.classList.add('open');
+    setTimeout(function () { if (pctInput) { pctInput.focus(); pctInput.select(); } }, 80);
+  };
+
+  window.closeLineDiscModal = function () {
+    const modal = document.getElementById('line-disc-modal');
+    if (modal) { modal.classList.remove('open'); }
+    lineDiscRecCtr = null;
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closeLineDiscModalOutside = function (evt) {
+    if (evt.target === document.getElementById('line-disc-modal')) {
+      window.closeLineDiscModal();
+    }
+  };
+
+  window.selectLineDiscType = function (btn, code, label, defaultPct) {
+    lineDiscType = code;
+    refreshLineDiscTypeBtns(code);
+    const typeInput = document.getElementById('line-disc-type');
+    const pctInput = document.getElementById('line-disc-pct-input');
+    if (typeInput) { typeInput.value = code; }
+    if (pctInput) {
+      if (defaultPct > 0) { pctInput.value = defaultPct; }
+      pctInput.focus();
+      pctInput.select();
+    }
+  };
+
+  function refreshLineDiscTypeBtns(selectedCode) {
+    document.querySelectorAll('.line-disc-type-btn').forEach(function (btn) {
+      btn.classList.toggle('selected', btn.getAttribute('data-code') === selectedCode);
+    });
+  }
+
+  window.applyLineDisc = function () {
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const pct = parseFloat(pctInput ? pctInput.value : 0) || 0;
+    if (pct <= 0) {
+      window.removeLineDiscAndClose();
+      return;
+    }
+    const form = document.getElementById('line-disc-form');
+    if (form) {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+    window.closeLineDiscModal();
+  };
+
+  window.removeLineDiscAndClose = function () {
+    const pctInput = document.getElementById('line-disc-pct-input');
+    const typeInput = document.getElementById('line-disc-type');
+    if (pctInput) { pctInput.value = 0; }
+    if (typeInput) { typeInput.value = ''; }
+    const form = document.getElementById('line-disc-form');
+    if (form) {
+      const recInput = document.getElementById('line-disc-rec-ctr');
+      if (recInput && recInput.value) {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      }
+    }
+    window.closeLineDiscModal();
+  };
+
+  // const lineDiscPctInput = document.getElementById('line-disc-pct-input');
+  // if (lineDiscPctInput) {
+  //   lineDiscPctInput.addEventListener('keydown', function (evt) {
+  //     if (evt.key === 'Enter') { evt.preventDefault(); window.applyLineDisc(); }
+  //   });
+  // }
 
   document.body.addEventListener('htmx:afterRequest', function (evt) {
     const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath || '';
@@ -647,270 +749,269 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
-
   // ---------------------------------------------------------------------------
-  // Close Transaction Modal (F8)
+  // Helpers
+  // ---------------------------------------------------------------------------
+  function formatPeso(num) {
+    return (
+      "₱" +
+      parseFloat(num || 0).toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    );
+  }
+ 
+  function getModal() {
+    return document.getElementById("close-trans-modal");
+  }
+ 
+  // ---------------------------------------------------------------------------
+  // Close Transaction Modal — open / close
   // ---------------------------------------------------------------------------
   window.openCloseTransModal = function () {
-    const modal = document.getElementById('close-trans-modal');
-    if (!modal) { return; }
-
-    // Pull expected cash from the cart total displayed on screen
-    const cartTotalEl = document.querySelector('.cart-total');
-    let expectedCash = 5000; // CHANGE::::::Default fallback if cart total not found or parseable
-    if (cartTotalEl) {
-      expectedCash = parseFloat(
-        cartTotalEl.textContent.replace(/[^0-9.]/g, '')
-      ) || 0;
-    }
-
-    // Store for variance calc
-    modal._expectedCash = expectedCash;
-
-    const expectedEl = document.getElementById('close-trans-expected');
-    if (expectedEl) {
-      expectedEl.textContent = '₱' + expectedCash.toLocaleString('en-PH', { minimumFractionDigits: 2 });
-    }
-
-    // Reset variance display
-    const varianceEl = document.getElementById('close-trans-variance');
-    if (varianceEl) {
-      varianceEl.textContent = '—';
-      varianceEl.className = 'close-trans-variance-val';
-    }
-
+    const modal = getModal();
+    if (!modal) return;
+ 
     // Reset inputs
-    const cashInput = document.getElementById('closing-cash-input');
-    const notesInput = document.getElementById('close-trans-notes');
-    const confirmBtn = document.getElementById('close-trans-confirm-btn');
-    if (cashInput) { cashInput.value = ''; }
-    if (notesInput) { notesInput.value = ''; }
-    if (confirmBtn) { confirmBtn.disabled = true; }
-
-    // Reset denominations
-    document.querySelectorAll('.denom-qty').forEach(function (inp) { inp.value = 0; });
-    document.querySelectorAll('.denom-subtotal').forEach(function (el) { el.textContent = '₱0.00'; });
-    const denomTotalEl = document.getElementById('denom-total-display');
-    if (denomTotalEl) { denomTotalEl.textContent = '₱0.00'; }
-
-    modal.classList.add('open');
-
-    setTimeout(function () {
-      if (cashInput) { cashInput.focus(); }
-    }, 80);
-  };
-
-  window.closeCloseTransModal = function () {
-    const modal = document.getElementById('close-trans-modal');
-    if (modal) { modal.classList.remove('open'); }
-    const barcodeInput = document.getElementById('barcode-input');
-    if (barcodeInput) { barcodeInput.focus(); }
-  };
-
-  window.closeCloseTransModalOutside = function (evt) {
-    if (evt.target === document.getElementById('close-trans-modal')) {
-      window.closeCloseTransModal();
+    const cashInput = document.getElementById("closing-cash-input");
+    const notesInput = document.getElementById("close-trans-notes");
+    const confirmBtn = document.getElementById("close-trans-confirm-btn");
+    if (cashInput) cashInput.value = "";
+    if (notesInput) notesInput.value = "";
+    if (confirmBtn) confirmBtn.disabled = true;
+ 
+    // Reset variance display
+    const varianceEl = document.getElementById("close-trans-variance");
+    if (varianceEl) {
+      varianceEl.textContent = "—";
+      varianceEl.className = "close-trans-variance-val";
     }
+ 
+    // Reset expected cash display
+    const expectedEl = document.getElementById("close-trans-expected-cash");
+    if (expectedEl) expectedEl.textContent = "₱0.00";
+ 
+    // Reset denomination modal
+    resetDenomModal();
+ 
+    // Clear stale session data from modal
+    modal._openingCash = 0;
+    modal._paidInCash = 0;
+    modal._creditDebitCash = 0;
+ 
+    // Fetch session cash summary from backend
+    fetch("/pos/to-close-session-details/", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": CSRF_TOKEN,
+      },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const openingCash    = parseFloat(data.opening_cash)    || 0;
+        const paidInCash     = parseFloat(data.paid_in_cash)    || 0;
+        const creditDebitCash = parseFloat(data.credit_debit_cash) || 0;
+        const expected       = openingCash + paidInCash + creditDebitCash;
+ 
+        // Cache on modal element so other functions can read them
+        modal._openingCash     = openingCash;
+        modal._paidInCash      = paidInCash;
+        modal._creditDebitCash = creditDebitCash;
+ 
+        // Update summary strip
+        const opening_cashEl     = document.getElementById("close-trans-opening-cash");
+        const paid_in_cashEl     = document.getElementById("close-trans-paid-in-cash");
+        const credit_debitEl     = document.getElementById("close-trans-credit-debit-cash");
+        const expectedEl         = document.getElementById("close-trans-expected-cash");
+ 
+        if (opening_cashEl)  opening_cashEl.textContent  = formatPeso(openingCash);
+        if (paid_in_cashEl)  paid_in_cashEl.textContent  = formatPeso(paidInCash);
+        if (credit_debitEl)  credit_debitEl.textContent  = formatPeso(creditDebitCash);
+        if (expectedEl)      expectedEl.textContent       = formatPeso(expected);
+ 
+        // Also prefill the hidden fields so a submit right after open is safe
+        document.getElementById("hidden-opening-cash").value     = openingCash.toFixed(2);
+        document.getElementById("hidden-paid-in-cash").value     = paidInCash.toFixed(2);
+        document.getElementById("hidden-credit-debit-cash").value = creditDebitCash.toFixed(2);
+        document.getElementById("hidden-expected-cash").value    = expected.toFixed(2);
+      })
+      .catch((err) => console.error("Failed to load session details:", err));
+ 
+    modal.classList.add("open");
+    setTimeout(() => cashInput && cashInput.focus(), 80);
   };
-
-  // Live variance calculation as cashier types
-  const closingCashInput = document.getElementById('closing-cash-input');
+ 
+  window.closeCloseTransModal = function () {
+    const modal = getModal();
+    if (modal) modal.classList.remove("open");
+    document.getElementById("barcode-input")?.focus();
+  };
+ 
+  window.closeCloseTransModalOutside = function (evt) {
+    if (evt.target === getModal()) window.closeCloseTransModal();
+  };
+ 
+  // ---------------------------------------------------------------------------
+  // Variance — recalculate whenever the closing cash input changes
+  // ---------------------------------------------------------------------------
+  function recalcVariance() {
+    const modal      = getModal();
+    const cashInput  = document.getElementById("closing-cash-input");
+    const varianceEl = document.getElementById("close-trans-variance");
+    const confirmBtn = document.getElementById("close-trans-confirm-btn");
+ 
+    if (!cashInput || !varianceEl || !modal) return;
+ 
+    const expected = (modal._openingCash || 0)
+                   + (modal._paidInCash || 0)
+                   + (modal._creditDebitCash || 0);
+ 
+    const raw    = cashInput.value;
+    const actual = parseFloat(raw) || 0;
+ 
+    if (!raw) {
+      varianceEl.textContent = "—";
+      varianceEl.className   = "close-trans-variance-val";
+      if (confirmBtn) confirmBtn.disabled = true;
+      return;
+    }
+ 
+    const variance = actual - expected;
+ 
+    if (variance > 0) {
+      varianceEl.textContent = "+" + formatPeso(variance) + " over";
+      varianceEl.className   = "close-trans-variance-val over";
+    } else if (variance < 0) {
+      varianceEl.textContent = formatPeso(Math.abs(variance)) + " short";
+      varianceEl.className   = "close-trans-variance-val short";
+    } else {
+      varianceEl.textContent = "Exact";
+      varianceEl.className   = "close-trans-variance-val exact";
+    }
+ 
+    if (confirmBtn) confirmBtn.disabled = actual < 0;
+  }
+ 
+  const closingCashInput = document.getElementById("closing-cash-input");
   if (closingCashInput) {
-    closingCashInput.addEventListener('input', function () {
-      const modal = document.getElementById('close-trans-modal');
-      const expected = modal ? (modal._expectedCash || 0) : 0; // #TODO: Change this if you pull expected cash from somewhere else
-      const actual = parseFloat(closingCashInput.value) || 0;
-      const variance = actual - expected;
-      const varianceEl = document.getElementById('close-trans-variance');
-      const confirmBtn = document.getElementById('close-trans-confirm-btn');
-
-      if (varianceEl) {
-        if (!closingCashInput.value) {
-          varianceEl.textContent = '—';
-          varianceEl.className = 'close-trans-variance-val';
-        } else if (variance > 0) {
-          varianceEl.textContent = '+₱' + variance.toLocaleString('en-PH', { minimumFractionDigits: 2 }) + ' over';
-          varianceEl.className = 'close-trans-variance-val over';
-        } else if (variance < 0) {
-          varianceEl.textContent = '₱' + Math.abs(variance).toLocaleString('en-PH', { minimumFractionDigits: 2 }) + ' short';
-          varianceEl.className = 'close-trans-variance-val short';
-        } else {
-          varianceEl.textContent = 'Exact';
-          varianceEl.className = 'close-trans-variance-val exact';
+    closingCashInput.addEventListener("input", recalcVariance);
+    closingCashInput.addEventListener("keydown", function (evt) {
+      if (evt.key === "Enter") {
+        evt.preventDefault();
+        // Trigger submit only if button is enabled
+        const confirmBtn = document.getElementById("close-trans-confirm-btn");
+        if (confirmBtn && !confirmBtn.disabled) {
+          document.getElementById("close-trans-form").requestSubmit();
         }
       }
-
-      if (confirmBtn) {
-        confirmBtn.disabled = !closingCashInput.value || actual < 0;
-      }
-    });
-
-    closingCashInput.addEventListener('keydown', function (evt) {
-      if (evt.key === 'Enter') { evt.preventDefault(); window.confirmCloseTrans(); }
     });
   }
-
-  // Denomination counter
-  document.querySelectorAll('.denom-qty').forEach(function (inp) {
-    inp.addEventListener('input', function () {
-      const row = inp.closest('.denom-row');
-      const value = parseFloat(row.getAttribute('data-value')) || 0;
-      const qty = parseInt(inp.value, 10) || 0;
-      const subtotal = value * qty;
-      const subtotalEl = row.querySelector('.denom-subtotal');
-      if (subtotalEl) {
-        subtotalEl.textContent = '₱' + subtotal.toLocaleString('en-PH', { minimumFractionDigits: 2 });
-      }
-      recalcDenomTotal();
+ 
+  // ---------------------------------------------------------------------------
+  // Confirm close — populate hidden fields then submit the form
+  // ---------------------------------------------------------------------------
+  // The confirm button is type="submit" inside the form, so the browser calls
+  // form's submit event. We intercept it here to populate hidden fields first.
+  const closeTransForm = document.getElementById("close-trans-form");
+  if (closeTransForm) {
+    closeTransForm.addEventListener("submit", function (evt) {
+      evt.preventDefault();
+ 
+      const modal     = getModal();
+      const cashInput = document.getElementById("closing-cash-input");
+ 
+      const closingCash     = parseFloat(cashInput?.value) || 0;
+      const openingCash     = modal?._openingCash     || 0;
+      const paidInCash      = modal?._paidInCash      || 0;
+      const creditDebitCash = modal?._creditDebitCash || 0;
+      const expected        = openingCash + paidInCash + creditDebitCash;
+      const variance        = closingCash - expected;
+ 
+      document.getElementById("hidden-opening-cash").value      = openingCash.toFixed(2);
+      document.getElementById("hidden-paid-in-cash").value      = paidInCash.toFixed(2);
+      document.getElementById("hidden-credit-debit-cash").value = creditDebitCash.toFixed(2);
+      document.getElementById("hidden-expected-cash").value     = expected.toFixed(2);
+      document.getElementById("hidden-cash-variance").value     = variance.toFixed(2);
+ 
+      // Standard form POST — Django handles the redirect
+      closeTransForm.submit();
     });
-  });
-
-  function recalcDenomTotal() {
-    let total = 0;
-    document.querySelectorAll('.denom-row').forEach(function (row) {
-      const value = parseFloat(row.getAttribute('data-value')) || 0;
-      const qty = parseInt(row.querySelector('.denom-qty').value, 10) || 0;
-      total += value * qty;
-    });
-    const denomTotalEl = document.getElementById('denom-total-display');
-    if (denomTotalEl) {
-      denomTotalEl.textContent = '₱' + total.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+  }
+ 
+  // ---------------------------------------------------------------------------
+  // Denomination Modal
+  // ---------------------------------------------------------------------------
+  function resetDenomModal() {
+    document.querySelectorAll(".denom-qty").forEach((inp) => (inp.value = ""));
+    document.querySelectorAll(".denom-subtotal").forEach((el) => (el.textContent = "₱0.00"));
+    const totalDisplay = document.getElementById("denom-total-display");
+    if (totalDisplay) {
+      totalDisplay.textContent  = "₱0.00";
+      totalDisplay.dataset.total = "0";
     }
   }
-
-  window.useDenomTotal = function () {
-    let total = 0;
-    document.querySelectorAll('.denom-row').forEach(function (row) {
-      const value = parseFloat(row.getAttribute('data-value')) || 0;
-      const qty = parseInt(row.querySelector('.denom-qty').value, 10) || 0;
-      total += value * qty;
-    });
-    const cashInput = document.getElementById('closing-cash-input');
+ 
+  window.openDenominationModal = function () {
+    document.getElementById("denom-modal").style.display = "flex";
+  };
+ 
+  window.closeDenominationModal = function () {
+    document.getElementById("denom-modal").style.display = "none";
+  };
+ 
+  window.closeDenominationModalOutside = function (evt) {
+    if (evt.target.id === "denom-modal") window.closeDenominationModal();
+  };
+ 
+  window.applyDenominationTotal = function () {
+    const totalDisplay = document.getElementById("denom-total-display");
+    const total        = parseFloat(totalDisplay?.dataset.total || 0);
+    const cashInput    = document.getElementById("closing-cash-input");
+ 
     if (cashInput) {
       cashInput.value = total.toFixed(2);
-      cashInput.dispatchEvent(new Event('input', { bubbles: true }));
+      // Trigger variance recalc
+      cashInput.dispatchEvent(new Event("input", { bubbles: true }));
       cashInput.focus();
     }
+ 
+    window.closeDenominationModal();
   };
-
-  window.confirmCloseTrans = function () {
-    const cashInput = document.getElementById('closing-cash-input');
-    const modal = document.getElementById('close-trans-modal');
-
-    const closingCash = parseFloat(cashInput ? cashInput.value : 0) || 0;
-    if (closingCash < 0) return;
-
-    const expected = modal ? (modal._expectedCash || 0) : 0;
-    const variance = closingCash - expected;
-
-    // Sync hidden fields so they POST alongside the form
-    document.getElementById('hidden-expected-cash').value = expected.toFixed(2);
-    document.getElementById('hidden-cash-variance').value = variance.toFixed(2);
-
-    document.getElementById('close-trans-form').submit();
-
-    console.log('Close transaction payload:', payload);
-
-    // ── Wire to your backend here ──────────────────────────────────
-    confirmBtn.disabled    = true;
-    confirmBtn.textContent = 'Closing…';
-    fetch('/pos/close-session/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify(payload),
-    })
-    .then(r => r.json())
-    .then(() => { window.closeCloseTransModal(); window.location.href = '/pos/login/'; })
-    .catch(err => console.error('Close session failed:', err));
-    // ───────────────────────────────────────────────────────────────
-
-    // Temporary confirmation until backend is wired
-    // alert(
-    //   'Session closed.\n' +
-    //   'Closing Cash: ₱' + closingCash.toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '\n' +
-    //   'Variance: ' + (variance >= 0 ? '+' : '') + '₱' + variance.toLocaleString('en-PH', { minimumFractionDigits: 2 })
-    // );
-
-  };
-
-  window.closeCloseTransModal();
-  
-  function openDenominationModal() {
-    document.getElementById("denom-modal").style.display = "flex";
-  }
-
-  function closeDenominationModal() {
-    document.getElementById("denom-modal").style.display = "none";
-  }
-
-  function closeDenominationModalOutside(e) {
-    if (e.target.id === "denom-modal") {
-      closeDenominationModal();
+ 
+  function updateDenomTotal() {
+    let total = 0;
+    document.querySelectorAll(".denom-row").forEach((row) => {
+      const value = parseFloat(row.dataset.value) || 0;
+      const qty   = parseInt(row.querySelector(".denom-qty").value || 0, 10) || 0;
+      total += value * qty;
+    });
+ 
+    const totalDisplay = document.getElementById("denom-total-display");
+    if (totalDisplay) {
+      totalDisplay.textContent   = formatPeso(total);
+      totalDisplay.dataset.total = total;
     }
   }
-
-  function applyDenominationTotal() {
-
-    const total = document.getElementById("denom-total-display").dataset.total;
-
-    document.getElementById("closing-cash-input").value = total;
-
-    closeDenominationModal();
-  }
-  document.querySelectorAll(".denom-row").forEach(row => {
-
-    const value = parseFloat(row.dataset.value);
-    const qtyInput = row.querySelector(".denom-qty");
+ 
+  // Wire up each denomination row — single implementation
+  document.querySelectorAll(".denom-row").forEach((row) => {
+    const value      = parseFloat(row.dataset.value) || 0;
+    const qtyInput   = row.querySelector(".denom-qty");
     const subtotalEl = row.querySelector(".denom-subtotal");
-
-    const plusBtn = row.querySelector(".plus");
-    const minusBtn = row.querySelector(".minus");
-
-    plusBtn.addEventListener("click", () => {
-      qtyInput.value = parseInt(qtyInput.value || 0) + 1;
-      updateRow();
-    });
-
-    minusBtn.addEventListener("click", () => {
-      qtyInput.value = Math.max(0, parseInt(qtyInput.value || 0) - 1);
-      updateRow();
-    });
-
-    qtyInput.addEventListener("input", updateRow);
-
+    const plusBtn    = row.querySelector(".plus");
+    const minusBtn   = row.querySelector(".minus");
+ 
     function updateRow() {
-
-      const qty = parseInt(qtyInput.value || 0);
+      const qty      = parseInt(qtyInput.value || 0, 10) || 0;
       const subtotal = qty * value;
-
-      subtotalEl.textContent = formatPeso(subtotal);
-
+      if (subtotalEl) subtotalEl.textContent = formatPeso(subtotal);
       updateDenomTotal();
     }
-
+ 
+    plusBtn?.addEventListener("click",  () => { qtyInput.value = (parseInt(qtyInput.value || 0, 10) || 0) + 1;                       updateRow(); });
+    minusBtn?.addEventListener("click", () => { qtyInput.value = Math.max(0, (parseInt(qtyInput.value || 0, 10) || 0) - 1);          updateRow(); });
+    qtyInput?.addEventListener("input", updateRow);
   });
-  function updateDenomTotal() {
-
-    let total = 0;
-
-    document.querySelectorAll(".denom-row").forEach(row => {
-
-      const value = parseFloat(row.dataset.value);
-      const qty = parseInt(row.querySelector(".denom-qty").value || 0);
-
-      total += value * qty;
-
-    });
-
-    const totalDisplay = document.getElementById("denom-total-display");
-
-    totalDisplay.textContent = formatPeso(total);
-    totalDisplay.dataset.total = total;
-  }
-  function formatPeso(num) {
-    return "₱" + num.toLocaleString("en-PH", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
 })();
