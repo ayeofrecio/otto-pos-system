@@ -1183,12 +1183,12 @@ def _print_receipt(printer, terminal_config, context, session):
         except (TypeError, ValueError):
             return str(val)
         
-    def set_text_size(width=1, height=1):
-        width = max(1, min(width, 8))
-        height = max(1, min(height, 8))
+    # def set_text_size(width=1, height=1):
+    #     width = max(1, min(width, 8))
+    #     height = max(1, min(height, 8))
 
-        n = ((width - 1) << 4) | (height - 1)
-        printer.write(b"\x1d\x21" + bytes([n]))
+    #     n = ((width - 1) << 4) | (height - 1)
+    #     printer.write(b"\x1d\x21" + bytes([n]))
 
     # ── Header ───────────────────────────────────────────────────────────────
     printer.write(b"\x1b\x40")  # ESC @ → Initialize printer
@@ -1391,15 +1391,21 @@ def _do_print_z_reading(session):
     def tendered(label, amount, count):
         return (
             f"{label:<{paper_width - 25}}"
-            f"{float(amount or 0):>20,.2f}"
-            f"{int(count or 0):>5}"
+            f"{float(amount or 0):>18,.2f}"
+            f"{int(count or 0):>6}"
         )
  
     def summary_row(label, amount, count=None):
         amt_str = f"{float(amount or 0):>10,.2f}"
         if count is not None:
-            return f"{label:<{paper_width - 16}}{amt_str}{int(count):>5}"
-        return f"{label:<{paper_width - 11}}{amt_str}"
+            return f"{label:<{paper_width - 14}}{amt_str}{int(count):>5}"
+        return f"{label:<{paper_width - 13}}{amt_str}"
+ 
+    def neg_gross(label, amount, count=None):
+        amt_str = f"{float(amount or 0):>10,.2f}"
+        if count is not None:
+            return f"{label:<{paper_width - 14}}{amt_str}{int(count):>5}"
+        return f"{label:<{paper_width - 16}}{amt_str}"
  
     def center(text):
         return text.center(paper_width)
@@ -1433,21 +1439,21 @@ def _do_print_z_reading(session):
         write_line(neg_row("Item Returns",     item_returns["total"],      item_returns["count"]))
         write_line(neg_row("Cash Withdrawal",  cash_withdrawals["total"],  cash_withdrawals["count"]))
         separator()
-        write_line(summary_row("Total", total_neg_entries_amt))
- 
+        write_line(neg_gross("Total", total_neg_entries_amt))
+        write_line("")
         # ── Gross sales & discounts ───────────────────────────────────────────
-        write_line(summary_row("\nGROSS SALES", gross_sales))
+        write_line(neg_gross("GROSS SALES", gross_sales))
         write_line("\nLess:Discounts")
         write_line(neg_row("Item Disc.",     item_disc["total"],       item_disc["count"]))
         write_line(neg_row("Item Amt Disc.", item_amt_disc["total"],   item_amt_disc["count"]))
         write_line(neg_row("Senior % Disc.", senior_disc["total"],     senior_disc["count"]))
         write_line(neg_row("     Amt.Disc.", senior_amt_disc["total"], senior_amt_disc["count"]))
         separator()
-        write_line(summary_row("Total", total_disc))
+        write_line(neg_gross("Total", total_disc))
  
         # ── Counts ────────────────────────────────────────────────────────────
-        write_line(f"\n{'Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>16}")
-        write_line(f"{'Total Item Sold':<{paper_width - 16}}{fmt_count(total_items_sold):>16}")
+        write_line(f"\n{'Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>15}")
+        write_line(f"{'Total Item Sold':<{paper_width - 16}}{fmt_count(total_items_sold):>15}")
         separator()
  
         # ── Tender breakdown ──────────────────────────────────────────────────
@@ -1456,21 +1462,19 @@ def _do_print_z_reading(session):
             write_line(tendered(desc, t["total"], t["count"]))
         # write_line(neg_row("GC SALES", gc_sales["total"], gc_sales["count"]))
         separator()
-        write_line(summary_row("NET SALES", net_sales))
-        write_line("")
+        write_line(neg_gross("NET SALES", net_sales))
+        # write_line("")
         separator()
  
         # ── Terminal summary ──────────────────────────────────────────────────
         write_line(center("Terminal Summary Total"))
         printer.write(b"\x1b\x61\x00")
-        separator()
-        separator()
-        write_line("")
+        separator("=")
         write_line(summary_row("OLD GRAND TOTAL", old_grand_total))
         write_line(summary_row("NEW GRAND TOTAL", new_grand_total))
         separator()
-        write_line(f"{'Total Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>16}")
-        write_line(f"{'Total Item Sold':<{paper_width - 16}}{fmt_count(total_items_sold):>16}")
+        write_line(f"{'Total Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>13}")
+        write_line(f"{'Total Item Sold':<{paper_width - 16}}{fmt_count(total_items_sold):>13}")
         write_line(summary_row("Total Neg. Entries", total_neg_entries_amt))
         write_line(summary_row("Total Gross Sales",  gross_sales))
         write_line(summary_row("Total Discounts",    total_disc))
@@ -1502,11 +1506,11 @@ def _do_print_z_reading(session):
 
             # Always reset to left after all footers
             printer.write(b"\x1b\x61\x00")
+            write_line("\n\n\n")
         else:
             write_line("Thank you!")
         printer.write(b"\x1b\x61\x00")
 
-        write_line("\n\n\n\n\n")
 
         # ── Feed & cut ────────────────────────────────────────────────────────
         printer.write(b"\x1d\x56\x00")
@@ -1609,3 +1613,228 @@ def z_reading_view(request):
         return JsonResponse({"error": "Printer error. Check server logs."}, status=500)
  
     return JsonResponse({"status": "ok", "message": "Z-Reading printed."})
+
+
+def _do_print_x_reading(session):
+    """
+    Print an X-Reading report for an already-resolved POSSession object.
+    X-Reading = snapshot of current session totals WITHOUT closing/resetting.
+    """
+    terminal_config = _get_terminal_config()
+    if not terminal_config:
+        raise ValueError("Terminal configuration not found.")
+
+    setup_details = _get_store_details()
+    paper_width   = _get_paper_width(terminal_config)
+
+    # ── Aggregate session data ─────────────────────────────────────────────────
+    headers_qs = TransactionHeader.objects.filter(session=session)
+
+    si_numbers = headers_qs.order_by("transaction_no").values_list("transaction_no", flat=True)
+    beg_si = si_numbers.first() or "00000000"
+    end_si = si_numbers.last()  or "00000000"
+
+    void_line_items   = headers_qs.filter(transaction_type="L").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_transactions = headers_qs.filter(transaction_type="V").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_previous     = headers_qs.filter(transaction_type="P").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    item_returns      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price_ext"),      count=Count("id"))
+    cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
+
+    total_neg = sum(filter(None, [
+        void_line_items["total"], void_transactions["total"],
+        void_previous["total"],   item_returns["total"],
+        cash_withdrawals["total"],
+    ]))
+
+    sales_headers = headers_qs.exclude(transaction_type__in=["V", "L", "P"]).exclude(return_code="R")
+
+    gross_sales = (
+        TransactionItem.objects.filter(header__in=sales_headers)
+        .aggregate(total=Sum("item_price_ext"))["total"] or Decimal("0")
+    )
+
+    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="ID").aggregate(total=Sum("item_discount"), count=Count("id"))
+    item_amt_disc   = TransactionItem.objects.filter(header__in=sales_headers, discount_code="IA").aggregate(total=Sum("item_discount"), count=Count("id"))
+    senior_disc     = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SC").aggregate(total=Sum("item_discount"), count=Count("id"))
+    senior_amt_disc = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SA").aggregate(total=Sum("item_discount"), count=Count("id"))
+
+    total_disc = sum(filter(None, [
+        item_disc["total"], item_amt_disc["total"],
+        senior_disc["total"], senior_amt_disc["total"],
+    ]))
+
+    customer_count   = sales_headers.aggregate(total=Sum("customer_count"))["total"] or 0
+    total_items_sold = TransactionItem.objects.filter(header__in=sales_headers).aggregate(total=Sum("item_qty"))["total"] or 0
+
+    tender_breakdown = (
+        Payment.objects.filter(header__in=sales_headers)
+        .values("tender_desc", "pcode")
+        .annotate(total=Sum("amount"), count=Count("id"))
+        .order_by("tender_desc")
+    )
+
+    net_sales             = gross_sales - Decimal(str(total_disc))
+    total_neg_entries_amt = Decimal(str(total_neg or 0))
+
+    VAT_RATE      = Decimal("0.12")
+    vatable_sales = net_sales / (1 + VAT_RATE)
+    vat_amount    = net_sales - vatable_sales
+    non_vat       = Decimal("0")
+
+    now = datetime.datetime.now()
+
+    # ── Open printer ───────────────────────────────────────────────────────────
+    printer, _ = _get_printer(terminal_config)
+
+    def write_line(text=""):
+        printer.write((str(text) + "\n").encode("utf-8"))
+
+    def separator(char="-"):
+        write_line(char * paper_width)
+
+    def fmt_count(val):
+        try:
+            return f"{int(val):>5}"
+        except (TypeError, ValueError):
+            return f"{'0':>5}"
+
+    def neg_row(label, amount, count):
+        return (
+            f"     {label:<{paper_width - 21}}"
+            f"{float(amount or 0):>10,.2f}"
+            f"{int(count or 0):>5}"
+        )
+
+    def tendered(label, amount, count):
+        return (
+            f"{label:<{paper_width - 25}}"
+            f"{float(amount or 0):>18,.2f}"
+            f"{int(count or 0):>6}"
+        )
+
+    def summary_row(label, amount, count=None):
+        amt_str = f"{float(amount or 0):>10,.2f}"
+        if count is not None:
+            return f"{label:<{paper_width - 14}}{amt_str}{int(count):>5}"
+        return f"{label:<{paper_width - 13}}{amt_str}"
+
+    def neg_gross(label, amount):
+        return f"{label:<{paper_width - 16}}{float(amount or 0):>10,.2f}"
+
+    def center(text):
+        return text.center(paper_width)
+
+    try:
+        # ── Store header ───────────────────────────────────────────────────────
+        printer.write(b"\x1b\x61\x01")
+        db_headers = list(terminal_config.headers.all().order_by("line_number"))
+        for h in db_headers:
+            write_line(h.header_text)
+        if not db_headers:
+            write_line(setup_details.header01 or "OTTO Store")
+
+        write_line(center("\n***** X-Reading Report *****\n"))
+
+        printer.write(b"\x1b\x61\x00")
+
+        # ── Terminal info ──────────────────────────────────────────────────────
+        write_line(f"StoreId    : {session.store_id}")
+        write_line(f"Terminal No: {session.terminal_id}")
+        write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
+        write_line(f"Date       : {session.business_date.strftime('%m/%d/%Y')}")
+        write_line(f"Time       : {now.strftime('%I:%M:%S %p')}")
+        write_line(f"\nBEG. SI    : {beg_si}")
+        write_line(f"END. SI    : {end_si}\n")
+
+        # ── Negative entries ───────────────────────────────────────────────────
+        write_line("Negative Entries")
+        write_line(neg_row("Void Line Item",   void_line_items["total"],   void_line_items["count"]))
+        write_line(neg_row("Void Transaction", void_transactions["total"], void_transactions["count"]))
+        write_line(neg_row("Void Previous",    void_previous["total"],     void_previous["count"]))
+        write_line(neg_row("Item Returns",     item_returns["total"],      item_returns["count"]))
+        write_line(neg_row("Cash Withdrawal",  cash_withdrawals["total"],  cash_withdrawals["count"]))
+        separator()
+        write_line(neg_gross("Total", total_neg_entries_amt))
+        write_line("")
+
+        # ── Gross sales & discounts ────────────────────────────────────────────
+        write_line(neg_gross("GROSS SALES", gross_sales))
+        write_line("\nLess:Discounts")
+        write_line(neg_row("Item Disc.",     item_disc["total"],       item_disc["count"]))
+        write_line(neg_row("Item Amt Disc.", item_amt_disc["total"],   item_amt_disc["count"]))
+        write_line(neg_row("Senior % Disc.", senior_disc["total"],     senior_disc["count"]))
+        write_line(neg_row("     Amt.Disc.", senior_amt_disc["total"], senior_amt_disc["count"]))
+        separator()
+        write_line(neg_gross("Total", total_disc))
+
+        # ── Counts ────────────────────────────────────────────────────────────
+        write_line(f"\n{'Customer Count':<{paper_width - 16}}{fmt_count(customer_count):>15}")
+        write_line(f"{'Total Item Sold':<{paper_width - 16}}{fmt_count(total_items_sold):>15}")
+        separator()
+
+        # ── Tender breakdown ───────────────────────────────────────────────────
+        for t in tender_breakdown:
+            desc = (t["tender_desc"] or t["pcode"] or "CASH").upper()
+            write_line(tendered(desc, t["total"], t["count"]))
+        separator()
+        write_line(neg_gross("NET SALES", net_sales))
+        write_line("")
+        separator()
+
+        # ── VAT summary ────────────────────────────────────────────────────────
+        write_line(summary_row("Non-Vat:",       non_vat))
+        write_line(summary_row("Vatable:",       vatable_sales))
+        write_line(summary_row("V.A.T. Amount:", vat_amount))
+        separator("=")
+
+        # ── Footer ─────────────────────────────────────────────────────────────
+        printer.write(b"\x1b\x61\x01")
+        footers = _get_report_footers(terminal_config)
+
+        if footers:
+            for f in footers:
+                align_cmd = b"\x1b\x61\x01" if f.is_centered else b"\x1b\x61\x00"
+                printer.write(align_cmd)
+                write_line(f.footer_text)
+            printer.write(b"\x1b\x61\x00")
+        else:
+            write_line("** THIS IS NOT AN OFFICIAL RECEIPT **")
+
+        printer.write(b"\x1b\x61\x00")
+        write_line("\n\n\n\n\n")
+
+        # ── Feed & cut ─────────────────────────────────────────────────────────
+        printer.write(b"\x1d\x56\x00")
+
+    finally:
+        printer.close()
+
+
+# ── View ───────────────────────────────────────────────────────────────────────
+
+@login_required
+@require_open_session
+@require_http_methods(["GET", "POST"])
+def print_x_reading(request):
+    """Print X-Reading for the current open session. Session stays open."""
+    session = POSSession.objects.select_related("cashier").filter(
+        cashier=request.user,
+        store_id=STORE_ID,
+        status="open",
+    ).order_by("-opened_at").first()
+
+    if not session:
+        messages.error(request, "No active session found.")
+        return redirect("sales:pos_cashier")
+
+    try:
+        _do_print_x_reading(session)
+        messages.success(request, "X-Reading printed successfully.")
+    except NotImplementedError as e:
+        messages.error(request, f"Printer not supported: {e}")
+    except Exception as e:
+        messages.error(request, f"X-Reading print error: {e}")
+        print(f"❌ X-Reading print error: {e}")
+
+    return redirect("sales:pos_cashier")
+
