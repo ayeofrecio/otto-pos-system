@@ -665,7 +665,7 @@ def pay_view(request):
 
 
 def _parse_tender_entries(request):
-    """Parse tender_entries JSON from POST. Returns list of (pcode, amount) or empty."""
+    """Parse tender_entries JSON from POST. Returns list of {"pcode": ..., "amount": ...} or empty."""
     import json
     raw = request.POST.get("tender_entries", "").strip()
     if not raw:
@@ -680,7 +680,7 @@ def _parse_tender_entries(request):
             except (ValueError, TypeError):
                 amt = Decimal("0")
             if pcode and amt > 0:
-                entries.append((pcode, amt))
+                entries.append({"pcode": pcode, "amount": amt})
         return entries
     except (json.JSONDecodeError, TypeError):
         return []
@@ -695,7 +695,6 @@ def payment_complete(request):
     trans_no = request.session.get("pos_trans_no")
     tender_entries = _parse_tender_entries(request)
     current_session = get_current_session(request)
-
     if not tender_entries:
         return redirect("sales:pay")
 
@@ -712,7 +711,7 @@ def payment_complete(request):
     trans_disc = _get_trans_disc(request)
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
 
-    total_tendered = sum(amt for _, amt in tender_entries)
+    total_tendered = sum(t["amount"] for t in tender_entries)
     if total_tendered < total:
         return redirect("sales:pay")
 
@@ -725,11 +724,21 @@ def payment_complete(request):
     # --- Build tender summary ---
     tender_lines = []
     total_cash = Decimal("0")
-    for pcode, amt in tender_entries:
+    for t in tender_entries:
+        pcode = t["pcode"]
+        amt = t["amount"]
+
         tender = Tender.objects.filter(pcode=pcode).first()
         desc = tender.description if tender else pcode
         is_cash = bool(tender and tender.pchange == "Y")
-        tender_lines.append({"desc": desc, "amount": str(amt), "is_cash": is_cash})
+
+        tender_lines.append({
+            "pcode": pcode,
+            "desc": desc,
+            "amount": str(amt),
+            "is_cash": is_cash
+        })
+
         if is_cash:
             total_cash += amt
 
@@ -780,14 +789,15 @@ def payment_complete(request):
     Payment.objects.bulk_create([
         Payment(
             header=header,
-            pcode=pcode,
-            amount=amt,
+            pcode=t["pcode"],
+            amount=t["amount"],
             tender_desc=next(
-                (t["desc"] for t in tender_lines if t["amount"] == str(amt)), pcode
+                (tl["desc"] for tl in tender_lines if tl["pcode"] == t["pcode"]),
+                t["pcode"]
             ),
             payment_reference="",
         )
-        for pcode, amt in tender_entries
+        for t in tender_entries
     ])
 
     # --- Store receipt data ---
@@ -1267,7 +1277,7 @@ def _print_receipt(printer, terminal_config, context, session):
     else:
         printer.write(b"\x1b\x61\x00")
         write_line("Thank you for your purchase!")
-    write_line("\n\n")
+    write_line("\n\ndf")
  
     # ── Cash drawer pulse ─────────────────────────────────────────────────────
     if ports.get("DRAWER"):
@@ -1378,6 +1388,13 @@ def _do_print_z_reading(session):
             f"{int(count or 0):>5}"
         )
  
+    def tendered(label, amount, count):
+        return (
+            f"{label:<{paper_width - 25}}"
+            f"{float(amount or 0):>20,.2f}"
+            f"{int(count or 0):>5}"
+        )
+ 
     def summary_row(label, amount, count=None):
         amt_str = f"{float(amount or 0):>10,.2f}"
         if count is not None:
@@ -1436,7 +1453,7 @@ def _do_print_z_reading(session):
         # ── Tender breakdown ──────────────────────────────────────────────────
         for t in tender_breakdown:
             desc = (t["tender_desc"] or t["pcode"] or "CASH").upper()
-            write_line(neg_row(desc, t["total"], t["count"]))
+            write_line(tendered(desc, t["total"], t["count"]))
         # write_line(neg_row("GC SALES", gc_sales["total"], gc_sales["count"]))
         separator()
         write_line(summary_row("NET SALES", net_sales))
@@ -1488,9 +1505,10 @@ def _do_print_z_reading(session):
         else:
             write_line("Thank you!")
         printer.write(b"\x1b\x61\x00")
- 
+
+        write_line("\n\n\n\n\n")
+
         # ── Feed & cut ────────────────────────────────────────────────────────
-        write_line("\n" * 5)
         printer.write(b"\x1d\x56\x00")
  
     finally:
