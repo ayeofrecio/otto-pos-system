@@ -1,4 +1,5 @@
 {% load static %}
+{% load sales_tags %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -1531,9 +1532,9 @@
                         <dt>Code:</dt>
                         <dd>{{ last_item.item_code }}</dd>
                         <dt>Size:</dt>
-                        <dd>{{ last_item.item_size|default:"—" }}</dd>
+                        <dd>{% size_display last_item.item_size as _item_size %}{{ _item_size|default:"—" }}</dd>
                         <dt>Color:</dt>
-                        <dd>{{ last_item.item_color|default:"—" }}</dd>
+                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as _item_color %}{{ _item_color|default:"—" }}</dd>
                         <dt>Price:</dt>
                         <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
                     </dl>

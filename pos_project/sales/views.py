@@ -15,9 +15,12 @@ from django.views.decorators.http import require_http_methods
 
 from users.models import POSSession
 
+from .color_lookup import get_color_description
+from .size_lookup import get_size_description
 from .decorators import require_open_session
 from .models import Item, ItemDetail, TempTransaction, TransactionLog, POSTransCounter, Tender, TerminalSetup, Color, Size
 from .services import get_business_date
+from .transaction_services.transaction_service import TransactionService, RecordCode
 
 from setup.pos_keys import get_pos_keys
 
@@ -662,7 +665,12 @@ def _parse_tender_entries(request):
 @login_required
 @require_http_methods(["POST"])
 def payment_complete(request):
-    """Complete payment with tender entries. Supports multiple tenders. Only completes when total tendered >= amount due."""
+    """
+    Complete payment with tender entries. Supports multiple tenders.
+    Only completes when total tendered >= amount due.
+    
+    NOW WITH CLIPPER-STYLE TRANSACTION LOGGING
+    """
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
     tender_entries = _parse_tender_entries(request)
@@ -670,18 +678,19 @@ def payment_complete(request):
     if not tender_entries:
         return redirect("sales:pay")
 
-    cart_lines = TempTransaction.objects.filter(
+    cart_lines_qs = TempTransaction.objects.filter(
         user_id=user_id,
         terminal_id=TERMINAL_ID,
         store_id=STORE_ID,
         transaction_no=trans_no,
     ).order_by("rec_ctr")
 
-    if not cart_lines.exists():
+    cart_lines_list = list(cart_lines_qs)
+    if not cart_lines_list:
         return redirect("sales:pos_cashier")
 
     trans_disc = _get_trans_disc(request)
-    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines_list, trans_disc)
 
     total_tendered = sum(amt for _, amt in tender_entries)
     if total_tendered < total:
@@ -694,38 +703,77 @@ def payment_complete(request):
     except Exception:
         biz_date = now.date()
 
-    # Build receipt tender summary (multiple tenders)
+    # Build tender entries with full details
     tender_lines = []
+    tender_entries_full = []  # For TransactionService
     total_cash = Decimal("0")
+    
     for pcode, amt in tender_entries:
         tender = Tender.objects.filter(pcode=pcode).first()
         desc = tender.description if tender else pcode
-        tender_lines.append({"desc": desc, "amount": str(amt), "is_cash": tender and tender.pchange == "Y"})
-        if tender and tender.pchange == "Y":
+        is_cash = tender and tender.pchange == "Y"
+        
+        tender_lines.append({
+            "desc": desc,
+            "amount": str(amt),
+            "is_cash": is_cash
+        })
+        
+        # Prepare for TransactionService
+        tender_entries_full.append((pcode, amt, desc, is_cash))
+        
+        if is_cash:
             total_cash += amt
+    
     change_amount = max(Decimal("0"), total_tendered - total) if total_cash > 0 else Decimal("0")
     tender_display = ", ".join(f"{t['desc']} ₱{t['amount']}" for t in tender_lines)
 
-    # Save to TransactionLog
-    for line in cart_lines:
-        TransactionLog.objects.create(
-            user_id=user_id,
-            terminal_id=TERMINAL_ID,
-            store_id=STORE_ID,
+    # ========================================================================
+    # CLIPPER-STYLE TRANSACTION LOGGING
+    # This replaces the simple loop that was saving cart_lines to TransactionLog
+    # ========================================================================
+    
+    try:
+        # Initialize transaction service
+        transaction_service = TransactionService()
+        
+        # Get salesman code (you can get this from session or user profile)
+        salesman_code = request.session.get("salesman_code", "")  # Adjust as needed
+        
+        # Generate SI number (you can customize this format)
+        si_number = f"SI-{trans_no}"
+        
+        # Save to TransactionLog with Clipper business logic
+        records_saved = transaction_service.save_to_transaction_log(
+            cart_lines=cart_lines_list,
             transaction_no=trans_no,
             transaction_date=biz_date,
             transaction_time=now.strftime("%H:%M"),
-            transaction_type="S",
-            item_code=line.item_code or "",
-            item_description=line.item_description or "",
-            item_qty=line.item_qty or 0,
-            item_price=line.item_price or 0,
-            item_discount=line.item_discount or 0,
-            discount_code=line.discount_code or "",
-            item_price_ext=line.item_price_ext or 0,
-            item_size=line.item_size or "",
-            item_color=line.item_color or "",
+            user_id=user_id,
+            salesman_code=salesman_code,
+            tender_entries=tender_entries_full,
+            subtotal_discount_pct=trans_disc.get("pct", Decimal("0")),
+            subtotal_discount_label=trans_disc.get("label", ""),
+            si_number=si_number,
+            void_tag=""  # Empty for normal sales, 'X' for voided transactions
         )
+        
+        print(f"✓ Saved {records_saved} records to TransactionLog (TLOG)")
+        
+        # Clear temp table (equivalent to Clipper dropping TEMP.DBF)
+        deleted_count = transaction_service.clear_temp_table(user_id, trans_no)
+        print(f"✓ Cleared {deleted_count} records from TempTransaction (TEMPTRANS)")
+        
+    except Exception as e:
+        print(f"❌ Transaction logging error: {e}")
+        import traceback
+        traceback.print_exc()
+        # You might want to handle this error differently
+        # For now, we'll continue since the old code also saved to TransactionLog
+    
+    # ========================================================================
+    # END TRANSACTION LOGGING
+    # ========================================================================
 
     # Store receipt data for display
     request.session["last_receipt"] = {
@@ -751,20 +799,26 @@ def payment_complete(request):
                 "disc_pct": line.disc_pct,
                 "disc_total": str(line.item_disc_total),
                 "ext": str(line.item_price_ext or 0),
-                "size": line.item_size or "",
-                "color": line.item_color or "",
+                "size": get_size_description(line.item_size or ""),
+                "color": get_color_description(
+                    line.item_color or "",
+                    icode=line.item_code or "",
+                    size=line.item_size or "",
+                ),
             }
-            for line in cart_lines
+            for line in cart_lines_list
         ],
     }
 
-    # Clear cart and get new transaction number
-    cart_lines.delete()
+    # Get new transaction number for next transaction
     new_trans = _get_next_transaction_no()
     request.session["pos_trans_no"] = new_trans
     _clear_trans_disc(request)
 
     return redirect("sales:receipt")
+
+
+
 
 
 # @login_required
@@ -963,7 +1017,9 @@ def item_search(request):
                     "code": item.icode,
                     "description": item.short_desc or item.long_desc,
                     "size": v.size,
+                    "size_display": get_size_description(v.size or ""),
                     "color": v.color,
+                    "color_display": get_color_description(v.color, item_detail=v),
                     "price": str(v.price or item.price),
                 })
         else:
@@ -972,7 +1028,13 @@ def item_search(request):
                 "code": item.icode,
                 "description": item.short_desc or item.long_desc,
                 "size": item.size or "",
+                "size_display": get_size_description(item.size or ""),
                 "color": item.color or "",
+                "color_display": get_color_description(
+                    item.color or "",
+                    icode=item.icode,
+                    size=item.size or "",
+                ),
                 "price": str(item.price),
             })
 

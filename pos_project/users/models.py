@@ -56,7 +56,7 @@ class Users(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "auth_users"
+        db_table = "auth_user"
 
     def __str__(self):
         return f"{self.get_full_name() or self.username} [{self.get_role_display()}]"
