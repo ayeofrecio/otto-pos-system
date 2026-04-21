@@ -714,7 +714,9 @@
     }
 
     const rows = results.map(function (item) {
-      const variant = [item.size, item.color].filter(Boolean).join('/');
+      const sizeLabel = item.size_display || item.size || '';
+      const colorLabel = item.color_display || item.color || '';
+      const variant = [sizeLabel, colorLabel].filter(Boolean).join('/');
       const variantHtml = variant ? '<span class="search-result-variant">(' + variant + ')</span>' : '';
       return '<div class="search-result" onclick="selectSearchResult(\'' +
         escHtml(item.barcode) + '\')" title="Click to add to cart">' +

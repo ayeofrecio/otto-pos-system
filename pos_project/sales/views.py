@@ -16,9 +16,12 @@ from django.views.decorators.http import require_http_methods
 
 from users.models import POSSession
 
+from .color_lookup import get_color_description
+from .size_lookup import get_size_description
 from .decorators import require_open_session
 from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransCounter, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
 from .services import get_business_date
+from .transaction_services.transaction_service import TransactionService, RecordCode
 
 from setup.pos_keys import get_pos_keys
 
@@ -690,7 +693,12 @@ def _parse_tender_entries(request):
 @require_open_session
 @require_http_methods(["POST"])
 def payment_complete(request):
-    """Complete payment with tender entries. Supports multiple tenders. Only completes when total tendered >= amount due."""
+    """
+    Complete payment with tender entries. Supports multiple tenders.
+    Only completes when total tendered >= amount due.
+    
+    NOW WITH CLIPPER-STYLE TRANSACTION LOGGING
+    """
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
     tender_entries = _parse_tender_entries(request)
@@ -698,18 +706,19 @@ def payment_complete(request):
     if not tender_entries:
         return redirect("sales:pay")
 
-    cart_lines = TempTransaction.objects.filter(
+    cart_lines_qs = TempTransaction.objects.filter(
         user_id=user_id,
         terminal_id=TERMINAL_ID,
         store_id=STORE_ID,
         transaction_no=trans_no,
     ).order_by("rec_ctr")
 
-    if not cart_lines.exists():
+    cart_lines_list = list(cart_lines_qs)
+    if not cart_lines_list:
         return redirect("sales:pos_cashier")
 
     trans_disc = _get_trans_disc(request)
-    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines_list, trans_disc)
 
     total_tendered = sum(t["amount"] for t in tender_entries)
     if total_tendered < total:
@@ -723,6 +732,7 @@ def payment_complete(request):
 
     # --- Build tender summary ---
     tender_lines = []
+    tender_entries_full = []  # For TransactionService
     total_cash = Decimal("0")
     for t in tender_entries:
         pcode = t["pcode"]
@@ -824,10 +834,14 @@ def payment_complete(request):
                 "disc_pct": line.disc_pct,
                 "disc_total": str(line.item_disc_total),
                 "ext": str(line.item_price_ext or 0),
-                "size": line.item_size or "",
-                "color": line.item_color or "",
+                "size": get_size_description(line.item_size or ""),
+                "color": get_color_description(
+                    line.item_color or "",
+                    icode=line.item_code or "",
+                    size=line.item_size or "",
+                ),
             }
-            for line in cart_lines
+            for line in cart_lines_list
         ],
     }
 

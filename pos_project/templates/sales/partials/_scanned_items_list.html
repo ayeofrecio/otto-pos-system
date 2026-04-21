@@ -1,3 +1,4 @@
+{% load sales_tags %}
 <h3 class="scanned-items-title">Items Entered <span class="scanned-items-hint">(click for discount, void, refund)</span></h3>
 <div class="scanned-items-inner">
 {% if cart_lines %}
@@ -7,7 +8,7 @@
         <div class="scanned-item-desc">{{ line.item_description }}</div>
         <div class="scanned-item-meta">
             {% if line.item_size or line.item_color %}
-            <span class="scanned-item-variant">{{ line.item_size|default:"" }}{% if line.item_size and line.item_color %}/{% endif %}{{ line.item_color|default:"" }}</span>
+            <span class="scanned-item-variant">{% size_display line.item_size %}{% if line.item_size and line.item_color %}/{% endif %}{% color_display line.item_color line.item_code line.item_size %}</span>
             {% endif %}
             {% if line.item_discount %}
             <span class="scanned-item-disc">{{ line.disc_pct|floatformat:-2 }}% disc</span>
