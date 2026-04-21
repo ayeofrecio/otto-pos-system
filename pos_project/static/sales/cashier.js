@@ -153,6 +153,14 @@
     const barcodeInput = document.getElementById('barcode-input');
     const qtyInput = document.getElementById('qty-input');
 
+    // Block browser defaults for ALL keys that are mapped to POS functions
+    if (typeof POS_FKEYS !== 'undefined') {
+      const mappedKeys = Object.values(POS_FKEYS);
+      if (mappedKeys.includes(evt.key)) {
+        evt.preventDefault();
+      }
+    }
+
     if (evt.key === 'F1') {
       evt.preventDefault();
       window.openSearchModal();
@@ -165,23 +173,29 @@
       return;
     }
 
-    if (evt.key === POS_KEYS.iDisc) {
+    if (evt.key === POS_FKEYS.iDisc) {
       evt.preventDefault();
       window.openDiscountModal();
       return;
     }
 
-    if (evt.key === POS_KEYS.stDisc) {
+    if (evt.key === POS_FKEYS.stDisc) {
       evt.preventDefault();
       window.openTransDiscModal();
       return;
     }
 
-    // if (evt.key === POS_KEYS.stDisc) {
-    //   evt.preventDefault();
-    //   window.openPayModal();
-    //   return;
-    // }
+    if (evt.key === POS_FKEYS.paymnt) {
+      evt.preventDefault();
+      window.openPayModal();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.menu) {
+      evt.preventDefault();
+      window.openFkeyHelpModal();
+      return;
+    }
 
     if (evt.key === '*' && qtyInput && document.activeElement === barcodeInput && !barcodeInput.value) {
       evt.preventDefault();
@@ -194,9 +208,11 @@
       const payModal = document.getElementById('pay-modal');
       const discModal = document.getElementById('discount-modal');
       const tdModal = document.getElementById('trans-disc-modal');
+      const fkeyModal = document.getElementById('fkey-help-modal');
       if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
       else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
+      else if (fkeyModal && fkeyModal.classList.contains('open')) { window.closeFkeyHelpModal(); }
       else if (closeTransModal && closeTransModal.classList.contains('open')) { window.closeCloseTransModal(); }
     }
   });
@@ -213,7 +229,7 @@
     });
   }
 
-  // Pressing Enter in the barcode field submits the form.
+  // Pressing Enter in the barcode field runs the enterKey() logic.
   // (Required because adding the qty number input means the browser no longer
   // auto-submits a multi-input form on Enter.)
   const barcodeInputEl = document.getElementById('barcode-input');
@@ -221,17 +237,96 @@
     barcodeInputEl.addEventListener('keydown', function (evt) {
       if (evt.key === 'Enter') {
         evt.preventDefault();
-        const form = document.getElementById('barcode-form');
-        if (form) {
-          form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-        }
+        enterKey();
       }
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Discount Modal (F3)
+  // enterKey — intercepts Enter on the barcode field
+  // Logic ported from Clarion:
+  //   len <= 11 + is_alias  → open color/size picker
+  //   len == 12             → backend parses embedded color/size, submit normally
+  //   otherwise             → submit normally
   // ---------------------------------------------------------------------------
+  function enterKey() {
+    var barcodeInput = document.getElementById('barcode-input');
+    if (!barcodeInput) { return; }
+    var barcode = barcodeInput.value.trim();
+    if (!barcode) { return; }
+
+    if (barcode.length <= 11) {
+      // Ask the server whether this icode is an alias item with variants
+      fetch('/sales/cart/variants/?barcode=' + encodeURIComponent(barcode))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok && data.is_alias && data.variants && data.variants.length > 0) {
+            openColorSizeModal(barcode, data.item_desc, data.variants);
+          } else {
+            submitBarcodeForm();
+          }
+        })
+        .catch(function () {
+          submitBarcodeForm();
+        });
+    } else {
+      // 12-char (or longer) barcode — let the backend handle it
+      submitBarcodeForm();
+    }
+  }
+
+  function submitBarcodeForm() {
+    var form = document.getElementById('barcode-form');
+    if (form) {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Color / Size Picker Modal (shown for alias items)
+  // ---------------------------------------------------------------------------
+  window.openColorSizeModal = function (icode, itemDesc, variants) {
+    var modal = document.getElementById('color-size-modal');
+    var titleEl = document.getElementById('color-size-modal-title');
+    var grid = document.getElementById('color-size-variant-grid');
+    if (!modal || !grid) { return; }
+    if (titleEl) { titleEl.textContent = itemDesc || icode; }
+    grid.innerHTML = '';
+    variants.forEach(function (v) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'variant-btn';
+      btn.innerHTML =
+        '<span class="variant-color">' + (v.color_desc || v.color_code || '\u2014') + '</span>' +
+        '<span class="variant-size">' + (v.size_desc  || v.size_code  || '\u2014') + '</span>' +
+        '<span class="variant-price">\u20B1' + parseFloat(v.price).toFixed(2) + '</span>';
+      btn.addEventListener('click', function () { selectVariant(v.barcode); });
+      grid.appendChild(btn);
+    });
+    modal.classList.add('open');
+  };
+
+  window.closeColorSizeModal = function () {
+    var modal = document.getElementById('color-size-modal');
+    if (modal) { modal.classList.remove('open'); }
+    var barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closeColorSizeModalOutside = function (evt) {
+    if (evt.target === document.getElementById('color-size-modal')) {
+      window.closeColorSizeModal();
+    }
+  };
+
+  function selectVariant(variantBarcode) {
+    var barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.value = variantBarcode; }
+    window.closeColorSizeModal();
+    submitBarcodeForm();
+  }
+
+
   var pendingDisc = { pct: 0, type: '', label: '' };
 
   window.openDiscountModal = function () {
@@ -665,6 +760,56 @@
   window.openPayModal = function () {
     const btn = document.getElementById('pay-trigger-btn');
     if (btn) { btn.click(); }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Function Key Help Modal
+  // ---------------------------------------------------------------------------
+  window.openFkeyHelpModal = function () {
+    const modal = document.getElementById('fkey-help-modal');
+    if (!modal) { return; }
+    // Build grid rows from POS_FKEYS + POS_KEY_LABELS
+    const grid = document.getElementById('fkey-grid-body');
+    if (grid && typeof POS_FKEYS !== 'undefined' && typeof POS_KEY_LABELS !== 'undefined') {
+      grid.innerHTML = '';
+      // Static non-POS-KEYS entries first (F1, F2)
+      const staticEntries = [
+        { key: 'F1', desc: 'Item Search' },
+        { key: 'F2', desc: 'Quantity Input' },
+      ];
+      staticEntries.forEach(function (e) {
+        grid.insertAdjacentHTML('beforeend', buildFkeyRow(e.key, e.desc));
+      });
+      // Dynamic POS_FKEYS entries
+      Object.keys(POS_KEY_LABELS).forEach(function (fn) {
+        const physKey = POS_FKEYS[fn];
+        const desc = POS_KEY_LABELS[fn];
+        grid.insertAdjacentHTML('beforeend', buildFkeyRow(physKey || null, desc));
+      });
+    }
+    modal.classList.add('open');
+  };
+
+  function buildFkeyRow(physKey, desc) {
+    const badgeClass = physKey ? 'fkey-badge' : 'fkey-badge unassigned';
+    const badgeLabel = physKey || '—';
+    return '<div class="fkey-row">' +
+      '<span class="' + badgeClass + '">' + badgeLabel + '</span>' +
+      '<span class="fkey-desc">' + desc + '</span>' +
+      '</div>';
+  }
+
+  window.closeFkeyHelpModal = function () {
+    const modal = document.getElementById('fkey-help-modal');
+    if (modal) { modal.classList.remove('open'); }
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closeFkeyHelpModalOutside = function (evt) {
+    if (evt.target === document.getElementById('fkey-help-modal')) {
+      window.closeFkeyHelpModal();
+    }
   };
 
   // Close modal on Escape

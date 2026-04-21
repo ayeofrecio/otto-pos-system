@@ -308,6 +308,50 @@ def cashier_view(request):
 
 @login_required
 @require_open_session
+@require_http_methods(["GET"])
+def item_variants(request):
+    """Return color/size variants for an alias item (barcode = icode, len <= 11)."""
+    barcode = (request.GET.get("barcode") or "").strip()
+    if not barcode:
+        return JsonResponse({"ok": False, "error": "Barcode required"}, status=400)
+
+    try:
+        item = Item.objects.get(icode=barcode)
+    except Item.DoesNotExist:
+        return JsonResponse({"ok": False, "is_alias": False, "error": "Item not found"}, status=404)
+
+    if item.is_alias != "Y":
+        return JsonResponse({"ok": True, "is_alias": False})
+
+    details = ItemDetail.objects.filter(icode=barcode)
+    color_codes = {d.color for d in details if d.color}
+    size_codes  = {d.size  for d in details if d.size}
+
+    color_map = {c.code: c.color for c in Color.objects.filter(code__in=color_codes)}
+    size_map  = {s.code: s.size  for s in Size.objects.filter(code__in=size_codes)}
+
+    variants = [
+        {
+            "barcode":    d.barcode,
+            "color_code": d.color,
+            "color_desc": color_map.get(d.color, d.color),
+            "size_code":  d.size,
+            "size_desc":  size_map.get(d.size, d.size),
+            "price":      float(d.price),
+        }
+        for d in details
+    ]
+
+    return JsonResponse({
+        "ok":       True,
+        "is_alias": True,
+        "item_desc": item.short_desc or item.long_desc or barcode,
+        "variants": variants,
+    })
+
+
+@login_required
+@require_open_session
 @require_http_methods(["POST"])
 def cart_add(request):
     """Add item by barcode. Returns HTML fragment for HTMX or JSON."""
@@ -335,13 +379,40 @@ def cart_add(request):
             item = Item.objects.get(icode=barcode)
             item_detail = None
         except Item.DoesNotExist:
-            if request.headers.get("HX-Request"):
-                return render(
-                    request,
-                    "sales/partials/cart_error.html",
-                    {"error": "Item not found"},
-                )
-            return JsonResponse({"ok": False, "error": "Item not found"}, status=404)
+            # 12-char barcode: last 4 digits encode color (2) + size (2)
+            if len(barcode) == 12:
+                parsed_icode = barcode[:-4]
+                parsed_color = barcode[-4:-2].zfill(3)
+                parsed_size  = barcode[-2:].zfill(3)
+                try:
+                    item_detail = ItemDetail.objects.get(
+                        icode=parsed_icode,
+                        color=parsed_color,
+                        size=parsed_size,
+                    )
+                    item = Item.objects.get(icode=parsed_icode)
+                except (ItemDetail.DoesNotExist, Item.DoesNotExist):
+                    item_detail = None
+                    item = None
+                if item_detail and item:
+                    # fall through to the item_detail/item assignment block below
+                    pass
+                else:
+                    if request.headers.get("HX-Request"):
+                        return render(
+                            request,
+                            "sales/partials/cart_error.html",
+                            {"error": "Item not found"},
+                        )
+                    return JsonResponse({"ok": False, "error": "Item not found"}, status=404)
+            else:
+                if request.headers.get("HX-Request"):
+                    return render(
+                        request,
+                        "sales/partials/cart_error.html",
+                        {"error": "Item not found"},
+                    )
+                return JsonResponse({"ok": False, "error": "Item not found"}, status=404)
 
     if item_detail:
         item = Item.objects.get(icode=item_detail.icode)
@@ -748,6 +819,7 @@ def payment_complete(request):
             "amount": str(amt),
             "is_cash": is_cash
         })
+        tender_entries_full.append((pcode, amt, desc, is_cash))
 
         if is_cash:
             total_cash += amt
@@ -792,7 +864,7 @@ def payment_complete(request):
             tag4=getattr(line, 'tag4', ''),
             promo_tag=getattr(line, 'promo_tag', ''),
         )
-        for line in cart_lines
+        for line in cart_lines_list
     ])
 
     # --- Create one Payment per tender entry ---
@@ -809,6 +881,23 @@ def payment_complete(request):
         )
         for t in tender_entries
     ])
+
+    # --- Clipper-style flat transaction log (TransactionLog / TLOG) ---
+    try:
+        service = TransactionService()
+        service.save_to_transaction_log(
+            cart_lines=cart_lines_qs,
+            transaction_no=trans_no,
+            transaction_date=biz_date,
+            transaction_time=now.strftime("%H:%M"),
+            user_id=user_id,
+            tender_entries=tender_entries_full,
+            subtotal_discount_pct=trans_disc.get("pct", Decimal("0")),
+            subtotal_discount_label=trans_disc.get("label", ""),
+            si_number=trans_no,
+        )
+    except Exception as e:
+        print(f"⚠️  TransactionService log failed: {e}")
 
     # --- Store receipt data ---
     request.session["last_receipt"] = {
@@ -846,7 +935,7 @@ def payment_complete(request):
     }
 
     # --- Clear cart, advance transaction number ---
-    cart_lines.delete()
+    cart_lines_qs.delete()
     request.session["pos_trans_no"] = _get_next_transaction_no()
     _clear_trans_disc(request)
 

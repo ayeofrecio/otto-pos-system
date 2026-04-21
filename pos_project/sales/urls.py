@@ -11,6 +11,7 @@ app_name = "sales"
 urlpatterns = [
     path("", views.cashier_view, name="pos_cashier"),
     path("cart/add/", views.cart_add, name="cart_add"),
+    path("cart/variants/", views.item_variants, name="item_variants"),
     path("cart/remove/", views.cart_remove, name="cart_remove"),
     path("cart/line-disc/", views.cart_line_disc, name="cart_line_disc"),
     path("cart/trans-disc/", views.cart_trans_disc, name="cart_trans_disc"),

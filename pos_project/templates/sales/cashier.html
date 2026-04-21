@@ -718,6 +718,120 @@
             border-color: #8b3d4a;
         }
 
+        .btn-fkey-help {
+            padding: 1rem 0.85rem;
+            font-size: 1rem;
+            font-weight: 700;
+            background: #2f3640;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            color: #8b9eb5;
+            cursor: pointer;
+            white-space: nowrap;
+            line-height: 1;
+        }
+
+        .btn-fkey-help:hover {
+            background: #3d454d;
+            border-color: #8b9eb5;
+            color: #e6edf3;
+        }
+
+        /* Color / Size Picker Modal */
+        .color-size-modal {
+            width: 640px;
+        }
+        .color-size-modal .modal-subtitle {
+            padding: 0.4rem 1.25rem 0.75rem;
+            font-size: 0.85rem;
+            color: #8b949e;
+            border-bottom: 1px solid #2f3640;
+        }
+        #color-size-variant-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.5rem;
+            padding: 1rem 1.25rem;
+            overflow-y: auto;
+            max-height: 55vh;
+        }
+        .variant-btn {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            padding: 0.75rem 1rem;
+            background: #2d343e;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            color: #e6edf3;
+            cursor: pointer;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        .variant-btn:hover {
+            border-color: #8b3d4a;
+            background: #3a1520;
+        }
+        .variant-btn:focus {
+            outline: none;
+            border-color: #8b3d4a;
+        }
+        .variant-color {
+            font-weight: 600;
+            color: #e6edf3;
+        }
+        .variant-size {
+            color: #8b949e;
+            font-size: 0.82rem;
+        }
+        .variant-price {
+            color: #6edb8f;
+            font-size: 0.85rem;
+            margin-top: 0.15rem;
+        }
+
+        /* Function Key Help Modal */
+        .fkey-modal {
+            width: 560px;
+        }
+        .fkey-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px 16px;
+            padding: 1rem 1.25rem;
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+        .fkey-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 8px;
+            border-radius: 5px;
+            background: #1c2128;
+            border: 1px solid #2f3640;
+        }
+        .fkey-row .fkey-badge {
+            min-width: 44px;
+            text-align: center;
+            padding: 3px 7px;
+            border-radius: 4px;
+            background: #8b3d4a;
+            color: #fff;
+            font-size: 0.78rem;
+            font-weight: 700;
+            font-family: monospace;
+            letter-spacing: 0.03em;
+        }
+        .fkey-row .fkey-badge.unassigned {
+            background: #2f3640;
+            color: #888;
+        }
+        .fkey-row .fkey-desc {
+            font-size: 0.85rem;
+            color: #c9d1d9;
+        }
+
         .modal-overlay {
             display: none;
             position: fixed;
@@ -1571,6 +1685,8 @@
                             placeholder="Scan or enter barcode here" autofocus autocomplete="off">
                         <button type="button" class="btn-search" onclick="openSearchModal()"
                             title="Search items (F1)">&#128269; Search</button>
+                        <button type="button" class="btn-fkey-help" onclick="openFkeyHelpModal()"
+                            title="Function Key Reference">&#63;</button>
                     </div>
                 </form>
                 <div class="disc-badge" id="disc-badge">
@@ -1590,9 +1706,9 @@
                         <dt>Code:</dt>
                         <dd>{{ last_item.item_code }}</dd>
                         <dt>Size:</dt>
-                        <dd>{% size_display last_item.item_size as _item_size %}{{ _item_size|default:"—" }}</dd>
+                        <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—" }}</dd>
                         <dt>Color:</dt>
-                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as _item_color %}{{ _item_color|default:"—" }}</dd>
+                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as item_color_display %}{{ item_color_display|default:"—" }}</dd>
                         <dt>Price:</dt>
                         <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
                     </dl>
@@ -1924,6 +2040,35 @@
 
         </div>
     </div>
+    <!-- Color / Size Picker Modal (alias items) -->
+    <div class="modal-overlay" id="color-size-modal" onclick="closeColorSizeModalOutside(event)">
+        <div class="modal color-size-modal">
+            <div class="modal-header">
+                <h2>Select Color &amp; Size</h2>
+                <button class="modal-close" onclick="closeColorSizeModal()">&#10005;</button>
+            </div>
+            <p class="modal-subtitle" id="color-size-modal-title"></p>
+            <div id="color-size-variant-grid">
+                <!-- populated by JS -->
+            </div>
+            <div class="disc-modal-footer">
+                <button class="btn btn-secondary" onclick="closeColorSizeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <!-- Function Key Help Modal -->
+    <div class="modal-overlay" id="fkey-help-modal" onclick="closeFkeyHelpModalOutside(event)">
+        <div class="modal fkey-modal">
+            <div class="modal-header">
+                <h2>&#9000; Function Key Reference</h2>
+                <button class="modal-close" onclick="closeFkeyHelpModal()">&#10005;</button>
+            </div>
+            <div class="fkey-grid" id="fkey-grid-body">
+                <!-- populated by JS -->
+            </div>
+        </div>
+    </div>
+
     <!-- Item Search Modal -->
     <div class="modal-overlay" id="search-modal" onclick="closeSearchModalOutside(event)">
         <div class="modal">
@@ -1955,11 +2100,11 @@
         </button>
         <button type="button" class="btn-fn btn-fn-green" onclick="openDiscountModal()"
             title="Item discount — applies to next scan only">
-            <span class="fn-key">F3</span><span class="fn-label">Item Discount</span>
+            <span class="fn-key">F12</span><span class="fn-label">Item Discount</span>
         </button>
         <button type="button" class="btn-fn btn-fn-blue" onclick="openTransDiscModal()"
             title="Subtotal discount — applies to entire transaction">
-            <span class="fn-key">F4</span><span class="fn-label">Sub Discount</span>
+            <span class="fn-key">F11</span><span class="fn-label">Sub Discount</span>
         </button>
         <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
             title="Close transaction — enter closing cash">
@@ -1994,6 +2139,53 @@
             sman:     "{{ pos_keys.pSManKey|escapejs }}",
             cWithD:   "{{ pos_keys.pCWithDKey|escapejs }}",
             resendTxt:"{{ pos_keys.pResendTxt|escapejs }}",
+        };
+        // Reverse map: Clipper chr() value → physical key name (e.g. "\xff" → "F12")
+        // Mirrors KEY_LABELS in key_capture.js
+        const CHAR_TO_FKEY = {
+            [String.fromCharCode(0xDC)]: 'F1',
+            [String.fromCharCode(0xD8)]: 'F2',
+            [String.fromCharCode(0xE9)]: 'F3',
+            [String.fromCharCode(0xF7)]: 'F4',
+            [String.fromCharCode(0xF8)]: 'F5',
+            [String.fromCharCode(0xF9)]: 'F6',
+            [String.fromCharCode(0xFA)]: 'F7',
+            [String.fromCharCode(0xFB)]: 'F8',
+            [String.fromCharCode(0xFC)]: 'F9',
+            [String.fromCharCode(0xFD)]: 'F10',
+            [String.fromCharCode(0xFE)]: 'F11',
+            [String.fromCharCode(0xFF)]: 'F12',
+        };
+        // Translate all POS_KEYS values to their physical key names for keydown comparisons
+        const POS_FKEYS = {};
+        for (const fn in POS_KEYS) {
+            const physKey = CHAR_TO_FKEY[POS_KEYS[fn]];
+            if (physKey) POS_FKEYS[fn] = physKey;
+        }
+
+        // Human-readable labels for each POS function key slot
+        const POS_KEY_LABELS = {
+            iDisc:    'Item Discount',
+            iView:    'Item Lookup',
+            stDisc:   'SubTotal Discount',
+            prOver:   'Price Override',
+            iRet:     'Item Return',
+            iVoid:    'Line Item Void',
+            iVoidA:   'Void All Items',
+            voidTr:   'Void Previous Transaction',
+            iSusRt:   'Transaction Suspend / Retrieve',
+            stat:     'Sales Status',
+            subTot:   'SubTotal',
+            paymnt:   'Payment',
+            iQty:     'Quantity',
+            tsRep:    'X-Reading / Terminal Sales',
+            zRead:    'Z-Reading / End of Day',
+            jRep:     'Journal Report',
+            sOff:     'Sign Off / Log Off',
+            menu:     'Menu Key',
+            sman:     'Reprint Transactions',
+            cWithD:   'Cash Withdrawal',
+            resendTxt:'Resend Text File',
         };
         // Initialise trans_disc state from server session (survives page reload)
         const INITIAL_TRANS_DISC = {

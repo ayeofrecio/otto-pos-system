@@ -99,6 +99,23 @@ class TerminalSetupAdmin(admin.ModelAdmin):
 
 @admin.register(TempTransaction)
 class TempTransactionAdmin(admin.ModelAdmin):
+    """
+    Django admin configuration for TempTransaction model.
+
+    This admin class customizes the Django admin interface for managing temporary
+    transaction records in the POS system.
+
+    Attributes:
+        list_display (tuple): Fields displayed in the admin list view including
+            transaction number, date, store and terminal identifiers, user ID,
+            and item details (code, description, quantity, extended price).
+        
+        list_filter (tuple): Enables filtering by store_id and terminal_id in
+            the admin sidebar for easier transaction lookup by location.
+        
+        search_fields (tuple): Enables full-text search functionality for
+            transaction_no, item_code, and user_id fields in the admin interface.
+    """
     list_display = (
         'transaction_no', 'transaction_date', 'store_id', 'terminal_id',
         'user_id', 'item_code', 'item_description', 'item_qty', 'item_price_ext',
