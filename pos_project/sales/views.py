@@ -264,11 +264,30 @@ def to_close_session_details(request):
         ).aggregate(total=Sum("amount"))["total"]
         or Decimal("0")
     )
+    credit_debit_cash_list = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+        ).exclude(
+            pcode__in=cash_tender_codes,
+        ).values("tender_desc")
+        .annotate(total=Sum("amount"))
+        .order_by("tender_desc")
+    )
+
+    
 
     return JsonResponse({
         "opening_cash": float(session.opening_cash),
         "paid_in_cash": float(paid_in_cash),
         "credit_debit_cash": float(credit_debit_cash),
+        "credit_debit_cash_list": [
+            {
+                "tender_desc": row["tender_desc"] or "",
+                "total": float(row["total"] or 0),
+            }
+            for row in credit_debit_cash_list
+        ],
+
     })
 
 # ---------------------------------------------------------------------------
