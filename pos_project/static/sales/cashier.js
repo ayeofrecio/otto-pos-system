@@ -813,7 +813,7 @@
         const openingCash    = parseFloat(data.opening_cash)    || 0;
         const paidInCash     = parseFloat(data.paid_in_cash)    || 0;
         const creditDebitCash = parseFloat(data.credit_debit_cash) || 0;
-        const expected       = openingCash + paidInCash + creditDebitCash;
+        const expected       = openingCash + paidInCash; //+ creditDebitCash;
  
         // Cache on modal element so other functions can read them
         modal._openingCash     = openingCash;
@@ -865,8 +865,8 @@
     if (!cashInput || !varianceEl || !modal) return;
  
     const expected = (modal._openingCash || 0)
-                   + (modal._paidInCash || 0)
-                   + (modal._creditDebitCash || 0);
+                   + (modal._paidInCash || 0);
+                  //  + (modal._creditDebitCash || 0);
  
     const raw    = cashInput.value;
     const actual = parseFloat(raw) || 0;

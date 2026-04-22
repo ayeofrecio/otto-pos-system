@@ -243,8 +243,32 @@ def to_close_session_details(request):
     if not session:
         return JsonResponse({"error": "No open session found."}, status=400)
 
+    # Cash tenders are those configured to give change (pchange="Y").
+    cash_tender_codes = list(
+        Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
+    )
+
+    paid_in_cash = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+            pcode__in=cash_tender_codes,
+        ).aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
+    credit_debit_cash = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+        ).exclude(
+            pcode__in=cash_tender_codes,
+        ).aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
     return JsonResponse({
         "opening_cash": float(session.opening_cash),
+        "paid_in_cash": float(paid_in_cash),
+        "credit_debit_cash": float(credit_debit_cash),
     })
 
 # ---------------------------------------------------------------------------
@@ -792,7 +816,7 @@ def payment_complete(request):
             tag4=getattr(line, 'tag4', ''),
             promo_tag=getattr(line, 'promo_tag', ''),
         )
-        for line in cart_lines
+        for line in cart_lines_qs
     ])
 
     # --- Create one Payment per tender entry ---
@@ -846,7 +870,7 @@ def payment_complete(request):
     }
 
     # --- Clear cart, advance transaction number ---
-    cart_lines.delete()
+    cart_lines_qs.delete()
     request.session["pos_trans_no"] = _get_next_transaction_no()
     _clear_trans_disc(request)
 
@@ -926,10 +950,10 @@ def close_session(request):
     expected_cash = parse_decimal(request.POST.get("expected_cash"))
     cash_variance = parse_decimal(request.POST.get("cash_variance"))
     notes         = request.POST.get("notes", "").strip()
-    print(session)
-    print(closing_cash)
-    print(expected_cash)
-    print(cash_variance)
+    # print(session)
+    # print(closing_cash)
+    # print(expected_cash)
+    # print(cash_variance)
     if closing_cash < 0:
         messages.error(request, "Closing cash cannot be negative.")
         return redirect("sales:pos_cashier")

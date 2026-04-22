@@ -1460,6 +1460,7 @@
 
         .close-trans-notes-input {
             width: 100%;
+            max-height: 5rem;
             padding: 0.6rem 0.75rem;
             font-size: 0.9rem;
             border: 1.5px solid #2f3640;
@@ -1590,9 +1591,9 @@
                         <dt>Code:</dt>
                         <dd>{{ last_item.item_code }}</dd>
                         <dt>Size:</dt>
-                        <dd>{% size_display last_item.item_size as _item_size %}{{ _item_size|default:"—" }}</dd>
+                        <dd>{% size_display last_item.item_size %}{{ last_item.item_size|default:"—" }}</dd>
                         <dt>Color:</dt>
-                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as _item_color %}{{ _item_color|default:"—" }}</dd>
+                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as _item_color %}{{ last_item.item_size|default:"—" }}</dd>
                         <dt>Price:</dt>
                         <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
                     </dl>
