@@ -333,7 +333,7 @@
     });
   }
 
-   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Line Discount Modal (click row in Items Entered)
   // ---------------------------------------------------------------------------
   var lineDiscRecCtr = null;
@@ -761,45 +761,70 @@
       })
     );
   }
- 
+
   function getModal() {
     return document.getElementById("close-trans-modal");
   }
- 
+
   // ---------------------------------------------------------------------------
   // Close Transaction Modal — open / close
   // ---------------------------------------------------------------------------
+  function renderCreditDebitBreakdown(list) {
+    const container = document.getElementById("close-trans-credit-debit-list");
+    container.innerHTML = "";
+
+    list.forEach(item => {
+      const row = document.createElement("div");
+
+      const label = document.createElement("span");
+      label.textContent = item.tender_desc;
+
+      const value = document.createElement("span");
+      value.textContent = `₱${item.total.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })}`;
+
+      row.appendChild(label);
+      row.appendChild(value);
+      container.appendChild(row);
+    });
+  }
+
   window.openCloseTransModal = function () {
     const modal = getModal();
     if (!modal) return;
- 
+
     // Reset inputs
     const cashInput = document.getElementById("closing-cash-input");
     const notesInput = document.getElementById("close-trans-notes");
     const confirmBtn = document.getElementById("close-trans-confirm-btn");
+    const container = document.getElementById("close-trans-credit-debit-list");
+    
+    if (container) container.innerHTML = "";
     if (cashInput) cashInput.value = "";
     if (notesInput) notesInput.value = "";
     if (confirmBtn) confirmBtn.disabled = true;
- 
+
     // Reset variance display
     const varianceEl = document.getElementById("close-trans-variance");
     if (varianceEl) {
       varianceEl.textContent = "—";
       varianceEl.className = "close-trans-variance-val";
     }
- 
+
     // Reset expected cash display
     const expectedEl = document.getElementById("close-trans-expected-cash");
     if (expectedEl) expectedEl.textContent = "₱0.00";
- 
+
     // Reset denomination modal
     resetDenomModal();
- 
+
     // Clear stale session data from modal
     modal._openingCash = 0;
     modal._paidInCash = 0;
     modal._creditDebitCash = 0;
- 
+
     // Fetch session cash summary from backend
     fetch("/pos/to-close-session-details/", {
       method: "GET",
@@ -810,90 +835,93 @@
     })
       .then((r) => r.json())
       .then((data) => {
-        const openingCash    = parseFloat(data.opening_cash)    || 0;
-        const paidInCash     = parseFloat(data.paid_in_cash)    || 0;
+        const openingCash = parseFloat(data.opening_cash) || 0;
+        const paidInCash = parseFloat(data.paid_in_cash) || 0;
         const creditDebitCash = parseFloat(data.credit_debit_cash) || 0;
-        const expected       = openingCash + paidInCash; //+ creditDebitCash;
- 
+        const expected = openingCash + paidInCash; //+ creditDebitCash;
+
         // Cache on modal element so other functions can read them
-        modal._openingCash     = openingCash;
-        modal._paidInCash      = paidInCash;
+        modal._openingCash = openingCash;
+        modal._paidInCash = paidInCash;
         modal._creditDebitCash = creditDebitCash;
- 
+
         // Update summary strip
-        const opening_cashEl     = document.getElementById("close-trans-opening-cash");
-        const paid_in_cashEl     = document.getElementById("close-trans-paid-in-cash");
-        const credit_debitEl     = document.getElementById("close-trans-credit-debit-cash");
-        const expectedEl         = document.getElementById("close-trans-expected-cash");
- 
-        if (opening_cashEl)  opening_cashEl.textContent  = formatPeso(openingCash);
-        if (paid_in_cashEl)  paid_in_cashEl.textContent  = formatPeso(paidInCash);
-        if (credit_debitEl)  credit_debitEl.textContent  = formatPeso(creditDebitCash);
-        if (expectedEl)      expectedEl.textContent       = formatPeso(expected);
- 
+        const opening_cashEl = document.getElementById("close-trans-opening-cash");
+        const paid_in_cashEl = document.getElementById("close-trans-paid-in-cash");
+        const credit_debitEl = document.getElementById("close-trans-credit-debit-cash");
+        const expectedEl = document.getElementById("close-trans-expected-cash");
+
+        if (opening_cashEl) opening_cashEl.textContent = formatPeso(openingCash);
+        if (paid_in_cashEl) paid_in_cashEl.textContent = formatPeso(paidInCash);
+        if (credit_debitEl) credit_debitEl.textContent = formatPeso(creditDebitCash);
+        if (expectedEl) expectedEl.textContent = formatPeso(expected);
+
         // Also prefill the hidden fields so a submit right after open is safe
-        document.getElementById("hidden-opening-cash").value     = openingCash.toFixed(2);
-        document.getElementById("hidden-paid-in-cash").value     = paidInCash.toFixed(2);
+        document.getElementById("hidden-opening-cash").value = openingCash.toFixed(2);
+        document.getElementById("hidden-paid-in-cash").value = paidInCash.toFixed(2);
         document.getElementById("hidden-credit-debit-cash").value = creditDebitCash.toFixed(2);
-        document.getElementById("hidden-expected-cash").value    = expected.toFixed(2);
+        document.getElementById("hidden-expected-cash").value = expected.toFixed(2);
+
+        const creditDebitList = data.credit_debit_cash_list || [];
+        renderCreditDebitBreakdown(creditDebitList);
       })
       .catch((err) => console.error("Failed to load session details:", err));
- 
+
     modal.classList.add("open");
     setTimeout(() => cashInput && cashInput.focus(), 80);
   };
- 
+
   window.closeCloseTransModal = function () {
     const modal = getModal();
     if (modal) modal.classList.remove("open");
     document.getElementById("barcode-input")?.focus();
   };
- 
+
   window.closeCloseTransModalOutside = function (evt) {
     if (evt.target === getModal()) window.closeCloseTransModal();
   };
- 
+
   // ---------------------------------------------------------------------------
   // Variance — recalculate whenever the closing cash input changes
   // ---------------------------------------------------------------------------
   function recalcVariance() {
-    const modal      = getModal();
-    const cashInput  = document.getElementById("closing-cash-input");
+    const modal = getModal();
+    const cashInput = document.getElementById("closing-cash-input");
     const varianceEl = document.getElementById("close-trans-variance");
     const confirmBtn = document.getElementById("close-trans-confirm-btn");
- 
+
     if (!cashInput || !varianceEl || !modal) return;
- 
+
     const expected = (modal._openingCash || 0)
-                   + (modal._paidInCash || 0);
-                  //  + (modal._creditDebitCash || 0);
- 
-    const raw    = cashInput.value;
+      + (modal._paidInCash || 0);
+    //  + (modal._creditDebitCash || 0);
+
+    const raw = cashInput.value;
     const actual = parseFloat(raw) || 0;
- 
+
     if (!raw) {
       varianceEl.textContent = "—";
-      varianceEl.className   = "close-trans-variance-val";
+      varianceEl.className = "close-trans-variance-val";
       if (confirmBtn) confirmBtn.disabled = true;
       return;
     }
- 
+
     const variance = actual - expected;
- 
+
     if (variance > 0) {
       varianceEl.textContent = "+" + formatPeso(variance) + " over";
-      varianceEl.className   = "close-trans-variance-val over";
+      varianceEl.className = "close-trans-variance-val over";
     } else if (variance < 0) {
       varianceEl.textContent = formatPeso(Math.abs(variance)) + " short";
-      varianceEl.className   = "close-trans-variance-val short";
+      varianceEl.className = "close-trans-variance-val short";
     } else {
       varianceEl.textContent = "Exact";
-      varianceEl.className   = "close-trans-variance-val exact";
+      varianceEl.className = "close-trans-variance-val exact";
     }
- 
+
     if (confirmBtn) confirmBtn.disabled = actual < 0;
   }
- 
+
   const closingCashInput = document.getElementById("closing-cash-input");
   if (closingCashInput) {
     closingCashInput.addEventListener("input", recalcVariance);
@@ -908,7 +936,7 @@
       }
     });
   }
- 
+
   // ---------------------------------------------------------------------------
   // Confirm close — populate hidden fields then submit the form
   // ---------------------------------------------------------------------------
@@ -918,28 +946,28 @@
   if (closeTransForm) {
     closeTransForm.addEventListener("submit", function (evt) {
       evt.preventDefault();
- 
-      const modal     = getModal();
+
+      const modal = getModal();
       const cashInput = document.getElementById("closing-cash-input");
- 
-      const closingCash     = parseFloat(cashInput?.value) || 0;
-      const openingCash     = modal?._openingCash     || 0;
-      const paidInCash      = modal?._paidInCash      || 0;
+
+      const closingCash = parseFloat(cashInput?.value) || 0;
+      const openingCash = modal?._openingCash || 0;
+      const paidInCash = modal?._paidInCash || 0;
       const creditDebitCash = modal?._creditDebitCash || 0;
-      const expected        = openingCash + paidInCash + creditDebitCash;
-      const variance        = closingCash - expected;
- 
-      document.getElementById("hidden-opening-cash").value      = openingCash.toFixed(2);
-      document.getElementById("hidden-paid-in-cash").value      = paidInCash.toFixed(2);
+      const expected = openingCash + paidInCash + creditDebitCash;
+      const variance = closingCash - expected;
+
+      document.getElementById("hidden-opening-cash").value = openingCash.toFixed(2);
+      document.getElementById("hidden-paid-in-cash").value = paidInCash.toFixed(2);
       document.getElementById("hidden-credit-debit-cash").value = creditDebitCash.toFixed(2);
-      document.getElementById("hidden-expected-cash").value     = expected.toFixed(2);
-      document.getElementById("hidden-cash-variance").value     = variance.toFixed(2);
- 
+      document.getElementById("hidden-expected-cash").value = expected.toFixed(2);
+      document.getElementById("hidden-cash-variance").value = variance.toFixed(2);
+
       // Standard form POST — Django handles the redirect
       closeTransForm.submit();
     });
   }
- 
+
   // ---------------------------------------------------------------------------
   // Denomination Modal
   // ---------------------------------------------------------------------------
@@ -948,70 +976,70 @@
     document.querySelectorAll(".denom-subtotal").forEach((el) => (el.textContent = "₱0.00"));
     const totalDisplay = document.getElementById("denom-total-display");
     if (totalDisplay) {
-      totalDisplay.textContent  = "₱0.00";
+      totalDisplay.textContent = "₱0.00";
       totalDisplay.dataset.total = "0";
     }
   }
- 
+
   window.openDenominationModal = function () {
     document.getElementById("denom-modal").style.display = "flex";
   };
- 
+
   window.closeDenominationModal = function () {
     document.getElementById("denom-modal").style.display = "none";
   };
- 
+
   window.closeDenominationModalOutside = function (evt) {
     if (evt.target.id === "denom-modal") window.closeDenominationModal();
   };
- 
+
   window.applyDenominationTotal = function () {
     const totalDisplay = document.getElementById("denom-total-display");
-    const total        = parseFloat(totalDisplay?.dataset.total || 0);
-    const cashInput    = document.getElementById("closing-cash-input");
- 
+    const total = parseFloat(totalDisplay?.dataset.total || 0);
+    const cashInput = document.getElementById("closing-cash-input");
+
     if (cashInput) {
       cashInput.value = total.toFixed(2);
       // Trigger variance recalc
       cashInput.dispatchEvent(new Event("input", { bubbles: true }));
       cashInput.focus();
     }
- 
+
     window.closeDenominationModal();
   };
- 
+
   function updateDenomTotal() {
     let total = 0;
     document.querySelectorAll(".denom-row").forEach((row) => {
       const value = parseFloat(row.dataset.value) || 0;
-      const qty   = parseInt(row.querySelector(".denom-qty").value || 0, 10) || 0;
+      const qty = parseInt(row.querySelector(".denom-qty").value || 0, 10) || 0;
       total += value * qty;
     });
- 
+
     const totalDisplay = document.getElementById("denom-total-display");
     if (totalDisplay) {
-      totalDisplay.textContent   = formatPeso(total);
+      totalDisplay.textContent = formatPeso(total);
       totalDisplay.dataset.total = total;
     }
   }
- 
+
   // Wire up each denomination row — single implementation
   document.querySelectorAll(".denom-row").forEach((row) => {
-    const value      = parseFloat(row.dataset.value) || 0;
-    const qtyInput   = row.querySelector(".denom-qty");
+    const value = parseFloat(row.dataset.value) || 0;
+    const qtyInput = row.querySelector(".denom-qty");
     const subtotalEl = row.querySelector(".denom-subtotal");
-    const plusBtn    = row.querySelector(".plus");
-    const minusBtn   = row.querySelector(".minus");
- 
+    const plusBtn = row.querySelector(".plus");
+    const minusBtn = row.querySelector(".minus");
+
     function updateRow() {
-      const qty      = parseInt(qtyInput.value || 0, 10) || 0;
+      const qty = parseInt(qtyInput.value || 0, 10) || 0;
       const subtotal = qty * value;
       if (subtotalEl) subtotalEl.textContent = formatPeso(subtotal);
       updateDenomTotal();
     }
- 
-    plusBtn?.addEventListener("click",  () => { qtyInput.value = (parseInt(qtyInput.value || 0, 10) || 0) + 1;                       updateRow(); });
-    minusBtn?.addEventListener("click", () => { qtyInput.value = Math.max(0, (parseInt(qtyInput.value || 0, 10) || 0) - 1);          updateRow(); });
+
+    plusBtn?.addEventListener("click", () => { qtyInput.value = (parseInt(qtyInput.value || 0, 10) || 0) + 1; updateRow(); });
+    minusBtn?.addEventListener("click", () => { qtyInput.value = Math.max(0, (parseInt(qtyInput.value || 0, 10) || 0) - 1); updateRow(); });
     qtyInput?.addEventListener("input", updateRow);
   });
 })();
