@@ -771,7 +771,15 @@
   // ---------------------------------------------------------------------------
   function renderCreditDebitBreakdown(list) {
     const container = document.getElementById("close-trans-credit-debit-list");
+    if (!container) return;
     container.innerHTML = "";
+
+    if (list.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "No data";
+      container.appendChild(empty);
+      return; // ← stop here, don't iterate
+    }
 
     list.forEach(item => {
       const row = document.createElement("div");
@@ -800,7 +808,7 @@
     const notesInput = document.getElementById("close-trans-notes");
     const confirmBtn = document.getElementById("close-trans-confirm-btn");
     const container = document.getElementById("close-trans-credit-debit-list");
-    
+
     if (container) container.innerHTML = "";
     if (cashInput) cashInput.value = "";
     if (notesInput) notesInput.value = "";
@@ -863,6 +871,7 @@
         document.getElementById("hidden-expected-cash").value = expected.toFixed(2);
 
         const creditDebitList = data.credit_debit_cash_list || [];
+
         renderCreditDebitBreakdown(creditDebitList);
       })
       .catch((err) => console.error("Failed to load session details:", err));
