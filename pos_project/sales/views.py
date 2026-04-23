@@ -1626,6 +1626,10 @@ def receipt_view(request):
         "change_amount":    receipt.get("change_amount", ""),
         "lines":            receipt["lines"],
         # "assisted_by":      receipt.get["salesperson"] or ""
+        "headers":      list(terminal_config.headers.all().order_by("line_number")),
+        "footers":      _get_customer_footers(terminal_config),
+        "cashier_name": session.cashier.get_full_name() or session.cashier.username,
+        "store_id":     session.store_id,
     }
  
     printer = None
