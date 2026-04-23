@@ -164,8 +164,11 @@
     const barcodeInput = document.getElementById('barcode-input');
     const qtyInput = document.getElementById('qty-input');
     if (barcodeInput && path.includes('/cart/add')) {
+      // Keep entered qty when barcode is not found and search modal is requested.
+      const responseText = (evt.detail.xhr && evt.detail.xhr.responseText) || '';
+      const isNotFoundFlow = responseText.indexOf('data-open-search') !== -1;
       barcodeInput.value = '';
-      if (qtyInput) { qtyInput.value = '1'; }
+      if (qtyInput && !isNotFoundFlow) { qtyInput.value = '1'; }
       // Item discount is one-shot — reset after each scan
       window.clearDiscount();
       barcodeInput.focus();
