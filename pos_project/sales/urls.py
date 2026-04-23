@@ -10,6 +10,7 @@ app_name = "sales"
 
 urlpatterns = [
     path("", views.cashier_view, name="pos_cashier"),
+    path("admin/posnbr-init/", views.admin_posnbr_init, name="admin_posnbr_init"),
     path("cart/add/", views.cart_add, name="cart_add"),
     path("cart/variants/", views.item_variants, name="item_variants"),
     path("cart/remove/", views.cart_remove, name="cart_remove"),

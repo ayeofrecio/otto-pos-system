@@ -924,6 +924,12 @@
             background: #2d343e;
         }
 
+        .search-result.active {
+            background: #3a1520;
+            border-left: 3px solid #8b3d4a;
+            padding-left: calc(0.75rem - 3px);
+        }
+
         .search-result-desc {
             font-weight: 500;
         }
@@ -961,14 +967,25 @@
             background: #252b33;
             border: 1px solid #2f3640;
             border-radius: 8px;
-            width: 480px;
+            width: min(960px, 96vw);
             max-width: 95vw;
-            max-height: 85vh;
-            overflow-y: auto;
+            max-height: 90vh;
+            overflow: hidden;
         }
 
         .pay-modal-inner {
             padding: 1.25rem 1.5rem;
+        }
+
+        .pay-layout {
+            display: grid;
+            grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+            gap: 1rem;
+            align-items: start;
+        }
+
+        .pay-col {
+            min-width: 0;
         }
 
         .pay-total-box {
@@ -1267,6 +1284,17 @@
 
         .pay-add-btn {
             margin-top: 0.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .pay-modal {
+                width: 96vw;
+                max-height: 90vh;
+            }
+
+            .pay-layout {
+                grid-template-columns: 1fr;
+            }
         }
 
         /* ── Close Transaction Modal ───────────────────────────────────── */
@@ -1662,6 +1690,9 @@
         </div>
         <div class="header-right">
             <span class="time" id="live-time">{{ time }}</span>
+            {% if request.user.is_superuser %}
+            <a href="{% url 'sales:admin_posnbr_init' %}" class="btn btn-secondary">POSNBR</a>
+            {% endif %}
             <a href="{% url 'pos_logout' %}" class="btn btn-secondary">Logout</a>
         </div>
     </header>

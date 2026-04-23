@@ -5,11 +5,13 @@ POS Cashier views: login, cashier screen, cart operations.
 import datetime
 import django.utils.timezone as timezone
 from decimal import Decimal
+from io import StringIO
 from pyexpat.errors import messages
 from django.http import JsonResponse
 
 from django.db import models
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.management import call_command, CommandError
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
@@ -19,7 +21,7 @@ from users.models import POSSession
 from .color_lookup import get_color_description
 from .size_lookup import get_size_description
 from .decorators import require_open_session
-from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransCounter, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
+from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
 
@@ -172,23 +174,72 @@ def _get_store_details():
 
 # ---------------------------------------------------------------------------
 
-def _get_next_transaction_no():
-    """Get and increment the next transaction number."""
+def _normalize_transaction_no(value):
+    """Return 8-digit numeric transaction number string."""
     try:
-        row = POSTransCounter.objects.first()
-        if row:
-            trans_no = row.transaction_no
-            try:
-                n = int(trans_no)
-                next_no = str(n + 1).zfill(8)
-            except ValueError:
-                next_no = "00000001"
-            row.transaction_no = next_no
-            row.save()
-            return next_no
-    except Exception:
-        pass
-    return "00000001"
+        return str(int(str(value).strip() or "0")).zfill(8)
+    except (TypeError, ValueError):
+        return "00000000"
+
+
+def _save_current_transaction_no(trans_no):
+    """Persist the latest used transaction number in POSNBR."""
+    current_no = _normalize_transaction_no(trans_no)
+    row = POSTransNumber.objects.order_by("id").first()
+    if row:
+        row.transaction_no = current_no
+        row.save(update_fields=["transaction_no"])
+        return row
+
+    return POSTransNumber.objects.create(transaction_no=current_no)
+
+
+def _get_next_transaction_no():
+    """Get next transaction number from POSNBR and persist it as current."""
+    row = POSTransNumber.objects.order_by("id").first()
+    if not row:
+        # First transaction in a fresh setup.
+        return _save_current_transaction_no("00000001").transaction_no
+
+    current = _normalize_transaction_no(row.transaction_no)
+    next_no = str(int(current) + 1).zfill(8)
+    row.transaction_no = next_no
+    row.save(update_fields=["transaction_no"])
+    return next_no
+
+
+@login_required(login_url="pos_login")
+@user_passes_test(lambda u: u.is_superuser)
+@require_http_methods(["GET", "POST"])
+def admin_posnbr_init(request):
+    """Super-admin tool to initialize/update POSNBR starting transaction number."""
+    command_output = ""
+    command_error = ""
+
+    if request.method == "POST":
+        start = (request.POST.get("start") or "").strip()
+        force = bool(request.POST.get("force"))
+        out = StringIO()
+        try:
+            call_command("init_posnbr", start=start, force=force, stdout=out)
+            command_output = out.getvalue().strip()
+        except CommandError as exc:
+            command_error = str(exc)
+        except Exception as exc:
+            command_error = f"Unexpected error: {exc}"
+
+    posnbr = POSTransNumber.objects.order_by("id").first()
+    current_no = _normalize_transaction_no(posnbr.transaction_no) if posnbr else "(not set)"
+
+    return render(
+        request,
+        "sales/admin_posnbr_init.html",
+        {
+            "current_no": current_no,
+            "command_output": command_output,
+            "command_error": command_error,
+        },
+    )
 
 # ---------------------------------------------------------------------------
 # Open session view
@@ -574,6 +625,7 @@ def cart_new(request):
             store_id=STORE_ID,
             transaction_no=trans_no,
         ).delete() # This needs to be configured to suspend instead of delete in case we want to support suspended transactions in the future
+        _save_current_transaction_no(trans_no)
 
     new_trans = _get_next_transaction_no()
     request.session["pos_trans_no"] = new_trans
@@ -739,7 +791,9 @@ def pay_view(request):
 
 
 def _parse_tender_entries(request):
-    """Parse tender_entries JSON from POST. Returns list of {"pcode": ..., "amount": ...} or empty."""
+    """Parse tender_entries JSON from POST.
+    Returns list of {"pcode": ..., "amount": ..., "payment_reference": ...} or empty.
+    """
     import json
     raw = request.POST.get("tender_entries", "").strip()
     if not raw:
@@ -753,8 +807,9 @@ def _parse_tender_entries(request):
                 amt = Decimal(str(item.get("amount", 0) or 0))
             except (ValueError, TypeError):
                 amt = Decimal("0")
+            payment_reference = str(item.get("payment_reference") or "").strip()[:20]
             if pcode and amt > 0:
-                entries.append({"pcode": pcode, "amount": amt})
+                entries.append({"pcode": pcode, "amount": amt, "payment_reference": payment_reference})
         return entries
     except (json.JSONDecodeError, TypeError):
         return []
@@ -794,6 +849,17 @@ def payment_complete(request):
     total_tendered = sum(t["amount"] for t in tender_entries)
     if total_tendered < total:
         return redirect("sales:pay")
+
+    # Enforce reference for non-cash tenders and disallow overpay on non-cash entries.
+    running_remaining = total
+    for t in tender_entries:
+        tender = Tender.objects.filter(pcode=t["pcode"]).first()
+        is_cash = bool(tender and tender.pchange == "Y")
+        if not is_cash and not (t.get("payment_reference") or "").strip():
+            return redirect("sales:pay")
+        if not is_cash and t["amount"] > running_remaining:
+            return redirect("sales:pay")
+        running_remaining = max(Decimal("0"), running_remaining - t["amount"])
 
     now = datetime.datetime.now()
     try:
@@ -877,7 +943,7 @@ def payment_complete(request):
                 (tl["desc"] for tl in tender_lines if tl["pcode"] == t["pcode"]),
                 t["pcode"]
             ),
-            payment_reference="",
+            payment_reference=(t.get("payment_reference") or "")[:20],
         )
         for t in tender_entries
     ])
@@ -934,7 +1000,8 @@ def payment_complete(request):
         ],
     }
 
-    # --- Clear cart, advance transaction number ---
+    # --- Persist current transaction no, clear cart, advance transaction number ---
+    _save_current_transaction_no(trans_no)
     cart_lines_qs.delete()
     request.session["pos_trans_no"] = _get_next_transaction_no()
     _clear_trans_disc(request)

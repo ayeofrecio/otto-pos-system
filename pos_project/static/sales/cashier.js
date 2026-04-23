@@ -9,6 +9,33 @@
   'use strict';
 
   // ---------------------------------------------------------------------------
+  // Best-effort browser maximize for POS usage
+  // ---------------------------------------------------------------------------
+  function maximizeBrowserWindow() {
+    try {
+      window.moveTo(0, 0);
+      if (window.screen && window.screen.availWidth && window.screen.availHeight) {
+        window.resizeTo(window.screen.availWidth, window.screen.availHeight);
+      }
+    } catch (_) {
+      // Some browsers block script-driven window resize/move.
+    }
+  }
+  maximizeBrowserWindow();
+
+  async function toggleFullscreenMode() {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (_) {
+      // Fullscreen may be blocked by browser policy.
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Live time tick
   // ---------------------------------------------------------------------------
   function updateTime() {
@@ -159,6 +186,13 @@
       if (mappedKeys.includes(evt.key)) {
         evt.preventDefault();
       }
+    }
+
+    // F9 toggles browser fullscreen for kiosk-like POS mode.
+    if (evt.key === 'F9') {
+      evt.preventDefault();
+      toggleFullscreenMode();
+      return;
     }
 
     if (evt.key === 'F1') {
@@ -711,10 +745,14 @@
   // Item Search Modal
   // ---------------------------------------------------------------------------
   let searchTimer = null;
+  let searchResultsCache = [];
+  let searchSelectedIndex = -1;
 
   window.openSearchModal = function (prefill) {
     const modal = document.getElementById('search-modal');
     const input = document.getElementById('modal-search-input');
+    searchResultsCache = [];
+    searchSelectedIndex = -1;
     modal.classList.add('open');
     setTimeout(function () {
       input.focus();
@@ -731,6 +769,8 @@
     document.getElementById('modal-search-input').value = '';
     document.getElementById('modal-results').innerHTML =
       '<p class="search-hint">Type at least 2 characters to search</p>';
+    searchResultsCache = [];
+    searchSelectedIndex = -1;
     const barcodeInput = document.getElementById('barcode-input');
     if (barcodeInput) { barcodeInput.focus(); }
   };
@@ -828,12 +868,32 @@
     modalInput.addEventListener('input', function () {
       clearTimeout(searchTimer);
       const q = modalInput.value.trim();
+      searchResultsCache = [];
+      searchSelectedIndex = -1;
       if (q.length < 2) {
         document.getElementById('modal-results').innerHTML =
           '<p class="search-hint">Type at least 2 characters to search</p>';
         return;
       }
       searchTimer = setTimeout(function () { doSearch(q); }, 250);
+    });
+
+    modalInput.addEventListener('keydown', function (evt) {
+      const modal = document.getElementById('search-modal');
+      if (!modal || !modal.classList.contains('open')) { return; }
+
+      if (evt.key === 'ArrowDown') {
+        evt.preventDefault();
+        moveSearchSelection(1);
+      } else if (evt.key === 'ArrowUp') {
+        evt.preventDefault();
+        moveSearchSelection(-1);
+      } else if (evt.key === 'Enter') {
+        if (searchResultsCache.length > 0) {
+          evt.preventDefault();
+          selectActiveSearchResult();
+        }
+      }
     });
   }
 
@@ -853,6 +913,8 @@
 
   function renderResults(results) {
     const resultsEl = document.getElementById('modal-results');
+    searchResultsCache = results || [];
+    searchSelectedIndex = -1;
     if (!results || results.length === 0) {
       resultsEl.innerHTML = '<p class="search-empty">No items found.</p>';
       return;
@@ -873,6 +935,42 @@
         '</div>';
     });
     resultsEl.innerHTML = rows.join('');
+    setSearchSelection(0);
+  }
+
+  function moveSearchSelection(delta) {
+    if (!searchResultsCache.length) { return; }
+    if (searchSelectedIndex < 0) {
+      setSearchSelection(delta > 0 ? 0 : searchResultsCache.length - 1);
+      return;
+    }
+    const next = (searchSelectedIndex + delta + searchResultsCache.length) % searchResultsCache.length;
+    setSearchSelection(next);
+  }
+
+  function setSearchSelection(index) {
+    const rows = document.querySelectorAll('#modal-results .search-result');
+    if (!rows.length) {
+      searchSelectedIndex = -1;
+      return;
+    }
+    const bounded = Math.max(0, Math.min(index, rows.length - 1));
+    searchSelectedIndex = bounded;
+    rows.forEach(function (row, idx) {
+      row.classList.toggle('active', idx === bounded);
+    });
+    if (rows[bounded] && rows[bounded].scrollIntoView) {
+      rows[bounded].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function selectActiveSearchResult() {
+    if (!searchResultsCache.length) { return; }
+    const idx = searchSelectedIndex >= 0 ? searchSelectedIndex : 0;
+    const item = searchResultsCache[idx];
+    if (item && item.barcode) {
+      window.selectSearchResult(item.barcode);
+    }
   }
 
   window.selectSearchResult = function (barcode) {
