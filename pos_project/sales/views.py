@@ -17,6 +17,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
 from users.models import POSSession
+from users.models import Users
 
 from .color_lookup import get_color_description
 from .size_lookup import get_size_description
@@ -24,6 +25,18 @@ from .decorators import require_open_session
 from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
+from .pos_constants import (
+    RCODE_ITEM_VOID,
+    TAG_ITEM_VOID,
+    TAG_VOID_PREVIOUS,
+    TAG_VOID_TRANS,
+    TRTYPE_VOID_ITEM,
+    TRTYPE_VOID_ITEM_LEGACY,
+    TRTYPE_VOID_PREVIOUS,
+    TRTYPE_VOID_TRANS,
+    TRTYPE_VOID_TRANS_LEGACY,
+    VOID_TRANSACTION_TYPES_ALL,
+)
 
 from setup.pos_keys import get_pos_keys
 
@@ -84,6 +97,47 @@ def _clear_trans_disc(request):
     """Remove transaction discount from session."""
     for key in ("pos_trans_disc_pct", "pos_trans_disc_type", "pos_trans_disc_label"):
         request.session.pop(key, None)
+
+
+def _verify_manager_pin(pin: str):
+    """Return manager/admin user object when PIN matches; else None."""
+    clean_pin = (pin or "").strip()
+    if not clean_pin:
+        return None
+
+    managers = Users.objects.filter(
+        role__in=[Users.ROLE_MANAGER, Users.ROLE_ADMIN, Users.ROLE_SUPERVISOR],
+        is_active=True,
+        is_suspended=False,
+    )
+
+    for user in managers:
+        if user.check_password(clean_pin):
+            return user
+    return None
+
+
+def _build_temp_line_cart_context(request, trans_no):
+    """Build cart context values used by cart mutation endpoints."""
+    user_id = _get_user_id(request)
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+    return {
+        "cart_lines": cart_lines,
+        "subtotal": subtotal,
+        "trans_disc": trans_disc,
+        "trans_disc_amt": trans_disc_amt,
+        "total": total,
+        "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+        "last_item": cart_lines.last(),
+    }
 
 
 def _get_user_id(request):
@@ -609,6 +663,271 @@ def cart_remove(request):
         )
 
     return JsonResponse({"ok": True, "total": str(total)})
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_void_item(request):
+    """Void one line from the current cart (F8) and classify as item-void."""
+    try:
+        rec_ctr = int(request.POST.get("rec_ctr", 0))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    line = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        rec_ctr=rec_ctr,
+    ).first()
+    if not line:
+        return JsonResponse({"ok": False, "error": "Line not found"}, status=404)
+
+    session = get_current_session(request)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open POS session"}, status=400)
+
+    now = datetime.datetime.now()
+    header = TransactionHeader.objects.create(
+        session=session,
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        transaction_date=session.business_date,
+        transaction_time=now.strftime("%H:%M"),
+        transaction_type=TRTYPE_VOID_ITEM,
+        return_code=RCODE_ITEM_VOID,
+        item_ref=str(line.rec_ctr),
+    )
+    TransactionItem.objects.create(
+        header=header,
+        item_code=line.item_code or "",
+        item_description=line.item_description or "",
+        item_qty=line.item_qty or 0,
+        item_uom=line.item_uom or "",
+        item_supplier=line.item_supplier or "",
+        item_department=line.item_department or "",
+        item_class=line.item_class or "",
+        item_size=line.item_size or "",
+        item_color=line.item_color or "",
+        item_type=line.item_type or "",
+        item_cost=line.item_cost or 0,
+        item_price=line.item_price or 0,
+        item_discount=line.item_discount or 0,
+        discount_code=line.discount_code or "",
+        item_price_ext=line.item_price_ext or 0,
+        tag1=TAG_ITEM_VOID,
+        tag2=line.tag2 or "",
+        tag3=line.tag3 or "",
+        tag4=line.tag4 or "",
+        promo_tag=line.promo_tag or "",
+    )
+
+    line.delete()
+
+    context = _build_temp_line_cart_context(request, trans_no)
+    if request.headers.get("HX-Request"):
+        return render(request, "sales/partials/cart_remove_response.html", context)
+    return JsonResponse({
+        "ok": True,
+        "void_kind": "item",
+        "transaction_type": TRTYPE_VOID_ITEM,
+        "remaining_items": context["item_count"],
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_void_transaction(request):
+    """Void the full active transaction (F7) with manager PIN, same business day."""
+    manager_pin = request.POST.get("manager_pin", "")
+    manager_user = _verify_manager_pin(manager_pin)
+    if not manager_user:
+        return JsonResponse({"ok": False, "error": "Manager PIN is invalid"}, status=403)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    cart_lines = list(TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr"))
+    if not cart_lines:
+        return JsonResponse({"ok": False, "error": "Active cart is empty"}, status=400)
+
+    session = get_current_session(request)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open POS session"}, status=400)
+
+    now = datetime.datetime.now()
+    header = TransactionHeader.objects.create(
+        session=session,
+        user_id=user_id,
+        user_id2=manager_user.username[:4],
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        transaction_date=session.business_date,
+        transaction_time=now.strftime("%H:%M"),
+        transaction_type=TRTYPE_VOID_TRANS,
+        return_code=TRTYPE_VOID_TRANS,
+    )
+
+    TransactionItem.objects.bulk_create([
+        TransactionItem(
+            header=header,
+            item_code=line.item_code or "",
+            item_description=line.item_description or "",
+            item_qty=line.item_qty or 0,
+            item_uom=line.item_uom or "",
+            item_supplier=line.item_supplier or "",
+            item_department=line.item_department or "",
+            item_class=line.item_class or "",
+            item_size=line.item_size or "",
+            item_color=line.item_color or "",
+            item_type=line.item_type or "",
+            item_cost=line.item_cost or 0,
+            item_price=line.item_price or 0,
+            item_discount=line.item_discount or 0,
+            discount_code=line.discount_code or "",
+            item_price_ext=line.item_price_ext or 0,
+            tag1=line.tag1 or "",
+            tag2=line.tag2 or "",
+            tag3=line.tag3 or "",
+            tag4=TAG_VOID_TRANS,
+            promo_tag=line.promo_tag or "",
+        )
+        for line in cart_lines
+    ])
+
+    TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).delete()
+
+    _save_current_transaction_no(trans_no)
+    request.session["pos_trans_no"] = _get_next_transaction_no()
+    _clear_trans_disc(request)
+
+    return JsonResponse({
+        "ok": True,
+        "void_kind": "full",
+        "transaction_type": TRTYPE_VOID_TRANS,
+        "next_transaction_no": request.session.get("pos_trans_no"),
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_void_previous(request):
+    """Void a previous completed transaction (F6) by receipt number, same business day."""
+    manager_pin = request.POST.get("manager_pin", "")
+    manager_user = _verify_manager_pin(manager_pin)
+    if not manager_user:
+        return JsonResponse({"ok": False, "error": "Manager PIN is invalid"}, status=403)
+
+    receipt_no = _normalize_transaction_no(request.POST.get("receipt_no", ""))
+    if receipt_no == "00000000":
+        return JsonResponse({"ok": False, "error": "Receipt number is required"}, status=400)
+
+    session = get_current_session(request)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open POS session"}, status=400)
+
+    target = (
+        TransactionHeader.objects
+        .filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=receipt_no,
+            transaction_date=session.business_date,
+        )
+        .exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL)
+        .order_by("-id")
+        .first()
+    )
+    if not target:
+        return JsonResponse({
+            "ok": False,
+            "error": "Receipt not found for this business day or already voided",
+        }, status=404)
+
+    already_voided = TransactionHeader.objects.filter(
+        store_id=STORE_ID,
+        terminal_id=TERMINAL_ID,
+        transaction_date=session.business_date,
+        transaction_type=TRTYPE_VOID_PREVIOUS,
+        item_ref=receipt_no,
+    ).exists()
+    if already_voided:
+        return JsonResponse({"ok": False, "error": "Receipt already voided previously"}, status=409)
+
+    now = datetime.datetime.now()
+    void_header = TransactionHeader.objects.create(
+        session=session,
+        user_id=_get_user_id(request),
+        user_id2=manager_user.username[:4],
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=request.session.get("pos_trans_no") or receipt_no,
+        transaction_date=session.business_date,
+        transaction_time=now.strftime("%H:%M"),
+        transaction_type=TRTYPE_VOID_PREVIOUS,
+        return_code=TRTYPE_VOID_PREVIOUS,
+        item_ref=receipt_no,
+    )
+
+    source_items = list(target.items.all())
+    if source_items:
+        TransactionItem.objects.bulk_create([
+            TransactionItem(
+                header=void_header,
+                item_code=item.item_code or "",
+                item_description=item.item_description or "",
+                item_qty=item.item_qty or 0,
+                item_uom=item.item_uom or "",
+                item_supplier=item.item_supplier or "",
+                item_department=item.item_department or "",
+                item_class=item.item_class or "",
+                item_size=item.item_size or "",
+                item_color=item.item_color or "",
+                item_type=item.item_type or "",
+                item_cost=item.item_cost or 0,
+                item_price=item.item_price or 0,
+                item_discount=item.item_discount or 0,
+                discount_code=item.discount_code or "",
+                item_price_ext=item.item_price_ext or 0,
+                tag1=item.tag1 or "",
+                tag2=item.tag2 or "",
+                tag3=item.tag3 or "",
+                tag4=TAG_VOID_PREVIOUS,
+                promo_tag=item.promo_tag or "",
+            )
+            for item in source_items
+        ])
+
+    return JsonResponse({
+        "ok": True,
+        "void_kind": "previous",
+        "transaction_type": TRTYPE_VOID_PREVIOUS,
+        "receipt_no": receipt_no,
+    })
 
 
 @login_required
@@ -1484,9 +1803,9 @@ def _do_print_z_reading(session):
     beg_si = si_numbers.first() or "00000000"
     end_si = si_numbers.last()  or "00000000"
  
-    void_line_items   = headers_qs.filter(transaction_type="L").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
-    void_transactions = headers_qs.filter(transaction_type="V").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
-    void_previous     = headers_qs.filter(transaction_type="P").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_line_items   = headers_qs.filter(transaction_type__in=[TRTYPE_VOID_ITEM, TRTYPE_VOID_ITEM_LEGACY]).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_transactions = headers_qs.filter(transaction_type__in=[TRTYPE_VOID_TRANS, TRTYPE_VOID_TRANS_LEGACY]).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_previous     = headers_qs.filter(transaction_type=TRTYPE_VOID_PREVIOUS).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
     item_returns      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price_ext"),      count=Count("id"))
     cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
  
@@ -1496,7 +1815,7 @@ def _do_print_z_reading(session):
         cash_withdrawals["total"],
     ]))
  
-    sales_headers = headers_qs.exclude(transaction_type__in=["V", "L", "P"]).exclude(return_code="R")
+    sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
  
     gross_sales = (
         TransactionItem.objects.filter(header__in=sales_headers)
@@ -1804,9 +2123,9 @@ def _do_print_x_reading(session):
     beg_si = si_numbers.first() or "00000000"
     end_si = si_numbers.last()  or "00000000"
 
-    void_line_items   = headers_qs.filter(transaction_type="L").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
-    void_transactions = headers_qs.filter(transaction_type="V").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
-    void_previous     = headers_qs.filter(transaction_type="P").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_line_items   = headers_qs.filter(transaction_type__in=[TRTYPE_VOID_ITEM, TRTYPE_VOID_ITEM_LEGACY]).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_transactions = headers_qs.filter(transaction_type__in=[TRTYPE_VOID_TRANS, TRTYPE_VOID_TRANS_LEGACY]).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_previous     = headers_qs.filter(transaction_type=TRTYPE_VOID_PREVIOUS).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
     item_returns      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price_ext"),      count=Count("id"))
     cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
 
@@ -1816,7 +2135,7 @@ def _do_print_x_reading(session):
         cash_withdrawals["total"],
     ]))
 
-    sales_headers = headers_qs.exclude(transaction_type__in=["V", "L", "P"]).exclude(return_code="R")
+    sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
 
     gross_sales = (
         TransactionItem.objects.filter(header__in=sales_headers)

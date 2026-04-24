@@ -234,6 +234,24 @@
       return;
     }
 
+    if (evt.key === POS_FKEYS.iVoid) {
+      evt.preventDefault();
+      window.triggerVoidItem();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.iVoidA) {
+      evt.preventDefault();
+      window.triggerVoidTransaction();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.voidTr) {
+      evt.preventDefault();
+      window.triggerVoidPrevious();
+      return;
+    }
+
     if (evt.key === '*' && qtyInput && document.activeElement === barcodeInput && !barcodeInput.value) {
       evt.preventDefault();
       qtyInput.focus();
@@ -995,6 +1013,127 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
+
+  function postFormEncoded(url, payload) {
+    const body = new URLSearchParams(payload || {});
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-CSRFToken': CSRF_TOKEN,
+      },
+      body: body.toString(),
+    }).then(function (r) {
+      return r.json().then(function (data) {
+        return { ok: r.ok, status: r.status, data: data || {} };
+      }).catch(function () {
+        return { ok: r.ok, status: r.status, data: {} };
+      });
+    });
+  }
+
+  function getSelectedRecCtr() {
+    var hidden = document.getElementById('line-disc-rec-ctr');
+    if (hidden && hidden.value) {
+      return hidden.value;
+    }
+    var scanned = document.querySelectorAll('.scanned-item[data-rec-ctr]');
+    if (scanned && scanned.length) {
+      return scanned[scanned.length - 1].getAttribute('data-rec-ctr');
+    }
+    return '';
+  }
+
+  window.triggerVoidItem = function () {
+    var recCtr = getSelectedRecCtr();
+    if (!recCtr) {
+      alert('No item selected to void. Click an item first.');
+      return;
+    }
+    if (!confirm('Void selected item?')) {
+      return;
+    }
+
+    postFormEncoded(CART_VOID_ITEM_URL, { rec_ctr: recCtr })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          alert(res.data.error || 'Failed to void item.');
+          return;
+        }
+        window.location.reload();
+      })
+      .catch(function () {
+        alert('Failed to void item.');
+      });
+  };
+
+  window.triggerVoidTransaction = function () {
+    var managerPin = prompt('Manager PIN required for full transaction void:');
+    if (managerPin === null) {
+      return;
+    }
+    managerPin = String(managerPin || '').trim();
+    if (!managerPin) {
+      alert('Manager PIN is required.');
+      return;
+    }
+    if (!confirm('Void entire active transaction?')) {
+      return;
+    }
+
+    postFormEncoded(CART_VOID_TRANSACTION_URL, { manager_pin: managerPin })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          alert(res.data.error || 'Failed to void transaction.');
+          return;
+        }
+        window.location.reload();
+      })
+      .catch(function () {
+        alert('Failed to void transaction.');
+      });
+  };
+
+  window.triggerVoidPrevious = function () {
+    var receiptNo = prompt('Enter receipt number to void:');
+    if (receiptNo === null) {
+      return;
+    }
+    receiptNo = String(receiptNo || '').trim();
+    if (!receiptNo) {
+      alert('Receipt number is required.');
+      return;
+    }
+
+    var managerPin = prompt('Manager PIN required for void previous transaction:');
+    if (managerPin === null) {
+      return;
+    }
+    managerPin = String(managerPin || '').trim();
+    if (!managerPin) {
+      alert('Manager PIN is required.');
+      return;
+    }
+
+    if (!confirm('Void receipt #' + receiptNo + '?')) {
+      return;
+    }
+
+    postFormEncoded(CART_VOID_PREVIOUS_URL, {
+      receipt_no: receiptNo,
+      manager_pin: managerPin,
+    })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          alert(res.data.error || 'Failed to void previous transaction.');
+          return;
+        }
+        alert('Previous transaction voided: ' + (res.data.receipt_no || receiptNo));
+      })
+      .catch(function () {
+        alert('Failed to void previous transaction.');
+      });
+  };
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------

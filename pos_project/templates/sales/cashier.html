@@ -2138,8 +2138,8 @@
             <span class="fn-key">F11</span><span class="fn-label">Sub Discount</span>
         </button>
         <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
-            title="Close transaction — enter closing cash">
-            <span class="fn-key">F8</span><span class="fn-label">Close</span>
+            title="Close cashier session">
+            <span class="fn-key">CLS</span><span class="fn-label">Close Session</span>
         </button>
     </footer>
 
@@ -2147,6 +2147,9 @@
         const ITEM_SEARCH_URL = "{% url 'sales:item_search' %}";
         const CART_ADD_URL = "{% url 'sales:cart_add' %}";
         const CART_LINE_DISC_URL = "{% url 'sales:cart_line_disc' %}";
+        const CART_VOID_ITEM_URL = "{% url 'sales:cart_void_item' %}";
+        const CART_VOID_TRANSACTION_URL = "{% url 'sales:cart_void_transaction' %}";
+        const CART_VOID_PREVIOUS_URL = "{% url 'sales:cart_void_previous' %}";
         const CSRF_TOKEN = "{{ csrf_token }}";
         const POS_KEYS = {
             iDisc:    "{{ pos_keys.pIDiscKey|escapejs }}",
