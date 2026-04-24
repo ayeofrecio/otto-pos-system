@@ -769,117 +769,106 @@
   // ---------------------------------------------------------------------------
   // Close Transaction Modal — open / close
   // ---------------------------------------------------------------------------
-  function renderCreditDebitBreakdown(list) {
+function renderCreditDebitBreakdown(list) {
     const container = document.getElementById("close-trans-credit-debit-list");
     if (!container) return;
     container.innerHTML = "";
 
     if (list.length === 0) {
-      const empty = document.createElement("div");
-      empty.textContent = "No data";
-      container.appendChild(empty);
-      return; // ← stop here, don't iterate
+        const empty = document.createElement("div");
+        empty.innerHTML = '<span class="close-trans-credit-empty">No credit/debit transactions</span>';
+        container.appendChild(empty);
+        return;
     }
 
     list.forEach(item => {
-      const row = document.createElement("div");
-
-      const label = document.createElement("span");
-      label.textContent = item.tender_desc;
-
-      const value = document.createElement("span");
-      value.textContent = `₱${item.total.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      })}`;
-
-      row.appendChild(label);
-      row.appendChild(value);
-      container.appendChild(row);
+        const row = document.createElement("div");
+        const label = document.createElement("span");
+        label.textContent = item.tender_desc;
+        const value = document.createElement("span");
+        value.textContent = `₱${item.total.toLocaleString(undefined, {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        })}`;
+        row.appendChild(label);
+        row.appendChild(value);
+        container.appendChild(row);
     });
-  }
+}
 
-  window.openCloseTransModal = function () {
+window.openCloseTransModal = function () {
     const modal = getModal();
     if (!modal) return;
 
-    // Reset inputs
-    const cashInput = document.getElementById("closing-cash-input");
+    const cashInput  = document.getElementById("closing-cash-input");
     const notesInput = document.getElementById("close-trans-notes");
     const confirmBtn = document.getElementById("close-trans-confirm-btn");
-    const container = document.getElementById("close-trans-credit-debit-list");
 
-    if (container) container.innerHTML = "";
-    if (cashInput) cashInput.value = "";
+    if (cashInput)  cashInput.value = "";
     if (notesInput) notesInput.value = "";
-    if (confirmBtn) confirmBtn.disabled = true;
+    if (confirmBtn) confirmBtn.disabled = false;
 
-    // Reset variance display
+    // Reset all display values
+    const resetEl = (id, val = "₱0.00") => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    };
+    resetEl("close-trans-opening-cash");
+    resetEl("close-trans-paid-in-cash");
+    resetEl("close-trans-net-worth");
+    resetEl("close-trans-gross-sales");
+    resetEl("close-trans-total-discounts");
+    resetEl("close-trans-credit-debit-cash");
+    resetEl("close-trans-expected-cash");
+    resetEl("close-trans-actual-cash");
+    resetEl("close-trans-variance", "—");
+
     const varianceEl = document.getElementById("close-trans-variance");
-    if (varianceEl) {
-      varianceEl.textContent = "—";
-      varianceEl.className = "close-trans-variance-val";
-    }
+    if (varianceEl) varianceEl.className = "close-trans-variance-val";
 
-    // Reset expected cash display
-    const expectedEl = document.getElementById("close-trans-expected-cash");
-    if (expectedEl) expectedEl.textContent = "₱0.00";
-
-    // Reset denomination modal
+    renderCreditDebitBreakdown([]);
     resetDenomModal();
 
-    // Clear stale session data from modal
-    modal._openingCash = 0;
-    modal._paidInCash = 0;
-    modal._creditDebitCash = 0;
-
-    // Fetch session cash summary from backend
     fetch("/pos/to-close-session-details/", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": CSRF_TOKEN,
-      },
+        method: "GET",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
     })
-      .then((r) => r.json())
-      .then((data) => {
-        const openingCash = parseFloat(data.opening_cash) || 0;
-        const paidInCash = parseFloat(data.paid_in_cash) || 0;
+    .then(r => r.json())
+    .then(data => {
+        const openingCash     = parseFloat(data.opening_cash)      || 0;
+        const paidInCash      = parseFloat(data.paid_in_cash)      || 0;
         const creditDebitCash = parseFloat(data.credit_debit_cash) || 0;
-        const expected = openingCash + paidInCash; //+ creditDebitCash;
+        const grossSales      = parseFloat(data.gross_sales)       || 0;
+        const totalDiscounts  = parseFloat(data.total_discounts)   || 0;
+        const netWorth        = parseFloat(data.net_worth)         || 0;
+        const expected        = openingCash + paidInCash;
 
-        // Cache on modal element so other functions can read them
-        modal._openingCash = openingCash;
-        modal._paidInCash = paidInCash;
+        modal._openingCash     = openingCash;
+        modal._paidInCash      = paidInCash;
         modal._creditDebitCash = creditDebitCash;
 
-        // Update summary strip
-        const opening_cashEl = document.getElementById("close-trans-opening-cash");
-        const paid_in_cashEl = document.getElementById("close-trans-paid-in-cash");
-        const credit_debitEl = document.getElementById("close-trans-credit-debit-cash");
-        const expectedEl = document.getElementById("close-trans-expected-cash");
+        resetEl("close-trans-opening-cash",    formatPeso(openingCash));
+        resetEl("close-trans-paid-in-cash",    formatPeso(paidInCash));
+        resetEl("close-trans-net-worth",       formatPeso(netWorth));
+        resetEl("close-trans-gross-sales",     formatPeso(grossSales));
+        resetEl("close-trans-total-discounts", formatPeso(totalDiscounts));
+        resetEl("close-trans-credit-debit-cash", formatPeso(creditDebitCash));
+        resetEl("close-trans-expected-cash",   formatPeso(expected));
 
-        if (opening_cashEl) opening_cashEl.textContent = formatPeso(openingCash);
-        if (paid_in_cashEl) paid_in_cashEl.textContent = formatPeso(paidInCash);
-        if (credit_debitEl) credit_debitEl.textContent = formatPeso(creditDebitCash);
-        if (expectedEl) expectedEl.textContent = formatPeso(expected);
-
-        // Also prefill the hidden fields so a submit right after open is safe
-        document.getElementById("hidden-opening-cash").value = openingCash.toFixed(2);
-        document.getElementById("hidden-paid-in-cash").value = paidInCash.toFixed(2);
+        document.getElementById("hidden-opening-cash").value     = openingCash.toFixed(2);
+        document.getElementById("hidden-paid-in-cash").value      = paidInCash.toFixed(2);
         document.getElementById("hidden-credit-debit-cash").value = creditDebitCash.toFixed(2);
-        document.getElementById("hidden-expected-cash").value = expected.toFixed(2);
+        document.getElementById("hidden-expected-cash").value     = expected.toFixed(2);
+        document.getElementById("hidden-net-worth").value         = netWorth.toFixed(2);
+        document.getElementById("hidden-gross-sales").value       = grossSales.toFixed(2);
+        document.getElementById("hidden-total-discounts").value   = totalDiscounts.toFixed(2);
 
-        const creditDebitList = data.credit_debit_cash_list || [];
-
-        renderCreditDebitBreakdown(creditDebitList);
-      })
-      .catch((err) => console.error("Failed to load session details:", err));
+        renderCreditDebitBreakdown(data.credit_debit_cash_list || []);
+    })
+    .catch(err => console.error("Failed to load session details:", err));
 
     modal.classList.add("open");
     setTimeout(() => cashInput && cashInput.focus(), 80);
-  };
-
+};
   window.closeCloseTransModal = function () {
     const modal = getModal();
     if (modal) modal.classList.remove("open");

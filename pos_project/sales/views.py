@@ -969,10 +969,6 @@ def close_session(request):
     expected_cash = parse_decimal(request.POST.get("expected_cash"))
     cash_variance = parse_decimal(request.POST.get("cash_variance"))
     notes         = request.POST.get("notes", "").strip()
-    # print(session)
-    # print(closing_cash)
-    # print(expected_cash)
-    # print(cash_variance)
     if closing_cash < 0:
         messages.error(request, "Closing cash cannot be negative.")
         return redirect("sales:pos_cashier")
