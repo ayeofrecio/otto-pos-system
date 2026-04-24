@@ -338,6 +338,16 @@
             background: #252b33;
             border-top: 1px solid #2f3640;
             align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .actions-fn-grid {
+            display: flex;
+            gap: 0.5rem;
+            flex: 1;
+            justify-content: space-between;
+            align-items: center;
+            min-width: 0;
         }
 
         .actions-divider {
@@ -410,6 +420,26 @@
         .btn-fn-red:hover {
             background: #3a1520;
             border-color: #f85149;
+        }
+
+        .btn-fn-orange {
+            border-color: #633a26;
+            color: #fb8500;
+        }
+
+        .btn-fn-orange:hover {
+            background: #4a2718;
+            border-color: #fb8500;
+        }
+
+        .btn-fn-pay {
+            border-color: #5c3a6f;
+            color: #d29fe2;
+        }
+
+        .btn-fn-pay:hover {
+            background: #3d2354;
+            border-color: #d29fe2;
         }
 
         .btn {
@@ -2119,28 +2149,50 @@
 
 
     <footer class="actions">
-        <button type="button" class="btn btn-primary" id="pay-trigger-btn" hx-get="{% url 'sales:pay' %}"
+        <!-- Primary Actions -->
+        <button type="button" class="btn-fn btn-fn-pay" id="pay-trigger-btn" hx-get="{% url 'sales:pay' %}"
             hx-target="#pay-modal-content" hx-swap="innerHTML" hx-trigger="click"
             onclick="document.getElementById('pay-modal').classList.add('open')">
-            Pay
+            <span class="fn-key" id="key-paymnt">F10</span><span class="fn-label">💳 Pay</span>
         </button>
-        <a href="{% url 'sales:cart_new' %}" class="btn btn-secondary">New Transaction</a>
-        <div class="actions-divider"></div>
-        <button type="button" class="btn-fn btn-fn-grey" onclick="openSearchModal()" title="Search items">
-            <span class="fn-key">F1</span><span class="fn-label">&#128269; Search</span>
-        </button>
-        <button type="button" class="btn-fn btn-fn-green" onclick="openDiscountModal()"
-            title="Item discount — applies to next scan only">
-            <span class="fn-key">F12</span><span class="fn-label">Item Discount</span>
-        </button>
-        <button type="button" class="btn-fn btn-fn-blue" onclick="openTransDiscModal()"
-            title="Subtotal discount — applies to entire transaction">
-            <span class="fn-key">F11</span><span class="fn-label">Sub Discount</span>
-        </button>
-        <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
-            title="Close cashier session">
-            <span class="fn-key">CLS</span><span class="fn-label">Close Session</span>
-        </button>
+        
+        <!-- Function Key Buttons - Grid Layout -->
+        <div class="actions-fn-grid">
+            <!-- Search & Inquiry -->
+            <button type="button" class="btn-fn btn-fn-grey" onclick="openSearchModal()" title="Search items">
+                <span class="fn-key" id="key-search">F1</span><span class="fn-label">🔍 Search</span>
+            </button>
+            
+            <!-- Discounts -->
+            <button type="button" class="btn-fn btn-fn-green" onclick="openDiscountModal()"
+                title="Item discount — applies to next scan only">
+                <span class="fn-key" id="key-idisc">F12</span><span class="fn-label">Item Disc</span>
+            </button>
+            <button type="button" class="btn-fn btn-fn-blue" onclick="openTransDiscModal()"
+                title="Subtotal discount — applies to entire transaction">
+                <span class="fn-key" id="key-stdisc">F11</span><span class="fn-label">Sub Disc</span>
+            </button>
+            
+            <!-- Void Operations -->
+            <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerVoidItem()"
+                title="Void single line item">
+                <span class="fn-key" id="key-ivoid">F8</span><span class="fn-label">Void Item</span>
+            </button>
+            <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerVoidTransaction()"
+                title="Void entire transaction">
+                <span class="fn-key" id="key-voidtr">F7</span><span class="fn-label">Void Trans</span>
+            </button>
+            <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerVoidPrevious()"
+                title="Void previous transaction by receipt number">
+                <span class="fn-key" id="key-ivoida">F6</span><span class="fn-label">Void Prev</span>
+            </button>
+            
+            <!-- Admin -->
+            <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
+                title="Close cashier session">
+                <span class="fn-key">CLS</span><span class="fn-label">Close Session</span>
+            </button>
+        </div>
     </footer>
 
     <script>
@@ -2221,6 +2273,26 @@
             cWithD:   'Cash Withdrawal',
             resendTxt:'Resend Text File',
         };
+        
+        // Initialize button labels with dynamic function keys
+        (function() {
+            const keyMappings = {
+                'key-paymnt': 'paymnt',
+                'key-idisc': 'iDisc',
+                'key-stdisc': 'stDisc',
+                'key-ivoid': 'iVoid',
+                'key-voidtr': 'voidTr',
+                'key-ivoida': 'iVoidA'
+            };
+            
+            for (const [elemId, posKeyName] of Object.entries(keyMappings)) {
+                const elem = document.getElementById(elemId);
+                if (elem && POS_FKEYS[posKeyName]) {
+                    elem.textContent = POS_FKEYS[posKeyName];
+                }
+            }
+        })();
+        
         // Initialise trans_disc state from server session (survives page reload)
         const INITIAL_TRANS_DISC = {
             pct: "{{ trans_disc.pct|default:0 }}",
