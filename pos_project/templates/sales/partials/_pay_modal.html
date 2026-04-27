@@ -4,7 +4,15 @@
 <div class="pay-modal-inner">
     <!-- Amount due box -->
     <div class="pay-total-box">
-        <div class="pay-total-label">Amount to Pay</div>
+        <div class="pay-total-label">
+            {% if total < 0 %}
+            Refund / Change to Give
+            {% elif total == 0 %}
+            No Payment Needed
+            {% else %}
+            Amount to Pay
+            {% endif %}
+        </div>
         <div class="pay-total-amount" data-total="{{ total|floatformat:2 }}">₱{{ total|floatformat:2 }}</div>
         {% if trans_disc_amt %}
         <div class="pay-total-breakdown">
@@ -14,7 +22,7 @@
         {% endif %}
     </div>
 
-    {% if tenders %}
+    {% if total > 0 and tenders %}
     <form method="post" action="{% url 'sales:payment_complete' %}" id="pay-form" onsubmit="return validatePayment()">
         {% csrf_token %}
         <input type="hidden" name="tender_entries" id="tender-entries" value="">
@@ -82,6 +90,28 @@
 
         <div class="pay-modal-actions">
             <button type="submit" class="btn btn-primary" id="pay-btn" disabled>Complete Payment</button>
+            {% if standalone %}
+            <a href="{% url 'sales:pos_cashier' %}" class="btn btn-secondary">Cancel</a>
+            {% else %}
+            <button type="button" class="btn btn-secondary" onclick="closePayModal()">Cancel</button>
+            {% endif %}
+        </div>
+    </form>
+    {% elif total <= 0 %}
+    <form method="post" action="{% url 'sales:payment_complete' %}" id="pay-form" onsubmit="return validatePayment()">
+        {% csrf_token %}
+        <input type="hidden" name="tender_entries" id="tender-entries" value="[]">
+
+        <div class="pay-empty" style="text-align:left;">
+            {% if total < 0 %}
+            This transaction has a net return amount. Complete to print a receipt with change/refund amount.
+            {% else %}
+            Return and replacement are equal. No payment is required.
+            {% endif %}
+        </div>
+
+        <div class="pay-modal-actions">
+            <button type="submit" class="btn btn-primary" id="pay-btn">Complete Transaction</button>
             {% if standalone %}
             <a href="{% url 'sales:pos_cashier' %}" class="btn btn-secondary">Cancel</a>
             {% else %}

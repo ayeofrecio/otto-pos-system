@@ -206,6 +206,21 @@
             color: #8b949e;
         }
 
+        .scanned-item-return {
+            border-left: 3px solid #f0c060;
+            background: #3d3320;
+        }
+
+        .scanned-item-return-badge {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #1e2328;
+            background: #f0c060;
+            border-radius: 999px;
+            padding: 0.1rem 0.45rem;
+            letter-spacing: 0.04em;
+        }
+
         .scanned-item-variant {
             color: #60b8f0;
         }
@@ -234,6 +249,12 @@
         .scanned-item-clickable:hover {
             background: #2d343e;
             border-left-color: #6edb8f;
+        }
+
+        .scanned-item-selected {
+            background: #153027;
+            border-left-color: #6edb8f;
+            box-shadow: inset 0 0 0 1px rgba(110, 219, 143, 0.45);
         }
 
         .scanned-items-hint {
@@ -310,6 +331,22 @@
             gap: 0.5rem;
             font-size: 0.85rem;
             color: #8b949e;
+        }
+
+        .cart-line-return {
+            border-left: 3px solid #f0c060;
+            background: #30291c;
+        }
+
+        .cart-line-return-badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #1e2328;
+            background: #f0c060;
+            border-radius: 999px;
+            padding: 0.08rem 0.42rem;
+            letter-spacing: 0.03em;
+            vertical-align: middle;
         }
 
         .cart-line form {
@@ -671,6 +708,146 @@
             display: flex;
             gap: 0.5rem;
             padding: 1rem 1.25rem;
+        }
+
+        .return-modal {
+            width: 460px;
+        }
+
+        .return-modal-body {
+            padding: 1rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .return-modal-line {
+            font-size: 0.85rem;
+            color: #8b949e;
+            background: #1f252c;
+            border: 1px solid #2f3640;
+            border-radius: 6px;
+            padding: 0.6rem 0.7rem;
+        }
+
+        .return-modal-label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #8b949e;
+        }
+
+        .return-modal-input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #e6edf3;
+            font-size: 1rem;
+        }
+
+        .return-modal-input:focus {
+            outline: none;
+            border-color: #f0c060;
+        }
+
+        .return-modal-error {
+            min-height: 1.2rem;
+            font-size: 0.84rem;
+            color: #f85149;
+        }
+
+        .return-lookup-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .return-receipt-results {
+            max-height: 38vh;
+            overflow-y: auto;
+            border: 1px solid #2f3640;
+            border-radius: 6px;
+            background: #1f252c;
+            padding: 0.4rem;
+        }
+
+        .return-receipt-empty {
+            color: #8b949e;
+            font-size: 0.88rem;
+            padding: 0.7rem;
+        }
+
+        .return-item-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 0.6rem;
+            align-items: center;
+            padding: 0.45rem 0.5rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .return-item-row:last-child {
+            border-bottom: none;
+        }
+
+        .return-item-main {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .return-item-desc {
+            font-size: 0.9rem;
+            color: #e6edf3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .return-item-meta {
+            font-size: 0.78rem;
+            color: #8b949e;
+        }
+
+        .return-item-qty-wrap {
+            margin-top: 0.35rem;
+            font-size: 0.78rem;
+            color: #8b949e;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .return-item-qty {
+            width: 86px;
+            padding: 0.28rem 0.38rem;
+            border: 1px solid #2f3640;
+            border-radius: 5px;
+            background: #2d343e;
+            color: #e6edf3;
+            text-align: right;
+            font-size: 0.82rem;
+        }
+
+        .return-item-qty:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .btn-return-remove {
+            background: #4a1d28;
+            color: #fff;
+            margin-right: auto;
+        }
+
+        .btn-return-apply {
+            background: #755a1f;
+            color: #fff;
+        }
+
+        .btn-return-apply:hover {
+            background: #8a6a25;
         }
 
         .btn-remove-disc {
@@ -1800,6 +1977,14 @@
         <input type="hidden" id="trans-disc-label-hidden" name="trans_disc_label" value="">
     </form>
 
+    <!-- Hidden HTMX form for line price override -->
+    <form id="line-price-override-form" hx-post="{% url 'sales:cart_line_price_override' %}" hx-target="#cart-summary"
+        hx-swap="outerHTML" hx-trigger="submit" style="display:none;">
+        {% csrf_token %}
+        <input type="hidden" id="line-price-rec-ctr" name="rec_ctr" value="">
+        <input type="hidden" id="line-price-new" name="new_price" value="0">
+    </form>
+
     <!-- Transaction Subtotal Discount Modal (F4) -->
     <div class="modal-overlay" id="trans-disc-modal" onclick="closeTransDiscModalOutside(event)">
         <div class="modal disc-modal">
@@ -1861,12 +2046,37 @@
                     <span class="disc-pct-sym">%</span>
                 </div>
                 <div class="disc-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="openPriceOverrideFromLineDisc()">Price Override</button>
                     <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove
                         Discount</button>
                     <button type="button" class="btn btn-secondary" onclick="closeLineDiscModal()">Cancel</button>
                     <button type="button" class="btn btn-apply-disc" onclick="applyLineDisc()">Apply</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Line Price Override Modal (prOver key) -->
+    <div class="modal-overlay" id="price-override-modal" onclick="closePriceOverrideModalOutside(event)">
+        <div class="modal disc-modal">
+            <div class="modal-header">
+                <h2>Price Override</h2>
+                <button class="modal-close" onclick="closePriceOverrideModal()">&#10005;</button>
+            </div>
+            <div class="disc-pct-row" style="justify-content:space-between;">
+                <span class="disc-pct-label">Current Price:</span>
+                <span id="price-override-current" style="font-size:1.2rem;font-weight:700;color:#f0c060;">₱0.00</span>
+            </div>
+            <div class="disc-pct-row">
+                <label class="disc-pct-label" for="price-override-input">New Unit Price:</label>
+                <span class="disc-pct-sym" style="font-size:1.35rem;">₱</span>
+                <input type="number" id="price-override-input" class="disc-pct-num" value="0" min="0"
+                    step="0.01" autocomplete="off" style="width:170px;color:#f0c060;border-color:#755a1f;">
+            </div>
+            <div class="disc-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closePriceOverrideModal()">Cancel</button>
+                <button type="button" class="btn" style="background:#755a1f;color:white;" onclick="applyPriceOverride()">Apply Override</button>
+            </div>
         </div>
     </div>
 
@@ -2147,6 +2357,42 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="item-return-modal" onclick="closeItemReturnModalOutside(event)">
+        <div class="modal return-modal">
+            <div class="modal-header">
+                <h2>Previous Receipt Return</h2>
+                <button class="modal-close" onclick="closeItemReturnModal()">&#10005;</button>
+            </div>
+            <div class="return-modal-body">
+                <div class="return-modal-line" id="item-return-line-label">Enter receipt number, load items, then select item(s) to return.</div>
+
+                <label class="return-modal-label" for="item-return-source-trans">Original Transaction No.</label>
+                <div class="return-lookup-row">
+                    <input id="item-return-source-trans" class="return-modal-input" type="text" maxlength="8" placeholder="e.g. 00001234" required>
+                    <button type="button" class="btn btn-secondary" onclick="lookupPreviousReceiptForReturn()">Load</button>
+                </div>
+
+                <div id="item-return-source-date" class="return-modal-line" style="display:none;"></div>
+                <div class="return-receipt-results" id="item-return-results">
+                    <div class="return-receipt-empty">No receipt loaded yet.</div>
+                </div>
+
+                <label class="return-modal-label" for="item-return-select-all">
+                    <input id="item-return-select-all" type="checkbox" onchange="toggleAllReturnItems(this.checked)"> Select all loaded items
+                </label>
+
+                <label class="return-modal-label" for="item-return-admin-pin">Admin / Manager PIN</label>
+                <input id="item-return-admin-pin" class="return-modal-input" type="password" maxlength="64" placeholder="Required for return tagging" required>
+
+                <div class="return-modal-error" id="item-return-error"></div>
+            </div>
+            <div class="disc-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeItemReturnModal()">Cancel</button>
+                <button type="button" class="btn btn-return-apply" onclick="importSelectedReturnItems()">Insert Selected Return Items</button>
+            </div>
+        </div>
+    </div>
+
 
     <footer class="actions">
         <!-- Primary Actions -->
@@ -2171,6 +2417,15 @@
             <button type="button" class="btn-fn btn-fn-blue" onclick="openTransDiscModal()"
                 title="Subtotal discount — applies to entire transaction">
                 <span class="fn-key" id="key-stdisc">F11</span><span class="fn-label">Sub Disc</span>
+            </button>
+            <button type="button" class="btn-fn btn-fn-orange" onclick="triggerPriceOverride()"
+                title="Override selected line item price">
+                <span class="fn-key" id="key-prover">F4</span><span class="fn-label">Price Ovr</span>
+            </button>
+
+            <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerItemReturn()"
+                title="Tag selected line as item return">
+                <span class="fn-key" id="key-iret">F5</span><span class="fn-label">Item Return</span>
             </button>
             
             <!-- Void Operations -->
@@ -2199,9 +2454,13 @@
         const ITEM_SEARCH_URL = "{% url 'sales:item_search' %}";
         const CART_ADD_URL = "{% url 'sales:cart_add' %}";
         const CART_LINE_DISC_URL = "{% url 'sales:cart_line_disc' %}";
+        const CART_LINE_PRICE_OVERRIDE_URL = "{% url 'sales:cart_line_price_override' %}";
         const CART_VOID_ITEM_URL = "{% url 'sales:cart_void_item' %}";
         const CART_VOID_TRANSACTION_URL = "{% url 'sales:cart_void_transaction' %}";
         const CART_VOID_PREVIOUS_URL = "{% url 'sales:cart_void_previous' %}";
+        const CART_ITEM_RETURN_TOGGLE_URL = "{% url 'sales:cart_item_return_toggle' %}";
+        const CART_RETURN_LOOKUP_URL = "{% url 'sales:cart_return_lookup' %}";
+        const CART_RETURN_IMPORT_URL = "{% url 'sales:cart_return_import' %}";
         const CSRF_TOKEN = "{{ csrf_token }}";
         const POS_KEYS = {
             iDisc:    "{{ pos_keys.pIDiscKey|escapejs }}",
@@ -2280,6 +2539,8 @@
                 'key-paymnt': 'paymnt',
                 'key-idisc': 'iDisc',
                 'key-stdisc': 'stDisc',
+                'key-prover': 'prOver',
+                'key-iret': 'iRet',
                 'key-ivoid': 'iVoid',
                 'key-voidtr': 'voidTr',
                 'key-ivoida': 'iVoidA'

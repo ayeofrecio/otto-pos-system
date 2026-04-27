@@ -40,7 +40,7 @@
         <div class="receipt-body">
             {% for line in lines %}
             <div class="receipt-line">
-                <span class="receipt-line-desc">{{ line.description }}{% if line.size or line.color %} ({{ line.size }}{% if line.size and line.color %}/{% endif %}{{ line.color }}){% endif %}</span>
+                <span class="receipt-line-desc">{{ line.description }}{% if line.is_return %} [RETURN]{% endif %}{% if line.size or line.color %} ({{ line.size }}{% if line.size and line.color %}/{% endif %}{{ line.color }}){% endif %}</span>
                 <span class="receipt-line-price">₱{{ line.ext }}</span>
             </div>
             <div class="receipt-line" style="font-size:0.8rem;color:#666;">
