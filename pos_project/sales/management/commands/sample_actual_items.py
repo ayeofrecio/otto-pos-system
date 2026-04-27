@@ -22,8 +22,8 @@ class Command(BaseCommand):
         itemscosts_file = options['itemscosts']
 
         with transaction.atomic():
-            # self.load_items(items_file)
-            # self.load_item_details(itemdtl_file)
+            self.load_items(items_file)
+            self.load_item_details(itemdtl_file)
             self.load_items_costs(itemscosts_file)
             
         self.stdout.write(self.style.SUCCESS("Seeding completed."))

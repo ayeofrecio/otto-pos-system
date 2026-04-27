@@ -340,7 +340,8 @@ def cashier_view(request):
         "total": total,
         "item_count": item_count,
         "last_item": last_line,
-        "pos_keys": get_pos_keys(), 
+        "pos_keys": get_pos_keys(),
+        "z_reading_required": getattr(request, "z_reading_required", False),
     }
     return render(request, "sales/cashier.html", context)
 

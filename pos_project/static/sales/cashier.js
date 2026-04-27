@@ -26,6 +26,7 @@
       });
     }
   }
+
   if (document.getElementById('live-time')) {
     setInterval(updateTime, 1000);
   }
@@ -869,6 +870,24 @@ window.openCloseTransModal = function () {
     modal.classList.add("open");
     setTimeout(() => cashInput && cashInput.focus(), 80);
 };
+// ---------------------------------------------------------------------------
+// Z-Reading Guard — triggered by middleware
+// ---------------------------------------------------------------------------
+
+// HTMX path: middleware returns HX-Trigger: openCloseTransModal
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof Z_READING_REQUIRED !== 'undefined' && Z_READING_REQUIRED) {
+        window.openCloseTransModal();
+    }
+});
+
+// HTMX path: middleware returns HX-Trigger: openCloseTransModal
+document.addEventListener('openCloseTransModal', function () {
+    const modal = getModal();
+    if (modal && modal.classList.contains('open')) return; // already open
+    window.openCloseTransModal();
+});
+
   window.closeCloseTransModal = function () {
     const modal = getModal();
     if (modal) modal.classList.remove("open");

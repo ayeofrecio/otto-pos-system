@@ -2228,7 +2228,8 @@
         function hideZReadConfirm() {
             document.getElementById("close-trans-confirm-strip").style.display = "none";
             document.getElementById("close-trans-footer-default").style.display = "flex";
-        }
+        };
+        const Z_READING_REQUIRED = {{ z_reading_required|yesno:"true,false" }};
     </script>
     <script src="{% static 'sales/cashier.js' %}"></script>
 </body>
