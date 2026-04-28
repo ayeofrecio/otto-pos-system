@@ -273,7 +273,11 @@ def to_close_session_details(request):
         .annotate(total=Sum("amount"))
         .order_by("tender_desc")
     )
-
+    discounts = TransactionItem.objects.filter(
+        header__session_id=session.id,
+        pcode="DISC"
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    print("DISCOUNTS:", discounts)
     
 
     return JsonResponse({
@@ -763,6 +767,7 @@ def payment_complete(request):
 
     trans_disc = _get_trans_disc(request)
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines_list, trans_disc)
+    print("SUBTOTAL:", subtotal, "DISC_AMT:", trans_disc_amt, "TOTAL:", total)
 
     total_tendered = sum(t["amount"] for t in tender_entries)
     if total_tendered < total:
@@ -809,6 +814,16 @@ def payment_complete(request):
         transaction_date=biz_date,
         transaction_time=now.strftime("%H:%M"),
         transaction_type="S",
+
+        trans_disc_type=trans_disc.get("type", ""),
+        trans_disc_pct=trans_disc.get("pct", 0),
+        trans_disc_label=trans_disc.get("label", ""),
+        trans_disc_amount=trans_disc_amt,
+
+        subtotal=subtotal,
+        amount_total=total,
+        amount_tendered=total_tendered,
+        change_amount=change_amount,
     )
 
     # --- Create one TransactionItem per cart line ---
