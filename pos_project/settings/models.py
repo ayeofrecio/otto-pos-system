@@ -135,8 +135,11 @@ class TerminalFileDirectories(models.Model):
         related_name="file_directories"
     )
 
-    directory_type = models.CharField(max_length=20)
     directory_path = models.CharField(max_length=255)
+    items_csv_path = models.CharField(max_length=255, blank=True)
+    itemdtl_csv_path = models.CharField(max_length=255, blank=True)
+    itemscosts_csv_path = models.CharField(max_length=255, blank=True)
+
 
     class Meta:
         db_table = "terminal_file_directories"  

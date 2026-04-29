@@ -42,21 +42,32 @@
               method: "POST",
               headers: { "X-CSRFToken": getCookie("csrftoken") },
           });
-          const data = await res.json();
+
+          const text = await res.text();   // 👈 read raw first
+          console.log("RAW RESPONSE:", text);
+
+          let data;
+          try {
+              data = JSON.parse(text);     // 👈 manually parse
+          } catch (e) {
+              throw new Error("Invalid JSON response");
+          }
+
+          if (!res.ok) {
+              throw new Error(data.message || "Request failed");
+          }
 
           if (data.status === "ok") {
               setCloudState("success");
-              console.log(data.message);
+              console.log(data);
           } else {
               setCloudState("error");
               console.error(data.message);
           }
+
       } catch (err) {
           setCloudState("error");
-          console.error("Network error:", err);
-      } finally {
-          // Reset icon after 3 seconds
-          setTimeout(() => setCloudState("idle"), 3000);
+          console.error("Error:", err);
       }
   });
 
