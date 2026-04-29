@@ -206,6 +206,21 @@
             color: #8b949e;
         }
 
+        .scanned-item-return {
+            border-left: 3px solid #f0c060;
+            background: #3d3320;
+        }
+
+        .scanned-item-return-badge {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #1e2328;
+            background: #f0c060;
+            border-radius: 999px;
+            padding: 0.1rem 0.45rem;
+            letter-spacing: 0.04em;
+        }
+
         .scanned-item-variant {
             color: #60b8f0;
         }
@@ -234,6 +249,12 @@
         .scanned-item-clickable:hover {
             background: #2d343e;
             border-left-color: #6edb8f;
+        }
+
+        .scanned-item-selected {
+            background: #153027;
+            border-left-color: #6edb8f;
+            box-shadow: inset 0 0 0 1px rgba(110, 219, 143, 0.45);
         }
 
         .scanned-items-hint {
@@ -312,6 +333,22 @@
             color: #8b949e;
         }
 
+        .cart-line-return {
+            border-left: 3px solid #f0c060;
+            background: #30291c;
+        }
+
+        .cart-line-return-badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #1e2328;
+            background: #f0c060;
+            border-radius: 999px;
+            padding: 0.08rem 0.42rem;
+            letter-spacing: 0.03em;
+            vertical-align: middle;
+        }
+
         .cart-line form {
             display: inline;
         }
@@ -338,6 +375,16 @@
             background: #252b33;
             border-top: 1px solid #2f3640;
             align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .actions-fn-grid {
+            display: flex;
+            gap: 0.5rem;
+            flex: 1;
+            justify-content: space-between;
+            align-items: center;
+            min-width: 0;
         }
 
         .actions-divider {
@@ -410,6 +457,26 @@
         .btn-fn-red:hover {
             background: #3a1520;
             border-color: #f85149;
+        }
+
+        .btn-fn-orange {
+            border-color: #633a26;
+            color: #fb8500;
+        }
+
+        .btn-fn-orange:hover {
+            background: #4a2718;
+            border-color: #fb8500;
+        }
+
+        .btn-fn-pay {
+            border-color: #5c3a6f;
+            color: #d29fe2;
+        }
+
+        .btn-fn-pay:hover {
+            background: #3d2354;
+            border-color: #d29fe2;
         }
 
         .btn {
@@ -643,6 +710,146 @@
             padding: 1rem 1.25rem;
         }
 
+        .return-modal {
+            width: 460px;
+        }
+
+        .return-modal-body {
+            padding: 1rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .return-modal-line {
+            font-size: 0.85rem;
+            color: #8b949e;
+            background: #1f252c;
+            border: 1px solid #2f3640;
+            border-radius: 6px;
+            padding: 0.6rem 0.7rem;
+        }
+
+        .return-modal-label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #8b949e;
+        }
+
+        .return-modal-input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #e6edf3;
+            font-size: 1rem;
+        }
+
+        .return-modal-input:focus {
+            outline: none;
+            border-color: #f0c060;
+        }
+
+        .return-modal-error {
+            min-height: 1.2rem;
+            font-size: 0.84rem;
+            color: #f85149;
+        }
+
+        .return-lookup-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .return-receipt-results {
+            max-height: 38vh;
+            overflow-y: auto;
+            border: 1px solid #2f3640;
+            border-radius: 6px;
+            background: #1f252c;
+            padding: 0.4rem;
+        }
+
+        .return-receipt-empty {
+            color: #8b949e;
+            font-size: 0.88rem;
+            padding: 0.7rem;
+        }
+
+        .return-item-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 0.6rem;
+            align-items: center;
+            padding: 0.45rem 0.5rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .return-item-row:last-child {
+            border-bottom: none;
+        }
+
+        .return-item-main {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .return-item-desc {
+            font-size: 0.9rem;
+            color: #e6edf3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .return-item-meta {
+            font-size: 0.78rem;
+            color: #8b949e;
+        }
+
+        .return-item-qty-wrap {
+            margin-top: 0.35rem;
+            font-size: 0.78rem;
+            color: #8b949e;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .return-item-qty {
+            width: 86px;
+            padding: 0.28rem 0.38rem;
+            border: 1px solid #2f3640;
+            border-radius: 5px;
+            background: #2d343e;
+            color: #e6edf3;
+            text-align: right;
+            font-size: 0.82rem;
+        }
+
+        .return-item-qty:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .btn-return-remove {
+            background: #4a1d28;
+            color: #fff;
+            margin-right: auto;
+        }
+
+        .btn-return-apply {
+            background: #755a1f;
+            color: #fff;
+        }
+
+        .btn-return-apply:hover {
+            background: #8a6a25;
+        }
+
         .btn-remove-disc {
             background: #3a1520;
             color: #e6edf3;
@@ -716,6 +923,120 @@
         .btn-search:hover {
             background: #3d454d;
             border-color: #8b3d4a;
+        }
+
+        .btn-fkey-help {
+            padding: 1rem 0.85rem;
+            font-size: 1rem;
+            font-weight: 700;
+            background: #2f3640;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            color: #8b9eb5;
+            cursor: pointer;
+            white-space: nowrap;
+            line-height: 1;
+        }
+
+        .btn-fkey-help:hover {
+            background: #3d454d;
+            border-color: #8b9eb5;
+            color: #e6edf3;
+        }
+
+        /* Color / Size Picker Modal */
+        .color-size-modal {
+            width: 640px;
+        }
+        .color-size-modal .modal-subtitle {
+            padding: 0.4rem 1.25rem 0.75rem;
+            font-size: 0.85rem;
+            color: #8b949e;
+            border-bottom: 1px solid #2f3640;
+        }
+        #color-size-variant-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.5rem;
+            padding: 1rem 1.25rem;
+            overflow-y: auto;
+            max-height: 55vh;
+        }
+        .variant-btn {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            padding: 0.75rem 1rem;
+            background: #2d343e;
+            border: 2px solid #2f3640;
+            border-radius: 6px;
+            color: #e6edf3;
+            cursor: pointer;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        .variant-btn:hover {
+            border-color: #8b3d4a;
+            background: #3a1520;
+        }
+        .variant-btn:focus {
+            outline: none;
+            border-color: #8b3d4a;
+        }
+        .variant-color {
+            font-weight: 600;
+            color: #e6edf3;
+        }
+        .variant-size {
+            color: #8b949e;
+            font-size: 0.82rem;
+        }
+        .variant-price {
+            color: #6edb8f;
+            font-size: 0.85rem;
+            margin-top: 0.15rem;
+        }
+
+        /* Function Key Help Modal */
+        .fkey-modal {
+            width: 560px;
+        }
+        .fkey-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px 16px;
+            padding: 1rem 1.25rem;
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+        .fkey-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 8px;
+            border-radius: 5px;
+            background: #1c2128;
+            border: 1px solid #2f3640;
+        }
+        .fkey-row .fkey-badge {
+            min-width: 44px;
+            text-align: center;
+            padding: 3px 7px;
+            border-radius: 4px;
+            background: #8b3d4a;
+            color: #fff;
+            font-size: 0.78rem;
+            font-weight: 700;
+            font-family: monospace;
+            letter-spacing: 0.03em;
+        }
+        .fkey-row .fkey-badge.unassigned {
+            background: #2f3640;
+            color: #888;
+        }
+        .fkey-row .fkey-desc {
+            font-size: 0.85rem;
+            color: #c9d1d9;
         }
 
         .modal-overlay {
@@ -810,6 +1131,12 @@
             background: #2d343e;
         }
 
+        .search-result.active {
+            background: #3a1520;
+            border-left: 3px solid #8b3d4a;
+            padding-left: calc(0.75rem - 3px);
+        }
+
         .search-result-desc {
             font-weight: 500;
         }
@@ -847,14 +1174,25 @@
             background: #252b33;
             border: 1px solid #2f3640;
             border-radius: 8px;
-            width: 480px;
+            width: min(960px, 96vw);
             max-width: 95vw;
-            max-height: 85vh;
-            overflow-y: auto;
+            max-height: 90vh;
+            overflow: hidden;
         }
 
         .pay-modal-inner {
             padding: 1.25rem 1.5rem;
+        }
+
+        .pay-layout {
+            display: grid;
+            grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+            gap: 1rem;
+            align-items: start;
+        }
+
+        .pay-col {
+            min-width: 0;
         }
 
         .pay-total-box {
@@ -1153,6 +1491,17 @@
 
         .pay-add-btn {
             margin-top: 0.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .pay-modal {
+                width: 96vw;
+                max-height: 90vh;
+            }
+
+            .pay-layout {
+                grid-template-columns: 1fr;
+            }
         }
 
         /* ── Close Transaction Modal ───────────────────────────────────── */
@@ -1719,6 +2068,9 @@
         </div>
         <div class="header-right">
             <span class="time" id="live-time">{{ time }}</span>
+            {% if request.user.is_superuser %}
+            <a href="{% url 'sales:admin_posnbr_init' %}" class="btn btn-secondary">POSNBR</a>
+            {% endif %}
             <a href="{% url 'pos_logout' %}" class="btn btn-secondary">Logout</a>
         </div>
     </header>
@@ -1742,6 +2094,8 @@
                             placeholder="Scan or enter barcode here" autofocus autocomplete="off">
                         <button type="button" class="btn-search" onclick="openSearchModal()"
                             title="Search items (F1)">&#128269; Search</button>
+                        <button type="button" class="btn-fkey-help" onclick="openFkeyHelpModal()"
+                            title="Function Key Reference">&#63;</button>
                     </div>
                 </form>
                 <div class="disc-badge" id="disc-badge">
@@ -1761,6 +2115,9 @@
                         <dt>Code:</dt>
                         <dd>{{ last_item.item_code }}</dd>
                         <dt>Size:</dt>
+                        <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—" }}</dd>
+                        <dt>Color:</dt>
+                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as item_color_display %}{{ item_color_display|default:"—" }}</dd>
                         <dd>{% size_display last_item.item_size %}{{ last_item.item_size|default:"—" }}</dd>
                         <dt>Color:</dt>
                         <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size
@@ -1793,6 +2150,14 @@
         <input type="hidden" id="trans-disc-pct-hidden" name="trans_disc_pct" value="0">
         <input type="hidden" id="trans-disc-type-hidden" name="trans_disc_type" value="">
         <input type="hidden" id="trans-disc-label-hidden" name="trans_disc_label" value="">
+    </form>
+
+    <!-- Hidden HTMX form for line price override -->
+    <form id="line-price-override-form" hx-post="{% url 'sales:cart_line_price_override' %}" hx-target="#cart-summary"
+        hx-swap="outerHTML" hx-trigger="submit" style="display:none;">
+        {% csrf_token %}
+        <input type="hidden" id="line-price-rec-ctr" name="rec_ctr" value="">
+        <input type="hidden" id="line-price-new" name="new_price" value="0">
     </form>
 
     <!-- Transaction Subtotal Discount Modal (F4) -->
@@ -1856,12 +2221,37 @@
                     <span class="disc-pct-sym">%</span>
                 </div>
                 <div class="disc-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="openPriceOverrideFromLineDisc()">Price Override</button>
                     <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove
                         Discount</button>
                     <button type="button" class="btn btn-secondary" onclick="closeLineDiscModal()">Cancel</button>
                     <button type="button" class="btn btn-apply-disc" onclick="applyLineDisc()">Apply</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Line Price Override Modal (prOver key) -->
+    <div class="modal-overlay" id="price-override-modal" onclick="closePriceOverrideModalOutside(event)">
+        <div class="modal disc-modal">
+            <div class="modal-header">
+                <h2>Price Override</h2>
+                <button class="modal-close" onclick="closePriceOverrideModal()">&#10005;</button>
+            </div>
+            <div class="disc-pct-row" style="justify-content:space-between;">
+                <span class="disc-pct-label">Current Price:</span>
+                <span id="price-override-current" style="font-size:1.2rem;font-weight:700;color:#f0c060;">₱0.00</span>
+            </div>
+            <div class="disc-pct-row">
+                <label class="disc-pct-label" for="price-override-input">New Unit Price:</label>
+                <span class="disc-pct-sym" style="font-size:1.35rem;">₱</span>
+                <input type="number" id="price-override-input" class="disc-pct-num" value="0" min="0"
+                    step="0.01" autocomplete="off" style="width:170px;color:#f0c060;border-color:#755a1f;">
+            </div>
+            <div class="disc-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closePriceOverrideModal()">Cancel</button>
+                <button type="button" class="btn" style="background:#755a1f;color:white;" onclick="applyPriceOverride()">Apply Override</button>
+            </div>
         </div>
     </div>
 
@@ -2142,6 +2532,35 @@
 
         </div>
     </div>
+    <!-- Color / Size Picker Modal (alias items) -->
+    <div class="modal-overlay" id="color-size-modal" onclick="closeColorSizeModalOutside(event)">
+        <div class="modal color-size-modal">
+            <div class="modal-header">
+                <h2>Select Color &amp; Size</h2>
+                <button class="modal-close" onclick="closeColorSizeModal()">&#10005;</button>
+            </div>
+            <p class="modal-subtitle" id="color-size-modal-title"></p>
+            <div id="color-size-variant-grid">
+                <!-- populated by JS -->
+            </div>
+            <div class="disc-modal-footer">
+                <button class="btn btn-secondary" onclick="closeColorSizeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <!-- Function Key Help Modal -->
+    <div class="modal-overlay" id="fkey-help-modal" onclick="closeFkeyHelpModalOutside(event)">
+        <div class="modal fkey-modal">
+            <div class="modal-header">
+                <h2>&#9000; Function Key Reference</h2>
+                <button class="modal-close" onclick="closeFkeyHelpModal()">&#10005;</button>
+            </div>
+            <div class="fkey-grid" id="fkey-grid-body">
+                <!-- populated by JS -->
+            </div>
+        </div>
+    </div>
+
     <!-- Item Search Modal -->
     <div class="modal-overlay" id="search-modal" onclick="closeSearchModalOutside(event)">
         <div class="modal">
@@ -2159,36 +2578,110 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="item-return-modal" onclick="closeItemReturnModalOutside(event)">
+        <div class="modal return-modal">
+            <div class="modal-header">
+                <h2>Previous Receipt Return</h2>
+                <button class="modal-close" onclick="closeItemReturnModal()">&#10005;</button>
+            </div>
+            <div class="return-modal-body">
+                <div class="return-modal-line" id="item-return-line-label">Enter receipt number, load items, then select item(s) to return.</div>
+
+                <label class="return-modal-label" for="item-return-source-trans">Original Transaction No.</label>
+                <div class="return-lookup-row">
+                    <input id="item-return-source-trans" class="return-modal-input" type="text" maxlength="8" placeholder="e.g. 00001234" required>
+                    <button type="button" class="btn btn-secondary" onclick="lookupPreviousReceiptForReturn()">Load</button>
+                </div>
+
+                <div id="item-return-source-date" class="return-modal-line" style="display:none;"></div>
+                <div class="return-receipt-results" id="item-return-results">
+                    <div class="return-receipt-empty">No receipt loaded yet.</div>
+                </div>
+
+                <label class="return-modal-label" for="item-return-select-all">
+                    <input id="item-return-select-all" type="checkbox" onchange="toggleAllReturnItems(this.checked)"> Select all loaded items
+                </label>
+
+                <label class="return-modal-label" for="item-return-admin-pin">Admin / Manager PIN</label>
+                <input id="item-return-admin-pin" class="return-modal-input" type="password" maxlength="64" placeholder="Required for return tagging" required>
+
+                <div class="return-modal-error" id="item-return-error"></div>
+            </div>
+            <div class="disc-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeItemReturnModal()">Cancel</button>
+                <button type="button" class="btn btn-return-apply" onclick="importSelectedReturnItems()">Insert Selected Return Items</button>
+            </div>
+        </div>
+    </div>
+
 
     <footer class="actions">
-        <button type="button" class="btn btn-primary" id="pay-trigger-btn" hx-get="{% url 'sales:pay' %}"
+        <!-- Primary Actions -->
+        <button type="button" class="btn-fn btn-fn-pay" id="pay-trigger-btn" hx-get="{% url 'sales:pay' %}"
             hx-target="#pay-modal-content" hx-swap="innerHTML" hx-trigger="click"
             onclick="document.getElementById('pay-modal').classList.add('open')">
-            Pay
+            <span class="fn-key" id="key-paymnt">F10</span><span class="fn-label">💳 Pay</span>
         </button>
-        <a href="{% url 'sales:cart_new' %}" class="btn btn-secondary">New Transaction</a>
-        <div class="actions-divider"></div>
-        <button type="button" class="btn-fn btn-fn-grey" onclick="openSearchModal()" title="Search items">
-            <span class="fn-key">F1</span><span class="fn-label">&#128269; Search</span>
-        </button>
-        <button type="button" class="btn-fn btn-fn-green" onclick="openDiscountModal()"
-            title="Item discount — applies to next scan only">
-            <span class="fn-key">F3</span><span class="fn-label">Item Discount</span>
-        </button>
-        <button type="button" class="btn-fn btn-fn-blue" onclick="openTransDiscModal()"
-            title="Subtotal discount — applies to entire transaction">
-            <span class="fn-key">F4</span><span class="fn-label">Sub Discount</span>
-        </button>
-        <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
-            title="Close transaction — enter closing cash">
-            <span class="fn-key">F8</span><span class="fn-label">Close</span>
-        </button>
+        
+        <!-- Function Key Buttons - Grid Layout -->
+        <div class="actions-fn-grid">
+            <!-- Search & Inquiry -->
+            <button type="button" class="btn-fn btn-fn-grey" onclick="openSearchModal()" title="Search items">
+                <span class="fn-key" id="key-search">F1</span><span class="fn-label">🔍 Search</span>
+            </button>
+            
+            <!-- Discounts -->
+            <button type="button" class="btn-fn btn-fn-green" onclick="openDiscountModal()"
+                title="Item discount — applies to next scan only">
+                <span class="fn-key" id="key-idisc">F12</span><span class="fn-label">Item Disc</span>
+            </button>
+            <button type="button" class="btn-fn btn-fn-blue" onclick="openTransDiscModal()"
+                title="Subtotal discount — applies to entire transaction">
+                <span class="fn-key" id="key-stdisc">F11</span><span class="fn-label">Sub Disc</span>
+            </button>
+            <button type="button" class="btn-fn btn-fn-orange" onclick="triggerPriceOverride()"
+                title="Override selected line item price">
+                <span class="fn-key" id="key-prover">F4</span><span class="fn-label">Price Ovr</span>
+            </button>
+
+            <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerItemReturn()"
+                title="Tag selected line as item return">
+                <span class="fn-key" id="key-iret">F5</span><span class="fn-label">Item Return</span>
+            </button>
+            
+            <!-- Void Operations -->
+            <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerVoidItem()"
+                title="Void single line item">
+                <span class="fn-key" id="key-ivoid">F8</span><span class="fn-label">Void Item</span>
+            </button>
+            <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerVoidTransaction()"
+                title="Void entire transaction">
+                <span class="fn-key" id="key-voidtr">F7</span><span class="fn-label">Void Trans</span>
+            </button>
+            <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerVoidPrevious()"
+                title="Void previous transaction by receipt number">
+                <span class="fn-key" id="key-ivoida">F6</span><span class="fn-label">Void Prev</span>
+            </button>
+            
+            <!-- Admin -->
+            <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
+                title="Close cashier session">
+                <span class="fn-key">CLS</span><span class="fn-label">Close Session</span>
+            </button>
+        </div>
     </footer>
 
     <script>
         const ITEM_SEARCH_URL = "{% url 'sales:item_search' %}";
         const CART_ADD_URL = "{% url 'sales:cart_add' %}";
         const CART_LINE_DISC_URL = "{% url 'sales:cart_line_disc' %}";
+        const CART_LINE_PRICE_OVERRIDE_URL = "{% url 'sales:cart_line_price_override' %}";
+        const CART_VOID_ITEM_URL = "{% url 'sales:cart_void_item' %}";
+        const CART_VOID_TRANSACTION_URL = "{% url 'sales:cart_void_transaction' %}";
+        const CART_VOID_PREVIOUS_URL = "{% url 'sales:cart_void_previous' %}";
+        const CART_ITEM_RETURN_TOGGLE_URL = "{% url 'sales:cart_item_return_toggle' %}";
+        const CART_RETURN_LOOKUP_URL = "{% url 'sales:cart_return_lookup' %}";
+        const CART_RETURN_IMPORT_URL = "{% url 'sales:cart_return_import' %}";
         const CSRF_TOKEN = "{{ csrf_token }}";
         const POS_KEYS = {
             iDisc: "{{ pos_keys.pIDiscKey|escapejs }}",
@@ -2213,6 +2706,75 @@
             cWithD: "{{ pos_keys.pCWithDKey|escapejs }}",
             resendTxt: "{{ pos_keys.pResendTxt|escapejs }}",
         };
+        // Reverse map: Clipper chr() value → physical key name (e.g. "\xff" → "F12")
+        // Mirrors KEY_LABELS in key_capture.js
+        const CHAR_TO_FKEY = {
+            [String.fromCharCode(0xDC)]: 'F1',
+            [String.fromCharCode(0xD8)]: 'F2',
+            [String.fromCharCode(0xE9)]: 'F3',
+            [String.fromCharCode(0xF7)]: 'F4',
+            [String.fromCharCode(0xF8)]: 'F5',
+            [String.fromCharCode(0xF9)]: 'F6',
+            [String.fromCharCode(0xFA)]: 'F7',
+            [String.fromCharCode(0xFB)]: 'F8',
+            [String.fromCharCode(0xFC)]: 'F9',
+            [String.fromCharCode(0xFD)]: 'F10',
+            [String.fromCharCode(0xFE)]: 'F11',
+            [String.fromCharCode(0xFF)]: 'F12',
+        };
+        // Translate all POS_KEYS values to their physical key names for keydown comparisons
+        const POS_FKEYS = {};
+        for (const fn in POS_KEYS) {
+            const physKey = CHAR_TO_FKEY[POS_KEYS[fn]];
+            if (physKey) POS_FKEYS[fn] = physKey;
+        }
+
+        // Human-readable labels for each POS function key slot
+        const POS_KEY_LABELS = {
+            iDisc:    'Item Discount',
+            iView:    'Item Lookup',
+            stDisc:   'SubTotal Discount',
+            prOver:   'Price Override',
+            iRet:     'Item Return',
+            iVoid:    'Line Item Void',
+            iVoidA:   'Void All Items',
+            voidTr:   'Void Previous Transaction',
+            iSusRt:   'Transaction Suspend / Retrieve',
+            stat:     'Sales Status',
+            subTot:   'SubTotal',
+            paymnt:   'Payment',
+            iQty:     'Quantity',
+            tsRep:    'X-Reading / Terminal Sales',
+            zRead:    'Z-Reading / End of Day',
+            jRep:     'Journal Report',
+            sOff:     'Sign Off / Log Off',
+            menu:     'Menu Key',
+            sman:     'Reprint Transactions',
+            cWithD:   'Cash Withdrawal',
+            resendTxt:'Resend Text File',
+        };
+        
+        // Initialize button labels with dynamic function keys
+        (function() {
+            const keyMappings = {
+                'key-paymnt': 'paymnt',
+                'key-idisc': 'iDisc',
+                'key-stdisc': 'stDisc',
+                'key-prover': 'prOver',
+                'key-iret': 'iRet',
+                'key-ivoid': 'iVoid',
+                'key-voidtr': 'voidTr',
+                'key-ivoida': 'iVoidA'
+            };
+            
+            for (const [elemId, posKeyName] of Object.entries(keyMappings)) {
+                const elem = document.getElementById(elemId);
+                if (elem && POS_FKEYS[posKeyName]) {
+                    elem.textContent = POS_FKEYS[posKeyName];
+                }
+            }
+        })();
+        
         // Initialise trans_disc state from server session (survives page reload)
         const INITIAL_TRANS_DISC = {
             pct: "{{ trans_disc.pct|default:0 }}",

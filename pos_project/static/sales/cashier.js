@@ -9,6 +9,33 @@
   'use strict';
 
   // ---------------------------------------------------------------------------
+  // Best-effort browser maximize for POS usage
+  // ---------------------------------------------------------------------------
+  function maximizeBrowserWindow() {
+    try {
+      window.moveTo(0, 0);
+      if (window.screen && window.screen.availWidth && window.screen.availHeight) {
+        window.resizeTo(window.screen.availWidth, window.screen.availHeight);
+      }
+    } catch (_) {
+      // Some browsers block script-driven window resize/move.
+    }
+  }
+  maximizeBrowserWindow();
+
+  async function toggleFullscreenMode() {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (_) {
+      // Fullscreen may be blocked by browser policy.
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Live time tick
   // ---------------------------------------------------------------------------
   function updateTime() {
@@ -59,6 +86,7 @@
   });
   document.body.addEventListener('htmx:afterSettle', function () {
     updateScannedItemsMaxHeight();
+    syncSelectedRowAfterRender();
     if (lastRequestWasCartAdd) {
       lastRequestWasCartAdd = false;
       const scannedInner = document.querySelector('.scanned-items-inner');
@@ -71,6 +99,49 @@
 
   // Capture barcode value just before htmx submits (needed for search prefill on not-found)
   var lastScannedBarcode = '';
+  var selectedLineRecCtr = '';
+
+  function normalizeRecCtr(value) {
+    var n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) {
+      return '';
+    }
+    return String(Math.trunc(n));
+  }
+
+  function setSelectedScannedRow(recCtr) {
+    var normalized = normalizeRecCtr(recCtr);
+    selectedLineRecCtr = normalized;
+
+    var rows = document.querySelectorAll('.scanned-item[data-rec-ctr]');
+    rows.forEach(function (row) {
+      var rowRecCtr = normalizeRecCtr(row.getAttribute('data-rec-ctr'));
+      row.classList.toggle('scanned-item-selected', !!normalized && rowRecCtr === normalized);
+    });
+
+    var recInput = document.getElementById('line-disc-rec-ctr');
+    if (recInput && normalized) {
+      recInput.value = normalized;
+    }
+  }
+
+  function syncSelectedRowAfterRender() {
+    var rows = document.querySelectorAll('.scanned-item[data-rec-ctr]');
+    if (!rows.length) {
+      selectedLineRecCtr = '';
+      return;
+    }
+
+    if (selectedLineRecCtr) {
+      setSelectedScannedRow(selectedLineRecCtr);
+      if (document.querySelector('.scanned-item.scanned-item-selected')) {
+        return;
+      }
+    }
+
+    setSelectedScannedRow(rows[rows.length - 1].getAttribute('data-rec-ctr'));
+  }
+
   const barcodeFormEl = document.getElementById('barcode-form');
   if (barcodeFormEl) {
     barcodeFormEl.addEventListener('submit', function () {
@@ -138,8 +209,11 @@
     const barcodeInput = document.getElementById('barcode-input');
     const qtyInput = document.getElementById('qty-input');
     if (barcodeInput && path.includes('/cart/add')) {
+      // Keep entered qty when barcode is not found and search modal is requested.
+      const responseText = (evt.detail.xhr && evt.detail.xhr.responseText) || '';
+      const isNotFoundFlow = responseText.indexOf('data-open-search') !== -1;
       barcodeInput.value = '';
-      if (qtyInput) { qtyInput.value = '1'; }
+      if (qtyInput && !isNotFoundFlow) { qtyInput.value = '1'; }
       // Item discount is one-shot — reset after each scan
       window.clearDiscount();
       barcodeInput.focus();
@@ -154,6 +228,21 @@
     const barcodeInput = document.getElementById('barcode-input');
     const qtyInput = document.getElementById('qty-input');
 
+    // Block browser defaults for ALL keys that are mapped to POS functions
+    if (typeof POS_FKEYS !== 'undefined') {
+      const mappedKeys = Object.values(POS_FKEYS);
+      if (mappedKeys.includes(evt.key)) {
+        evt.preventDefault();
+      }
+    }
+
+    // F9 toggles browser fullscreen for kiosk-like POS mode.
+    if (evt.key === 'F9') {
+      evt.preventDefault();
+      toggleFullscreenMode();
+      return;
+    }
+
     if (evt.key === 'F1') {
       evt.preventDefault();
       window.openSearchModal();
@@ -166,23 +255,59 @@
       return;
     }
 
-    if (evt.key === POS_KEYS.iDisc) {
+    if (evt.key === POS_FKEYS.iDisc) {
       evt.preventDefault();
       window.openDiscountModal();
       return;
     }
 
-    if (evt.key === POS_KEYS.stDisc) {
+    if (evt.key === POS_FKEYS.stDisc) {
       evt.preventDefault();
       window.openTransDiscModal();
       return;
     }
 
-    // if (evt.key === POS_KEYS.stDisc) {
-    //   evt.preventDefault();
-    //   window.openPayModal();
-    //   return;
-    // }
+    if (evt.key === POS_FKEYS.prOver) {
+      evt.preventDefault();
+      window.triggerPriceOverride();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.iRet) {
+      evt.preventDefault();
+      window.triggerItemReturn();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.paymnt) {
+      evt.preventDefault();
+      window.openPayModal();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.menu) {
+      evt.preventDefault();
+      window.openFkeyHelpModal();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.iVoid) {
+      evt.preventDefault();
+      window.triggerVoidItem();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.iVoidA) {
+      evt.preventDefault();
+      window.triggerVoidTransaction();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.voidTr) {
+      evt.preventDefault();
+      window.triggerVoidPrevious();
+      return;
+    }
 
     if (evt.key === '*' && qtyInput && document.activeElement === barcodeInput && !barcodeInput.value) {
       evt.preventDefault();
@@ -195,9 +320,15 @@
       const payModal = document.getElementById('pay-modal');
       const discModal = document.getElementById('discount-modal');
       const tdModal = document.getElementById('trans-disc-modal');
+      const poModal = document.getElementById('price-override-modal');
+      const fkeyModal = document.getElementById('fkey-help-modal');
+      const itemReturnModal = document.getElementById('item-return-modal');
       if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
       else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
+      else if (poModal && poModal.classList.contains('open')) { window.closePriceOverrideModal(); }
+      else if (itemReturnModal && itemReturnModal.classList.contains('open')) { window.closeItemReturnModal(); }
+      else if (fkeyModal && fkeyModal.classList.contains('open')) { window.closeFkeyHelpModal(); }
       else if (closeTransModal && closeTransModal.classList.contains('open')) { window.closeCloseTransModal(); }
     }
   });
@@ -214,7 +345,7 @@
     });
   }
 
-  // Pressing Enter in the barcode field submits the form.
+  // Pressing Enter in the barcode field runs the enterKey() logic.
   // (Required because adding the qty number input means the browser no longer
   // auto-submits a multi-input form on Enter.)
   const barcodeInputEl = document.getElementById('barcode-input');
@@ -222,17 +353,96 @@
     barcodeInputEl.addEventListener('keydown', function (evt) {
       if (evt.key === 'Enter') {
         evt.preventDefault();
-        const form = document.getElementById('barcode-form');
-        if (form) {
-          form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-        }
+        enterKey();
       }
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Discount Modal (F3)
+  // enterKey — intercepts Enter on the barcode field
+  // Logic ported from Clarion:
+  //   len <= 11 + is_alias  → open color/size picker
+  //   len == 12             → backend parses embedded color/size, submit normally
+  //   otherwise             → submit normally
   // ---------------------------------------------------------------------------
+  function enterKey() {
+    var barcodeInput = document.getElementById('barcode-input');
+    if (!barcodeInput) { return; }
+    var barcode = barcodeInput.value.trim();
+    if (!barcode) { return; }
+
+    if (barcode.length <= 11) {
+      // Ask the server whether this icode is an alias item with variants
+      fetch('/sales/cart/variants/?barcode=' + encodeURIComponent(barcode))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok && data.is_alias && data.variants && data.variants.length > 0) {
+            openColorSizeModal(barcode, data.item_desc, data.variants);
+          } else {
+            submitBarcodeForm();
+          }
+        })
+        .catch(function () {
+          submitBarcodeForm();
+        });
+    } else {
+      // 12-char (or longer) barcode — let the backend handle it
+      submitBarcodeForm();
+    }
+  }
+
+  function submitBarcodeForm() {
+    var form = document.getElementById('barcode-form');
+    if (form) {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Color / Size Picker Modal (shown for alias items)
+  // ---------------------------------------------------------------------------
+  window.openColorSizeModal = function (icode, itemDesc, variants) {
+    var modal = document.getElementById('color-size-modal');
+    var titleEl = document.getElementById('color-size-modal-title');
+    var grid = document.getElementById('color-size-variant-grid');
+    if (!modal || !grid) { return; }
+    if (titleEl) { titleEl.textContent = itemDesc || icode; }
+    grid.innerHTML = '';
+    variants.forEach(function (v) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'variant-btn';
+      btn.innerHTML =
+        '<span class="variant-color">' + (v.color_desc || v.color_code || '\u2014') + '</span>' +
+        '<span class="variant-size">' + (v.size_desc  || v.size_code  || '\u2014') + '</span>' +
+        '<span class="variant-price">\u20B1' + parseFloat(v.price).toFixed(2) + '</span>';
+      btn.addEventListener('click', function () { selectVariant(v.barcode); });
+      grid.appendChild(btn);
+    });
+    modal.classList.add('open');
+  };
+
+  window.closeColorSizeModal = function () {
+    var modal = document.getElementById('color-size-modal');
+    if (modal) { modal.classList.remove('open'); }
+    var barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closeColorSizeModalOutside = function (evt) {
+    if (evt.target === document.getElementById('color-size-modal')) {
+      window.closeColorSizeModal();
+    }
+  };
+
+  function selectVariant(variantBarcode) {
+    var barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.value = variantBarcode; }
+    window.closeColorSizeModal();
+    submitBarcodeForm();
+  }
+
+
   var pendingDisc = { pct: 0, type: '', label: '' };
 
   window.openDiscountModal = function () {
@@ -341,16 +551,17 @@
   var lineDiscType = '';
 
   window.openLineDiscModal = function (recCtr) {
-    lineDiscRecCtr = recCtr;
+    lineDiscRecCtr = normalizeRecCtr(recCtr) || recCtr;
     lineDiscType = 'REG';
     const modal = document.getElementById('line-disc-modal');
     const recInput = document.getElementById('line-disc-rec-ctr');
     const pctInput = document.getElementById('line-disc-pct-input');
     const typeInput = document.getElementById('line-disc-type');
     if (!modal || !recInput) { return; }
-    recInput.value = recCtr;
+    recInput.value = lineDiscRecCtr;
     typeInput.value = 'REG';
     pctInput.value = 0;
+    setSelectedScannedRow(lineDiscRecCtr);
     refreshLineDiscTypeBtns('REG');
     modal.classList.add('open');
     setTimeout(function () { if (pctInput) { pctInput.focus(); pctInput.select(); } }, 80);
@@ -428,6 +639,142 @@
   document.body.addEventListener('htmx:afterRequest', function (evt) {
     const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath || '';
     if (path.indexOf('/cart/line-disc') !== -1) {
+      const barcodeInput = document.getElementById('barcode-input');
+      if (barcodeInput) { barcodeInput.focus(); }
+    }
+  });
+
+  window.openPriceOverrideFromLineDisc = function () {
+    const recInput = document.getElementById('line-disc-rec-ctr');
+    const recCtr = recInput ? String(recInput.value || '').trim() : '';
+    if (!recCtr) {
+      alert('No item selected for price override.');
+      return;
+    }
+    window.closeLineDiscModal();
+    window.openPriceOverrideModal(recCtr);
+  };
+
+  window.triggerPriceOverride = function () {
+    const recCtr = getSelectedRecCtr();
+    if (!recCtr) {
+      return;
+    }
+    window.openPriceOverrideModal(recCtr);
+  };
+
+  window.openPriceOverrideModal = function (recCtr) {
+    const modal = document.getElementById('price-override-modal');
+    const recInput = document.getElementById('line-price-rec-ctr');
+    const priceInput = document.getElementById('price-override-input');
+    const currentEl = document.getElementById('price-override-current');
+    if (!modal || !recInput || !priceInput) { return; }
+
+    const recValue = String(recCtr || '').trim();
+    if (!recValue) { return; }
+
+    const recNumber = Number(recValue);
+    const recKey = Number.isFinite(recNumber) ? Math.trunc(recNumber) : null;
+
+    setSelectedScannedRow(recKey !== null ? String(recKey) : recValue);
+
+    let currentPrice = 0;
+    let row = null;
+
+    if (recKey !== null) {
+      document.querySelectorAll('.scanned-item[data-rec-ctr]').forEach(function (candidate) {
+        if (row) { return; }
+        const raw = candidate.getAttribute('data-rec-ctr');
+        const n = Number(raw);
+        if (Number.isFinite(n) && Math.trunc(n) === recKey) {
+          row = candidate;
+        }
+      });
+    } else {
+      row = document.querySelector('.scanned-item[data-rec-ctr="' + recValue + '"]');
+    }
+
+    if (row) {
+      const rowPrice = parseFloat(row.getAttribute('data-unit-price') || '0');
+      if (Number.isFinite(rowPrice)) {
+        currentPrice = rowPrice;
+      }
+    }
+
+    recInput.value = recKey !== null ? String(recKey) : recValue;
+    priceInput.value = currentPrice.toFixed(2);
+    if (currentEl) {
+      currentEl.textContent = '₱' + currentPrice.toFixed(2);
+    }
+
+    modal.classList.add('open');
+    setTimeout(function () {
+      priceInput.focus();
+      priceInput.select();
+    }, 80);
+  };
+
+  window.closePriceOverrideModal = function () {
+    const modal = document.getElementById('price-override-modal');
+    if (modal) { modal.classList.remove('open'); }
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closePriceOverrideModalOutside = function (evt) {
+    if (evt.target === document.getElementById('price-override-modal')) {
+      window.closePriceOverrideModal();
+    }
+  };
+
+  window.applyPriceOverride = function () {
+    const recInput = document.getElementById('line-price-rec-ctr');
+    const priceInput = document.getElementById('price-override-input');
+    if (!recInput || !priceInput) { return; }
+
+    const newPrice = parseFloat(priceInput.value || '0');
+    if (!Number.isFinite(newPrice) || newPrice < 0) {
+      alert('Enter a valid unit price.');
+      return;
+    }
+
+    const recCtr = String(recInput.value || '').trim();
+    if (!recCtr) {
+      alert('No item selected for price override.');
+      return;
+    }
+
+    postFormEncoded(CART_LINE_PRICE_OVERRIDE_URL, {
+      rec_ctr: recCtr,
+      new_price: newPrice.toFixed(4),
+    })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          var msg = (res.data && res.data.error) ? res.data.error : ('Failed to apply price override (HTTP ' + res.status + ').');
+          alert(msg);
+          return;
+        }
+        window.closePriceOverrideModal();
+        window.location.reload();
+      })
+      .catch(function () {
+        alert('Failed to apply price override.');
+      });
+  };
+
+  const priceOverrideInput = document.getElementById('price-override-input');
+  if (priceOverrideInput) {
+    priceOverrideInput.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Enter') {
+        evt.preventDefault();
+        window.applyPriceOverride();
+      }
+    });
+  }
+
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    const path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath || '';
+    if (path.indexOf('/cart/line-price-override') !== -1) {
       const barcodeInput = document.getElementById('barcode-input');
       if (barcodeInput) { barcodeInput.focus(); }
     }
@@ -617,10 +964,14 @@
   // Item Search Modal
   // ---------------------------------------------------------------------------
   let searchTimer = null;
+  let searchResultsCache = [];
+  let searchSelectedIndex = -1;
 
   window.openSearchModal = function (prefill) {
     const modal = document.getElementById('search-modal');
     const input = document.getElementById('modal-search-input');
+    searchResultsCache = [];
+    searchSelectedIndex = -1;
     modal.classList.add('open');
     setTimeout(function () {
       input.focus();
@@ -637,6 +988,8 @@
     document.getElementById('modal-search-input').value = '';
     document.getElementById('modal-results').innerHTML =
       '<p class="search-hint">Type at least 2 characters to search</p>';
+    searchResultsCache = [];
+    searchSelectedIndex = -1;
     const barcodeInput = document.getElementById('barcode-input');
     if (barcodeInput) { barcodeInput.focus(); }
   };
@@ -668,6 +1021,56 @@
     if (btn) { btn.click(); }
   };
 
+  // ---------------------------------------------------------------------------
+  // Function Key Help Modal
+  // ---------------------------------------------------------------------------
+  window.openFkeyHelpModal = function () {
+    const modal = document.getElementById('fkey-help-modal');
+    if (!modal) { return; }
+    // Build grid rows from POS_FKEYS + POS_KEY_LABELS
+    const grid = document.getElementById('fkey-grid-body');
+    if (grid && typeof POS_FKEYS !== 'undefined' && typeof POS_KEY_LABELS !== 'undefined') {
+      grid.innerHTML = '';
+      // Static non-POS-KEYS entries first (F1, F2)
+      const staticEntries = [
+        { key: 'F1', desc: 'Item Search' },
+        { key: 'F2', desc: 'Quantity Input' },
+      ];
+      staticEntries.forEach(function (e) {
+        grid.insertAdjacentHTML('beforeend', buildFkeyRow(e.key, e.desc));
+      });
+      // Dynamic POS_FKEYS entries
+      Object.keys(POS_KEY_LABELS).forEach(function (fn) {
+        const physKey = POS_FKEYS[fn];
+        const desc = POS_KEY_LABELS[fn];
+        grid.insertAdjacentHTML('beforeend', buildFkeyRow(physKey || null, desc));
+      });
+    }
+    modal.classList.add('open');
+  };
+
+  function buildFkeyRow(physKey, desc) {
+    const badgeClass = physKey ? 'fkey-badge' : 'fkey-badge unassigned';
+    const badgeLabel = physKey || '—';
+    return '<div class="fkey-row">' +
+      '<span class="' + badgeClass + '">' + badgeLabel + '</span>' +
+      '<span class="fkey-desc">' + desc + '</span>' +
+      '</div>';
+  }
+
+  window.closeFkeyHelpModal = function () {
+    const modal = document.getElementById('fkey-help-modal');
+    if (modal) { modal.classList.remove('open'); }
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  window.closeFkeyHelpModalOutside = function (evt) {
+    if (evt.target === document.getElementById('fkey-help-modal')) {
+      window.closeFkeyHelpModal();
+    }
+  };
+
   // Close modal on Escape
   document.addEventListener('keydown', function (evt) {
     if (evt.key === 'Escape') {
@@ -684,12 +1087,32 @@
     modalInput.addEventListener('input', function () {
       clearTimeout(searchTimer);
       const q = modalInput.value.trim();
+      searchResultsCache = [];
+      searchSelectedIndex = -1;
       if (q.length < 2) {
         document.getElementById('modal-results').innerHTML =
           '<p class="search-hint">Type at least 2 characters to search</p>';
         return;
       }
       searchTimer = setTimeout(function () { doSearch(q); }, 250);
+    });
+
+    modalInput.addEventListener('keydown', function (evt) {
+      const modal = document.getElementById('search-modal');
+      if (!modal || !modal.classList.contains('open')) { return; }
+
+      if (evt.key === 'ArrowDown') {
+        evt.preventDefault();
+        moveSearchSelection(1);
+      } else if (evt.key === 'ArrowUp') {
+        evt.preventDefault();
+        moveSearchSelection(-1);
+      } else if (evt.key === 'Enter') {
+        if (searchResultsCache.length > 0) {
+          evt.preventDefault();
+          selectActiveSearchResult();
+        }
+      }
     });
   }
 
@@ -709,6 +1132,8 @@
 
   function renderResults(results) {
     const resultsEl = document.getElementById('modal-results');
+    searchResultsCache = results || [];
+    searchSelectedIndex = -1;
     if (!results || results.length === 0) {
       resultsEl.innerHTML = '<p class="search-empty">No items found.</p>';
       return;
@@ -729,6 +1154,42 @@
         '</div>';
     });
     resultsEl.innerHTML = rows.join('');
+    setSearchSelection(0);
+  }
+
+  function moveSearchSelection(delta) {
+    if (!searchResultsCache.length) { return; }
+    if (searchSelectedIndex < 0) {
+      setSearchSelection(delta > 0 ? 0 : searchResultsCache.length - 1);
+      return;
+    }
+    const next = (searchSelectedIndex + delta + searchResultsCache.length) % searchResultsCache.length;
+    setSearchSelection(next);
+  }
+
+  function setSearchSelection(index) {
+    const rows = document.querySelectorAll('#modal-results .search-result');
+    if (!rows.length) {
+      searchSelectedIndex = -1;
+      return;
+    }
+    const bounded = Math.max(0, Math.min(index, rows.length - 1));
+    searchSelectedIndex = bounded;
+    rows.forEach(function (row, idx) {
+      row.classList.toggle('active', idx === bounded);
+    });
+    if (rows[bounded] && rows[bounded].scrollIntoView) {
+      rows[bounded].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function selectActiveSearchResult() {
+    if (!searchResultsCache.length) { return; }
+    const idx = searchSelectedIndex >= 0 ? searchSelectedIndex : 0;
+    const item = searchResultsCache[idx];
+    if (item && item.barcode) {
+      window.selectSearchResult(item.barcode);
+    }
   }
 
   window.selectSearchResult = function (barcode) {
@@ -750,6 +1211,393 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
+
+  function postFormEncoded(url, payload) {
+    const body = new URLSearchParams(payload || {});
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-CSRFToken': CSRF_TOKEN,
+      },
+      body: body.toString(),
+    }).then(function (r) {
+      return r.json().then(function (data) {
+        return { ok: r.ok, status: r.status, data: data || {} };
+      }).catch(function () {
+        return { ok: r.ok, status: r.status, data: {} };
+      });
+    });
+  }
+
+  function getSelectedRecCtr() {
+    function hasRecCtrRow(recCtr) {
+      if (!recCtr) { return false; }
+      var rows = document.querySelectorAll('.scanned-item[data-rec-ctr]');
+      for (var i = 0; i < rows.length; i += 1) {
+        if (normalizeRecCtr(rows[i].getAttribute('data-rec-ctr')) === recCtr) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    if (selectedLineRecCtr && hasRecCtrRow(selectedLineRecCtr)) {
+      return selectedLineRecCtr;
+    }
+
+    var hidden = document.getElementById('line-disc-rec-ctr');
+    if (hidden && hidden.value) {
+      var hiddenRecCtr = normalizeRecCtr(hidden.value);
+      if (hiddenRecCtr && hasRecCtrRow(hiddenRecCtr)) {
+        setSelectedScannedRow(hiddenRecCtr);
+        return hiddenRecCtr;
+      }
+    }
+
+    var scanned = document.querySelectorAll('.scanned-item[data-rec-ctr]');
+    if (scanned && scanned.length) {
+      var lastRecCtr = normalizeRecCtr(scanned[scanned.length - 1].getAttribute('data-rec-ctr'));
+      setSelectedScannedRow(lastRecCtr);
+      return lastRecCtr;
+    }
+
+    selectedLineRecCtr = '';
+    return '';
+  }
+
+  var loadedReturnReceiptNo = '';
+  var loadedReturnItems = [];
+
+  window.triggerItemReturn = function () {
+    window.openItemReturnModal();
+  };
+
+  window.openItemReturnModal = function () {
+    const modal = document.getElementById('item-return-modal');
+    const sourceInput = document.getElementById('item-return-source-trans');
+    const pinInput = document.getElementById('item-return-admin-pin');
+    const errorEl = document.getElementById('item-return-error');
+    const lineLabel = document.getElementById('item-return-line-label');
+    const sourceDateEl = document.getElementById('item-return-source-date');
+    const selectAll = document.getElementById('item-return-select-all');
+    const resultsEl = document.getElementById('item-return-results');
+
+    if (!modal) {
+      return;
+    }
+
+    loadedReturnReceiptNo = '';
+    loadedReturnItems = [];
+    if (sourceInput) {
+      sourceInput.value = '';
+    }
+    if (pinInput) {
+      pinInput.value = '';
+    }
+    if (errorEl) {
+      errorEl.textContent = '';
+    }
+    if (lineLabel) {
+      lineLabel.textContent = 'Enter receipt number, load items, then select item(s) to return.';
+    }
+    if (sourceDateEl) {
+      sourceDateEl.style.display = 'none';
+      sourceDateEl.textContent = '';
+    }
+    if (selectAll) {
+      selectAll.checked = false;
+    }
+    if (resultsEl) {
+      resultsEl.innerHTML = '<div class="return-receipt-empty">No receipt loaded yet.</div>';
+    }
+
+    modal.classList.add('open');
+    setTimeout(function () {
+      if (sourceInput) { sourceInput.focus(); sourceInput.select(); }
+    }, 80);
+  };
+
+  window.closeItemReturnModal = function () {
+    const modal = document.getElementById('item-return-modal');
+    if (modal) {
+      modal.classList.remove('open');
+    }
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) {
+      barcodeInput.focus();
+    }
+  };
+
+  window.closeItemReturnModalOutside = function (evt) {
+    if (evt.target === document.getElementById('item-return-modal')) {
+      window.closeItemReturnModal();
+    }
+  };
+
+  window.lookupPreviousReceiptForReturn = function () {
+    const sourceInput = document.getElementById('item-return-source-trans');
+    const errorEl = document.getElementById('item-return-error');
+    const sourceDateEl = document.getElementById('item-return-source-date');
+    const selectAll = document.getElementById('item-return-select-all');
+    const receiptNo = String((sourceInput && sourceInput.value) || '').trim();
+
+    if (!receiptNo) {
+      if (errorEl) { errorEl.textContent = 'Original transaction number is required.'; }
+      return;
+    }
+    if (errorEl) { errorEl.textContent = ''; }
+    if (selectAll) { selectAll.checked = false; }
+
+    fetch(CART_RETURN_LOOKUP_URL + '?receipt_no=' + encodeURIComponent(receiptNo), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          return { ok: r.ok, data: data || {} };
+        }).catch(function () {
+          return { ok: r.ok, data: {} };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          loadedReturnReceiptNo = '';
+          loadedReturnItems = [];
+          renderReturnLookupItems([]);
+          if (sourceDateEl) {
+            sourceDateEl.style.display = 'none';
+            sourceDateEl.textContent = '';
+          }
+          if (errorEl) { errorEl.textContent = res.data.error || 'Receipt lookup failed.'; }
+          return;
+        }
+
+        loadedReturnReceiptNo = res.data.receipt_no || '';
+        loadedReturnItems = Array.isArray(res.data.items) ? res.data.items : [];
+        renderReturnLookupItems(loadedReturnItems);
+        if (sourceDateEl) {
+          sourceDateEl.style.display = 'block';
+          sourceDateEl.textContent = 'Purchased date: ' + (res.data.transaction_date || 'N/A');
+        }
+      })
+      .catch(function () {
+        loadedReturnReceiptNo = '';
+        loadedReturnItems = [];
+        renderReturnLookupItems([]);
+        if (sourceDateEl) {
+          sourceDateEl.style.display = 'none';
+          sourceDateEl.textContent = '';
+        }
+        if (errorEl) { errorEl.textContent = 'Receipt lookup failed.'; }
+      });
+  };
+
+  function renderReturnLookupItems(items) {
+    const resultsEl = document.getElementById('item-return-results');
+    if (!resultsEl) {
+      return;
+    }
+    if (!items || !items.length) {
+      resultsEl.innerHTML = '<div class="return-receipt-empty">No items loaded.</div>';
+      return;
+    }
+
+    resultsEl.innerHTML = items.map(function (item) {
+      var variant = [item.size, item.color].filter(Boolean).join('/');
+      var variantHtml = variant ? (' <span>(' + escHtml(variant) + ')</span>') : '';
+      var maxQty = escHtml(item.max_qty || item.qty || '0');
+      return '<label class="return-item-row">' +
+        '<input type="checkbox" class="return-item-check" data-item-id="' + escHtml(item.line_id) + '" onchange="toggleReturnQtyInput(this)">' +
+        '<div class="return-item-main">' +
+        '<div class="return-item-desc">' + escHtml(item.description || item.item_code || '') + variantHtml + '</div>' +
+        '<div class="return-item-meta">Code: ' + escHtml(item.item_code || '') + ' | Qty: ' + escHtml(item.qty || '0') + ' x P' + escHtml(item.price || '0') + '</div>' +
+        '<div class="return-item-qty-wrap">Return Qty: <input type="number" class="return-item-qty" data-item-id="' + escHtml(item.line_id) + '" min="0.0001" step="0.0001" max="' + maxQty + '" value="' + maxQty + '" disabled></div>' +
+        '</div>' +
+        '<div class="return-item-meta">P' + escHtml(item.ext || '0') + '</div>' +
+        '</label>';
+    }).join('');
+  }
+
+  window.toggleReturnQtyInput = function (checkboxEl) {
+    if (!checkboxEl) { return; }
+    var itemId = checkboxEl.getAttribute('data-item-id');
+    var qtyInput = document.querySelector('.return-item-qty[data-item-id="' + itemId + '"]');
+    if (!qtyInput) { return; }
+    qtyInput.disabled = !checkboxEl.checked;
+    if (checkboxEl.checked) {
+      qtyInput.focus();
+      qtyInput.select();
+    }
+  };
+
+  window.toggleAllReturnItems = function (checked) {
+    document.querySelectorAll('.return-item-check').forEach(function (cb) {
+      cb.checked = !!checked;
+      window.toggleReturnQtyInput(cb);
+    });
+  };
+
+  window.importSelectedReturnItems = function () {
+    const errorEl = document.getElementById('item-return-error');
+    const sourceInput = document.getElementById('item-return-source-trans');
+    const pinInput = document.getElementById('item-return-admin-pin');
+    const receiptNo = loadedReturnReceiptNo || String((sourceInput && sourceInput.value) || '').trim();
+    const managerPin = String((pinInput && pinInput.value) || '').trim();
+    const selectedQtyMap = {};
+    const selectedIds = Array.from(document.querySelectorAll('.return-item-check:checked'))
+      .map(function (cb) {
+        var id = Number(cb.getAttribute('data-item-id'));
+        var qtyInput = document.querySelector('.return-item-qty[data-item-id="' + id + '"]');
+        var qty = qtyInput ? Number(qtyInput.value) : 0;
+        var maxQty = qtyInput ? Number(qtyInput.getAttribute('max')) : 0;
+        if (!Number.isFinite(id) || id <= 0) { return null; }
+        if (!Number.isFinite(qty) || qty <= 0) { return null; }
+        if (Number.isFinite(maxQty) && maxQty > 0 && qty > maxQty) {
+          qty = maxQty;
+          if (qtyInput) { qtyInput.value = String(maxQty); }
+        }
+        selectedQtyMap[String(id)] = String(qty);
+        return id;
+      })
+      .filter(function (id) { return Number.isFinite(id) && id > 0; });
+
+    if (!receiptNo) {
+      if (errorEl) { errorEl.textContent = 'Load a receipt first.'; }
+      return;
+    }
+    if (!selectedIds.length) {
+      if (errorEl) { errorEl.textContent = 'Select at least one item to return.'; }
+      return;
+    }
+    if (!managerPin) {
+      if (errorEl) { errorEl.textContent = 'Admin / manager PIN is required.'; }
+      return;
+    }
+    if (errorEl) { errorEl.textContent = ''; }
+
+    postFormEncoded(CART_RETURN_IMPORT_URL, {
+      receipt_no: receiptNo,
+      manager_pin: managerPin,
+      item_ids: JSON.stringify(selectedIds),
+      item_qtys: JSON.stringify(selectedQtyMap),
+    })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          if (errorEl) {
+            errorEl.textContent = res.data.error || 'Failed to import return items.';
+          }
+          return;
+        }
+        window.closeItemReturnModal();
+        window.location.reload();
+      })
+      .catch(function () {
+        if (errorEl) {
+          errorEl.textContent = 'Failed to import return items.';
+        }
+      });
+  };
+
+  var sourceTransInput = document.getElementById('item-return-source-trans');
+  if (sourceTransInput) {
+    sourceTransInput.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Enter') {
+        evt.preventDefault();
+        window.lookupPreviousReceiptForReturn();
+      }
+    });
+  }
+
+  window.triggerVoidItem = function () {
+    var recCtr = getSelectedRecCtr();
+    if (!recCtr) {
+      alert('No item selected to void. Click an item first.');
+      return;
+    }
+    if (!confirm('Void selected item?')) {
+      return;
+    }
+
+    postFormEncoded(CART_VOID_ITEM_URL, { rec_ctr: recCtr })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          alert(res.data.error || 'Failed to void item.');
+          return;
+        }
+        window.location.reload();
+      })
+      .catch(function () {
+        alert('Failed to void item.');
+      });
+  };
+
+  window.triggerVoidTransaction = function () {
+    var managerPin = prompt('Manager PIN required for full transaction void:');
+    if (managerPin === null) {
+      return;
+    }
+    managerPin = String(managerPin || '').trim();
+    if (!managerPin) {
+      alert('Manager PIN is required.');
+      return;
+    }
+    if (!confirm('Void entire active transaction?')) {
+      return;
+    }
+
+    postFormEncoded(CART_VOID_TRANSACTION_URL, { manager_pin: managerPin })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          alert(res.data.error || 'Failed to void transaction.');
+          return;
+        }
+        window.location.reload();
+      })
+      .catch(function () {
+        alert('Failed to void transaction.');
+      });
+  };
+
+  window.triggerVoidPrevious = function () {
+    var receiptNo = prompt('Enter receipt number to void:');
+    if (receiptNo === null) {
+      return;
+    }
+    receiptNo = String(receiptNo || '').trim();
+    if (!receiptNo) {
+      alert('Receipt number is required.');
+      return;
+    }
+
+    var managerPin = prompt('Manager PIN required for void previous transaction:');
+    if (managerPin === null) {
+      return;
+    }
+    managerPin = String(managerPin || '').trim();
+    if (!managerPin) {
+      alert('Manager PIN is required.');
+      return;
+    }
+
+    if (!confirm('Void receipt #' + receiptNo + '?')) {
+      return;
+    }
+
+    postFormEncoded(CART_VOID_PREVIOUS_URL, {
+      receipt_no: receiptNo,
+      manager_pin: managerPin,
+    })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          alert(res.data.error || 'Failed to void previous transaction.');
+          return;
+        }
+        alert('Previous transaction voided: ' + (res.data.receipt_no || receiptNo));
+      })
+      .catch(function () {
+        alert('Failed to void previous transaction.');
+      });
+  };
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
@@ -1059,4 +1907,6 @@ document.addEventListener('openCloseTransModal', function () {
     minusBtn?.addEventListener("click", () => { qtyInput.value = Math.max(0, (parseInt(qtyInput.value || 0, 10) || 0) - 1); updateRow(); });
     qtyInput?.addEventListener("input", updateRow);
   });
+
+  syncSelectedRowAfterRender();
 })();

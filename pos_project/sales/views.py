@@ -5,23 +5,40 @@ POS Cashier views: login, cashier screen, cart operations.
 import datetime
 import django.utils.timezone as timezone
 from decimal import Decimal
+from io import StringIO
 from pyexpat.errors import messages
 from django.http import JsonResponse
 
 from django.db import models
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.management import call_command, CommandError
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
 from users.models import POSSession
+from users.models import Users
 
 from .color_lookup import get_color_description
 from .size_lookup import get_size_description
 from .decorators import require_open_session
-from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransCounter, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
+from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
+from .pos_constants import (
+    RCODE_ITEM_VOID,
+    TAG_ITEM_RETURN,
+    TAG_PRICE_OVERRIDE,
+    TAG_ITEM_VOID,
+    TAG_VOID_PREVIOUS,
+    TAG_VOID_TRANS,
+    TRTYPE_VOID_ITEM,
+    TRTYPE_VOID_ITEM_LEGACY,
+    TRTYPE_VOID_PREVIOUS,
+    TRTYPE_VOID_TRANS,
+    TRTYPE_VOID_TRANS_LEGACY,
+    VOID_TRANSACTION_TYPES_ALL,
+)
 
 from setup.pos_keys import get_pos_keys
 
@@ -82,6 +99,47 @@ def _clear_trans_disc(request):
     """Remove transaction discount from session."""
     for key in ("pos_trans_disc_pct", "pos_trans_disc_type", "pos_trans_disc_label"):
         request.session.pop(key, None)
+
+
+def _verify_manager_pin(pin: str):
+    """Return manager/admin user object when PIN matches; else None."""
+    clean_pin = (pin or "").strip()
+    if not clean_pin:
+        return None
+
+    managers = Users.objects.filter(
+        role__in=[Users.ROLE_MANAGER, Users.ROLE_ADMIN, Users.ROLE_SUPERVISOR],
+        is_active=True,
+        is_suspended=False,
+    )
+
+    for user in managers:
+        if user.check_password(clean_pin):
+            return user
+    return None
+
+
+def _build_temp_line_cart_context(request, trans_no):
+    """Build cart context values used by cart mutation endpoints."""
+    user_id = _get_user_id(request)
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+    return {
+        "cart_lines": cart_lines,
+        "subtotal": subtotal,
+        "trans_disc": trans_disc,
+        "trans_disc_amt": trans_disc_amt,
+        "total": total,
+        "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+        "last_item": cart_lines.last(),
+    }
 
 
 def _get_user_id(request):
@@ -172,23 +230,72 @@ def _get_store_details():
 
 # ---------------------------------------------------------------------------
 
-def _get_next_transaction_no():
-    """Get and increment the next transaction number."""
+def _normalize_transaction_no(value):
+    """Return 8-digit numeric transaction number string."""
     try:
-        row = POSTransCounter.objects.first()
-        if row:
-            trans_no = row.transaction_no
-            try:
-                n = int(trans_no)
-                next_no = str(n + 1).zfill(8)
-            except ValueError:
-                next_no = "00000001"
-            row.transaction_no = next_no
-            row.save()
-            return next_no
-    except Exception:
-        pass
-    return "00000001"
+        return str(int(str(value).strip() or "0")).zfill(8)
+    except (TypeError, ValueError):
+        return "00000000"
+
+
+def _save_current_transaction_no(trans_no):
+    """Persist the latest used transaction number in POSNBR."""
+    current_no = _normalize_transaction_no(trans_no)
+    row = POSTransNumber.objects.order_by("id").first()
+    if row:
+        row.transaction_no = current_no
+        row.save(update_fields=["transaction_no"])
+        return row
+
+    return POSTransNumber.objects.create(transaction_no=current_no)
+
+
+def _get_next_transaction_no():
+    """Get next transaction number from POSNBR and persist it as current."""
+    row = POSTransNumber.objects.order_by("id").first()
+    if not row:
+        # First transaction in a fresh setup.
+        return _save_current_transaction_no("00000001").transaction_no
+
+    current = _normalize_transaction_no(row.transaction_no)
+    next_no = str(int(current) + 1).zfill(8)
+    row.transaction_no = next_no
+    row.save(update_fields=["transaction_no"])
+    return next_no
+
+
+@login_required(login_url="pos_login")
+@user_passes_test(lambda u: u.is_superuser)
+@require_http_methods(["GET", "POST"])
+def admin_posnbr_init(request):
+    """Super-admin tool to initialize/update POSNBR starting transaction number."""
+    command_output = ""
+    command_error = ""
+
+    if request.method == "POST":
+        start = (request.POST.get("start") or "").strip()
+        force = bool(request.POST.get("force"))
+        out = StringIO()
+        try:
+            call_command("init_posnbr", start=start, force=force, stdout=out)
+            command_output = out.getvalue().strip()
+        except CommandError as exc:
+            command_error = str(exc)
+        except Exception as exc:
+            command_error = f"Unexpected error: {exc}"
+
+    posnbr = POSTransNumber.objects.order_by("id").first()
+    current_no = _normalize_transaction_no(posnbr.transaction_no) if posnbr else "(not set)"
+
+    return render(
+        request,
+        "sales/admin_posnbr_init.html",
+        {
+            "current_no": current_no,
+            "command_output": command_output,
+            "command_error": command_error,
+        },
+    )
 
 # ---------------------------------------------------------------------------
 # Open session view
@@ -356,6 +463,50 @@ def cashier_view(request):
 
 @login_required
 @require_open_session
+@require_http_methods(["GET"])
+def item_variants(request):
+    """Return color/size variants for an alias item (barcode = icode, len <= 11)."""
+    barcode = (request.GET.get("barcode") or "").strip()
+    if not barcode:
+        return JsonResponse({"ok": False, "error": "Barcode required"}, status=400)
+
+    try:
+        item = Item.objects.get(icode=barcode)
+    except Item.DoesNotExist:
+        return JsonResponse({"ok": False, "is_alias": False, "error": "Item not found"}, status=404)
+
+    if item.is_alias != "Y":
+        return JsonResponse({"ok": True, "is_alias": False})
+
+    details = ItemDetail.objects.filter(icode=barcode)
+    color_codes = {d.color for d in details if d.color}
+    size_codes  = {d.size  for d in details if d.size}
+
+    color_map = {c.code: c.color for c in Color.objects.filter(code__in=color_codes)}
+    size_map  = {s.code: s.size  for s in Size.objects.filter(code__in=size_codes)}
+
+    variants = [
+        {
+            "barcode":    d.barcode,
+            "color_code": d.color,
+            "color_desc": color_map.get(d.color, d.color),
+            "size_code":  d.size,
+            "size_desc":  size_map.get(d.size, d.size),
+            "price":      float(d.price),
+        }
+        for d in details
+    ]
+
+    return JsonResponse({
+        "ok":       True,
+        "is_alias": True,
+        "item_desc": item.short_desc or item.long_desc or barcode,
+        "variants": variants,
+    })
+
+
+@login_required
+@require_open_session
 @require_http_methods(["POST"])
 def cart_add(request):
     """Add item by barcode. Returns HTML fragment for HTMX or JSON."""
@@ -383,13 +534,40 @@ def cart_add(request):
             item = Item.objects.get(icode=barcode)
             item_detail = None
         except Item.DoesNotExist:
-            if request.headers.get("HX-Request"):
-                return render(
-                    request,
-                    "sales/partials/cart_error.html",
-                    {"error": "Item not found"},
-                )
-            return JsonResponse({"ok": False, "error": "Item not found"}, status=404)
+            # 12-char barcode: last 4 digits encode color (2) + size (2)
+            if len(barcode) == 12:
+                parsed_icode = barcode[:-4]
+                parsed_color = barcode[-4:-2].zfill(3)
+                parsed_size  = barcode[-2:].zfill(3)
+                try:
+                    item_detail = ItemDetail.objects.get(
+                        icode=parsed_icode,
+                        color=parsed_color,
+                        size=parsed_size,
+                    )
+                    item = Item.objects.get(icode=parsed_icode)
+                except (ItemDetail.DoesNotExist, Item.DoesNotExist):
+                    item_detail = None
+                    item = None
+                if item_detail and item:
+                    # fall through to the item_detail/item assignment block below
+                    pass
+                else:
+                    if request.headers.get("HX-Request"):
+                        return render(
+                            request,
+                            "sales/partials/cart_error.html",
+                            {"error": "Item not found"},
+                        )
+                    return JsonResponse({"ok": False, "error": "Item not found"}, status=404)
+            else:
+                if request.headers.get("HX-Request"):
+                    return render(
+                        request,
+                        "sales/partials/cart_error.html",
+                        {"error": "Item not found"},
+                    )
+                return JsonResponse({"ok": False, "error": "Item not found"}, status=404)
 
     if item_detail:
         item = Item.objects.get(icode=item_detail.icode)
@@ -539,6 +717,271 @@ def cart_remove(request):
 
 @login_required
 @require_open_session
+@require_http_methods(["POST"])
+def cart_void_item(request):
+    """Void one line from the current cart (F8) and classify as item-void."""
+    try:
+        rec_ctr = int(request.POST.get("rec_ctr", 0))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    line = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        rec_ctr=rec_ctr,
+    ).first()
+    if not line:
+        return JsonResponse({"ok": False, "error": "Line not found"}, status=404)
+
+    session = get_current_session(request)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open POS session"}, status=400)
+
+    now = datetime.datetime.now()
+    header = TransactionHeader.objects.create(
+        session=session,
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        transaction_date=session.business_date,
+        transaction_time=now.strftime("%H:%M"),
+        transaction_type=TRTYPE_VOID_ITEM,
+        return_code=RCODE_ITEM_VOID,
+        item_ref=str(line.rec_ctr),
+    )
+    TransactionItem.objects.create(
+        header=header,
+        item_code=line.item_code or "",
+        item_description=line.item_description or "",
+        item_qty=line.item_qty or 0,
+        item_uom=line.item_uom or "",
+        item_supplier=line.item_supplier or "",
+        item_department=line.item_department or "",
+        item_class=line.item_class or "",
+        item_size=line.item_size or "",
+        item_color=line.item_color or "",
+        item_type=line.item_type or "",
+        item_cost=line.item_cost or 0,
+        item_price=line.item_price or 0,
+        item_discount=line.item_discount or 0,
+        discount_code=line.discount_code or "",
+        item_price_ext=line.item_price_ext or 0,
+        tag1=TAG_ITEM_VOID,
+        tag2=line.tag2 or "",
+        tag3=line.tag3 or "",
+        tag4=line.tag4 or "",
+        promo_tag=line.promo_tag or "",
+    )
+
+    line.delete()
+
+    context = _build_temp_line_cart_context(request, trans_no)
+    if request.headers.get("HX-Request"):
+        return render(request, "sales/partials/cart_remove_response.html", context)
+    return JsonResponse({
+        "ok": True,
+        "void_kind": "item",
+        "transaction_type": TRTYPE_VOID_ITEM,
+        "remaining_items": context["item_count"],
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_void_transaction(request):
+    """Void the full active transaction (F7) with manager PIN, same business day."""
+    manager_pin = request.POST.get("manager_pin", "")
+    manager_user = _verify_manager_pin(manager_pin)
+    if not manager_user:
+        return JsonResponse({"ok": False, "error": "Manager PIN is invalid"}, status=403)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    cart_lines = list(TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr"))
+    if not cart_lines:
+        return JsonResponse({"ok": False, "error": "Active cart is empty"}, status=400)
+
+    session = get_current_session(request)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open POS session"}, status=400)
+
+    now = datetime.datetime.now()
+    header = TransactionHeader.objects.create(
+        session=session,
+        user_id=user_id,
+        user_id2=manager_user.username[:4],
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        transaction_date=session.business_date,
+        transaction_time=now.strftime("%H:%M"),
+        transaction_type=TRTYPE_VOID_TRANS,
+        return_code=TRTYPE_VOID_TRANS,
+    )
+
+    TransactionItem.objects.bulk_create([
+        TransactionItem(
+            header=header,
+            item_code=line.item_code or "",
+            item_description=line.item_description or "",
+            item_qty=line.item_qty or 0,
+            item_uom=line.item_uom or "",
+            item_supplier=line.item_supplier or "",
+            item_department=line.item_department or "",
+            item_class=line.item_class or "",
+            item_size=line.item_size or "",
+            item_color=line.item_color or "",
+            item_type=line.item_type or "",
+            item_cost=line.item_cost or 0,
+            item_price=line.item_price or 0,
+            item_discount=line.item_discount or 0,
+            discount_code=line.discount_code or "",
+            item_price_ext=line.item_price_ext or 0,
+            tag1=line.tag1 or "",
+            tag2=line.tag2 or "",
+            tag3=line.tag3 or "",
+            tag4=TAG_VOID_TRANS,
+            promo_tag=line.promo_tag or "",
+        )
+        for line in cart_lines
+    ])
+
+    TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).delete()
+
+    _save_current_transaction_no(trans_no)
+    request.session["pos_trans_no"] = _get_next_transaction_no()
+    _clear_trans_disc(request)
+
+    return JsonResponse({
+        "ok": True,
+        "void_kind": "full",
+        "transaction_type": TRTYPE_VOID_TRANS,
+        "next_transaction_no": request.session.get("pos_trans_no"),
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_void_previous(request):
+    """Void a previous completed transaction (F6) by receipt number, same business day."""
+    manager_pin = request.POST.get("manager_pin", "")
+    manager_user = _verify_manager_pin(manager_pin)
+    if not manager_user:
+        return JsonResponse({"ok": False, "error": "Manager PIN is invalid"}, status=403)
+
+    receipt_no = _normalize_transaction_no(request.POST.get("receipt_no", ""))
+    if receipt_no == "00000000":
+        return JsonResponse({"ok": False, "error": "Receipt number is required"}, status=400)
+
+    session = get_current_session(request)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open POS session"}, status=400)
+
+    target = (
+        TransactionHeader.objects
+        .filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=receipt_no,
+            transaction_date=session.business_date,
+        )
+        .exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL)
+        .order_by("-id")
+        .first()
+    )
+    if not target:
+        return JsonResponse({
+            "ok": False,
+            "error": "Receipt not found for this business day or already voided",
+        }, status=404)
+
+    already_voided = TransactionHeader.objects.filter(
+        store_id=STORE_ID,
+        terminal_id=TERMINAL_ID,
+        transaction_date=session.business_date,
+        transaction_type=TRTYPE_VOID_PREVIOUS,
+        item_ref=receipt_no,
+    ).exists()
+    if already_voided:
+        return JsonResponse({"ok": False, "error": "Receipt already voided previously"}, status=409)
+
+    now = datetime.datetime.now()
+    void_header = TransactionHeader.objects.create(
+        session=session,
+        user_id=_get_user_id(request),
+        user_id2=manager_user.username[:4],
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=request.session.get("pos_trans_no") or receipt_no,
+        transaction_date=session.business_date,
+        transaction_time=now.strftime("%H:%M"),
+        transaction_type=TRTYPE_VOID_PREVIOUS,
+        return_code=TRTYPE_VOID_PREVIOUS,
+        item_ref=receipt_no,
+    )
+
+    source_items = list(target.items.all())
+    if source_items:
+        TransactionItem.objects.bulk_create([
+            TransactionItem(
+                header=void_header,
+                item_code=item.item_code or "",
+                item_description=item.item_description or "",
+                item_qty=item.item_qty or 0,
+                item_uom=item.item_uom or "",
+                item_supplier=item.item_supplier or "",
+                item_department=item.item_department or "",
+                item_class=item.item_class or "",
+                item_size=item.item_size or "",
+                item_color=item.item_color or "",
+                item_type=item.item_type or "",
+                item_cost=item.item_cost or 0,
+                item_price=item.item_price or 0,
+                item_discount=item.item_discount or 0,
+                discount_code=item.discount_code or "",
+                item_price_ext=item.item_price_ext or 0,
+                tag1=item.tag1 or "",
+                tag2=item.tag2 or "",
+                tag3=item.tag3 or "",
+                tag4=TAG_VOID_PREVIOUS,
+                promo_tag=item.promo_tag or "",
+            )
+            for item in source_items
+        ])
+
+    return JsonResponse({
+        "ok": True,
+        "void_kind": "previous",
+        "transaction_type": TRTYPE_VOID_PREVIOUS,
+        "receipt_no": receipt_no,
+    })
+
+
+@login_required
+@require_open_session
 def cart_new(request):
     """Start a new transaction (clear cart, get new receipt number)."""
     user_id = _get_user_id(request)
@@ -551,6 +994,7 @@ def cart_new(request):
             store_id=STORE_ID,
             transaction_no=trans_no,
         ).delete() # This needs to be configured to suspend instead of delete in case we want to support suspended transactions in the future
+        _save_current_transaction_no(trans_no)
 
     new_trans = _get_next_transaction_no()
     request.session["pos_trans_no"] = new_trans
@@ -636,6 +1080,8 @@ def cart_line_disc(request):
     qty = line.item_qty or Decimal("1")
     item_discount = (price * disc_pct / 100).quantize(Decimal("0.0001")) if disc_pct > 0 else Decimal("0")
     ext = (price - item_discount) * qty
+    if (line.tag1 or "") == TAG_ITEM_RETURN:
+        ext = -abs(ext)
 
     line.item_discount = item_discount
     line.discount_code = disc_type
@@ -670,6 +1116,429 @@ def cart_line_disc(request):
     return JsonResponse({"ok": True, "total": str(total)})
 
 
+@login_required(login_url="sales:pos_login")
+@require_open_session
+@require_http_methods(["POST"])
+def cart_line_price_override(request):
+    """Override unit price for a specific cart line and preserve existing line-discount rate."""
+    try:
+        rec_ctr = int(Decimal(str(request.POST.get("rec_ctr", "0") or "0")))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    try:
+        new_price = Decimal(str(request.POST.get("new_price", "0") or "0"))
+    except (ValueError, TypeError, ArithmeticError):
+        return JsonResponse({"ok": False, "error": "Invalid price"}, status=400)
+
+    if new_price < 0:
+        return JsonResponse({"ok": False, "error": "Price cannot be negative"}, status=400)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    line = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        rec_ctr=rec_ctr,
+    ).first()
+
+    if not line:
+        if request.headers.get("HX-Request"):
+            return render(request, "sales/partials/cart_error.html", {"error": "Line not found"}, status=404)
+        return JsonResponse({"ok": False, "error": "Line not found"}, status=404)
+
+    old_price = line.item_price or Decimal("0")
+    if new_price != old_price:
+        old_discount = line.item_discount or Decimal("0")
+        qty = line.item_qty or Decimal("1")
+
+        disc_rate = Decimal("0")
+        if old_price > 0 and old_discount > 0:
+            disc_rate = old_discount / old_price
+
+        new_item_discount = (new_price * disc_rate).quantize(Decimal("0.0001")) if disc_rate > 0 else Decimal("0")
+        ext = (new_price - new_item_discount) * qty
+        if (line.tag1 or "") == TAG_ITEM_RETURN:
+            ext = -abs(ext)
+
+        if (line.old_price or Decimal("0")) <= 0:
+            line.old_price = old_price
+
+        line.item_price = new_price
+        line.item_discount = new_item_discount
+        line.item_price_ext = ext
+        line.price_override = TAG_PRICE_OVERRIDE
+        line.save(update_fields=[
+            "old_price",
+            "item_price",
+            "item_discount",
+            "item_price_ext",
+            "price_override",
+        ])
+
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+
+    if request.headers.get("HX-Request"):
+        return render(
+            request,
+            "sales/partials/cart_line_disc_response.html",
+            {
+                "cart_lines": cart_lines,
+                "subtotal": subtotal,
+                "trans_disc": trans_disc,
+                "trans_disc_amt": trans_disc_amt,
+                "total": total,
+                "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+                "last_item": cart_lines.last(),
+            },
+        )
+
+    return JsonResponse({"ok": True, "total": str(total)})
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_item_return_toggle(request):
+    """Tag or untag a cart line as item return with manager/admin validation."""
+    raw_rec_ctr = str(request.POST.get("rec_ctr", "") or "").strip()
+    if not raw_rec_ctr:
+        return JsonResponse({"ok": False, "error": "Select an item first"}, status=400)
+
+    try:
+        rec_ctr = int(Decimal(raw_rec_ctr))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    if rec_ctr <= 0:
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    mode = (request.POST.get("mode") or "set").strip().lower()
+    if mode not in {"set", "clear"}:
+        return JsonResponse({"ok": False, "error": "Invalid mode"}, status=400)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    line = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        rec_ctr=rec_ctr,
+    ).first()
+    if not line:
+        return JsonResponse({"ok": False, "error": "Line not found"}, status=404)
+
+    price = line.item_price or Decimal("0")
+    qty = line.item_qty or Decimal("1")
+    item_discount = line.item_discount or Decimal("0")
+    base_ext = abs((price - item_discount) * qty)
+
+    if mode == "clear":
+        line.tag1 = ""
+        line.return_code = ""
+        line.transaction_date_r = None
+        line.item_ref = ""
+        line.item_price_ext = base_ext
+        line.save(update_fields=[
+            "tag1", "return_code", "transaction_date_r", "item_ref", "item_price_ext"
+        ])
+    else:
+        source_trans_no = _normalize_transaction_no(request.POST.get("source_transaction_no", ""))
+        if source_trans_no == "00000000":
+            return JsonResponse({"ok": False, "error": "Original transaction number is required"}, status=400)
+
+        source_exists = TransactionHeader.objects.filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=source_trans_no,
+        ).exists()
+        if not source_exists:
+            return JsonResponse({
+                "ok": False,
+                "error": "Source transaction number was not found in historical transactions",
+            }, status=404)
+
+        purchased_raw = (request.POST.get("purchased_date") or "").strip()
+        if not purchased_raw:
+            return JsonResponse({"ok": False, "error": "Purchased date is required"}, status=400)
+        try:
+            purchased_date = datetime.datetime.strptime(purchased_raw, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({"ok": False, "error": "Invalid purchased date"}, status=400)
+
+        if purchased_date > datetime.date.today():
+            return JsonResponse({"ok": False, "error": "Purchased date cannot be in the future"}, status=400)
+
+        manager_pin = request.POST.get("manager_pin", "")
+        manager_user = _verify_manager_pin(manager_pin)
+        if not manager_user:
+            return JsonResponse({"ok": False, "error": "Admin/manager PIN is invalid"}, status=403)
+
+        line.tag1 = TAG_ITEM_RETURN
+        line.return_code = TAG_ITEM_RETURN
+        line.transaction_date_r = purchased_date
+        line.item_ref = source_trans_no
+        line.item_price_ext = -base_ext
+        line.save(update_fields=[
+            "tag1", "return_code", "transaction_date_r", "item_ref", "item_price_ext"
+        ])
+
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+
+    if request.headers.get("HX-Request"):
+        return render(
+            request,
+            "sales/partials/cart_line_disc_response.html",
+            {
+                "cart_lines": cart_lines,
+                "subtotal": subtotal,
+                "trans_disc": trans_disc,
+                "trans_disc_amt": trans_disc_amt,
+                "total": total,
+                "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+                "last_item": cart_lines.last(),
+            },
+        )
+
+    return JsonResponse({"ok": True, "total": str(total), "mode": mode})
+
+
+@login_required
+@require_open_session
+@require_http_methods(["GET"])
+def cart_return_lookup(request):
+    """Lookup a historical receipt and return its line items for return selection."""
+    receipt_no = _normalize_transaction_no(request.GET.get("receipt_no", ""))
+    if receipt_no == "00000000":
+        return JsonResponse({"ok": False, "error": "Receipt number is required"}, status=400)
+
+    source_header = (
+        TransactionHeader.objects
+        .filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=receipt_no,
+        )
+        .exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL)
+        .exclude(return_code=TAG_ITEM_RETURN)
+        .order_by("-id")
+        .first()
+    )
+    if not source_header:
+        return JsonResponse({
+            "ok": False,
+            "error": "Receipt not found or is not eligible for returns",
+        }, status=404)
+
+    items = []
+    for item in source_header.items.all().order_by("id"):
+        qty = item.item_qty or Decimal("0")
+        if qty <= 0:
+            continue
+        price = item.item_price or Decimal("0")
+        discount = item.item_discount or Decimal("0")
+        ext = item.item_price_ext or ((price - discount) * qty)
+        items.append({
+            "line_id": item.id,
+            "item_code": item.item_code or "",
+            "description": item.item_description or "",
+            "qty": str(qty),
+            "max_qty": str(qty),
+            "price": str(price),
+            "ext": str(ext),
+            "size": get_size_description(item.item_size or ""),
+            "color": get_color_description(
+                item.item_color or "",
+                icode=item.item_code or "",
+                size=item.item_size or "",
+            ),
+        })
+
+    if not items:
+        return JsonResponse({
+            "ok": False,
+            "error": "Receipt has no returnable items",
+        }, status=404)
+
+    return JsonResponse({
+        "ok": True,
+        "receipt_no": source_header.transaction_no,
+        "transaction_date": source_header.transaction_date.strftime("%Y-%m-%d") if source_header.transaction_date else "",
+        "items": items,
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_return_import(request):
+    """Insert selected historical receipt items directly into current cart as returns."""
+    manager_pin = request.POST.get("manager_pin", "")
+    manager_user = _verify_manager_pin(manager_pin)
+    if not manager_user:
+        return JsonResponse({"ok": False, "error": "Admin/manager PIN is invalid"}, status=403)
+
+    receipt_no = _normalize_transaction_no(request.POST.get("receipt_no", ""))
+    if receipt_no == "00000000":
+        return JsonResponse({"ok": False, "error": "Receipt number is required"}, status=400)
+
+    source_header = (
+        TransactionHeader.objects
+        .filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=receipt_no,
+        )
+        .exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL)
+        .exclude(return_code=TAG_ITEM_RETURN)
+        .order_by("-id")
+        .first()
+    )
+    if not source_header:
+        return JsonResponse({"ok": False, "error": "Receipt not found or is not eligible for returns"}, status=404)
+
+    try:
+        item_ids = json.loads((request.POST.get("item_ids") or "[]").strip() or "[]")
+        item_ids = [int(x) for x in item_ids]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "error": "Invalid selected items"}, status=400)
+
+    try:
+        raw_qty_map = json.loads((request.POST.get("item_qtys") or "{}").strip() or "{}")
+        if not isinstance(raw_qty_map, dict):
+            raise ValueError("qty map must be object")
+        requested_qty_map = {}
+        for key, value in raw_qty_map.items():
+            line_id = int(key)
+            qty = Decimal(str(value or "0"))
+            requested_qty_map[line_id] = qty
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "error": "Invalid return quantities"}, status=400)
+
+    if not item_ids:
+        return JsonResponse({"ok": False, "error": "Select at least one item"}, status=400)
+
+    source_items = list(source_header.items.filter(id__in=item_ids).order_by("id"))
+    if not source_items:
+        return JsonResponse({"ok": False, "error": "Selected items were not found on this receipt"}, status=404)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        trans_no = _get_next_transaction_no()
+        request.session["pos_trans_no"] = trans_no
+
+    now = datetime.datetime.now()
+    try:
+        biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
+    except Exception:
+        biz_date = now.date()
+
+    max_rec = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).aggregate(mx=models.Max("rec_ctr"))
+    rec_ctr = int(max_rec["mx"] or 0)
+
+    rows = []
+    for src in source_items:
+        source_qty = src.item_qty or Decimal("0")
+        requested_qty = requested_qty_map.get(src.id, source_qty)
+        if requested_qty <= 0:
+            continue
+        if requested_qty > source_qty:
+            return JsonResponse({
+                "ok": False,
+                "error": f"Requested return quantity exceeds sold quantity for item {src.item_code or src.id}",
+            }, status=400)
+
+        rec_ctr += 1
+        price = src.item_price or Decimal("0")
+        discount = src.item_discount or Decimal("0")
+        ext = (price - discount) * requested_qty
+        rows.append(TempTransaction(
+            user_id=user_id,
+            terminal_id=TERMINAL_ID,
+            store_id=STORE_ID,
+            transaction_no=trans_no,
+            transaction_date=biz_date,
+            transaction_date_r=source_header.transaction_date,
+            transaction_time=now.strftime("%H:%M"),
+            transaction_type="S",
+            return_code=TAG_ITEM_RETURN,
+            item_ref=source_header.transaction_no,
+            item_code=src.item_code or "",
+            item_description=(src.item_description or "")[:25],
+            item_qty=requested_qty,
+            item_uom=src.item_uom or "",
+            item_supplier=src.item_supplier or "",
+            item_department=src.item_department or "",
+            item_class=src.item_class or "",
+            item_size=src.item_size or "",
+            item_color=src.item_color or "",
+            item_type=src.item_type or "",
+            item_cost=src.item_cost or 0,
+            item_price=price,
+            item_discount=discount,
+            discount_code=src.discount_code or "",
+            item_price_ext=-abs(ext),
+            tag1=TAG_ITEM_RETURN,
+            tag2=src.tag2 or "",
+            tag3=src.tag3 or "",
+            tag4=src.tag4 or "",
+            promo_tag=src.promo_tag or "",
+            rec_ctr=rec_ctr,
+        ))
+
+    if not rows:
+        return JsonResponse({"ok": False, "error": "No valid items selected for return"}, status=400)
+
+    TempTransaction.objects.bulk_create(rows)
+
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+
+    return JsonResponse({
+        "ok": True,
+        "imported_count": len(rows),
+        "total": str(total),
+        "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+    })
+
+
 @login_required
 @require_open_session
 def pay_view(request):
@@ -693,7 +1562,7 @@ def pay_view(request):
     trans_disc = _get_trans_disc(request)
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
 
-    if total <= 0:
+    if not cart_lines.exists():
         if is_htmx:
             return render(request, "sales/partials/_pay_modal_empty.html", {"message": "Add items to cart first."})
         return redirect("sales:pos_cashier")
@@ -716,7 +1585,9 @@ def pay_view(request):
 
 
 def _parse_tender_entries(request):
-    """Parse tender_entries JSON from POST. Returns list of {"pcode": ..., "amount": ...} or empty."""
+    """Parse tender_entries JSON from POST.
+    Returns list of {"pcode": ..., "amount": ..., "payment_reference": ...} or empty.
+    """
     import json
     raw = request.POST.get("tender_entries", "").strip()
     if not raw:
@@ -730,8 +1601,9 @@ def _parse_tender_entries(request):
                 amt = Decimal(str(item.get("amount", 0) or 0))
             except (ValueError, TypeError):
                 amt = Decimal("0")
+            payment_reference = str(item.get("payment_reference") or "").strip()[:20]
             if pcode and amt > 0:
-                entries.append({"pcode": pcode, "amount": amt})
+                entries.append({"pcode": pcode, "amount": amt, "payment_reference": payment_reference})
         return entries
     except (json.JSONDecodeError, TypeError):
         return []
@@ -751,9 +1623,6 @@ def payment_complete(request):
     trans_no = request.session.get("pos_trans_no")
     tender_entries = _parse_tender_entries(request)
     current_session = get_current_session(request)
-    if not tender_entries:
-        return redirect("sales:pay")
-
     cart_lines_qs = TempTransaction.objects.filter(
         user_id=user_id,
         terminal_id=TERMINAL_ID,
@@ -769,9 +1638,24 @@ def payment_complete(request):
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines_list, trans_disc)
     print("SUBTOTAL:", subtotal, "DISC_AMT:", trans_disc_amt, "TOTAL:", total)
 
-    total_tendered = sum(t["amount"] for t in tender_entries)
-    if total_tendered < total:
+    if total > 0 and not tender_entries:
         return redirect("sales:pay")
+
+    total_tendered = sum(t["amount"] for t in tender_entries)
+    if total > 0 and total_tendered < total:
+        return redirect("sales:pay")
+
+    # Enforce reference for non-cash tenders and disallow overpay on non-cash entries.
+    if total > 0:
+        running_remaining = total
+        for t in tender_entries:
+            tender = Tender.objects.filter(pcode=t["pcode"]).first()
+            is_cash = bool(tender and tender.pchange == "Y")
+            if not is_cash and not (t.get("payment_reference") or "").strip():
+                return redirect("sales:pay")
+            if not is_cash and t["amount"] > running_remaining:
+                return redirect("sales:pay")
+            running_remaining = max(Decimal("0"), running_remaining - t["amount"])
 
     now = datetime.datetime.now()
     try:
@@ -797,12 +1681,20 @@ def payment_complete(request):
             "amount": str(amt),
             "is_cash": is_cash
         })
+        tender_entries_full.append((pcode, amt, desc, is_cash))
 
         if is_cash:
             total_cash += amt
 
-    change_amount = max(Decimal("0"), total_tendered - total) if total_cash > 0 else Decimal("0")
+    if total < 0:
+        change_amount = abs(total)
+    elif total_cash > 0:
+        change_amount = max(Decimal("0"), total_tendered - total)
+    else:
+        change_amount = Decimal("0")
     tender_display = ", ".join(f"{t['desc']} ₱{t['amount']}" for t in tender_lines)
+    has_return_lines = any((line.tag1 or "") == TAG_ITEM_RETURN for line in cart_lines_list)
+    all_lines_return = has_return_lines and all((line.tag1 or "") == TAG_ITEM_RETURN for line in cart_lines_list)
 
     # --- Create one TransactionHeader for the whole transaction ---
     header = TransactionHeader.objects.create(
@@ -814,6 +1706,7 @@ def payment_complete(request):
         transaction_date=biz_date,
         transaction_time=now.strftime("%H:%M"),
         transaction_type="S",
+        return_code=TAG_ITEM_RETURN if all_lines_return else "",
 
         trans_disc_type=trans_disc.get("type", ""),
         trans_disc_pct=trans_disc.get("pct", 0),
@@ -851,7 +1744,7 @@ def payment_complete(request):
             tag4=getattr(line, 'tag4', ''),
             promo_tag=getattr(line, 'promo_tag', ''),
         )
-        for line in cart_lines_qs
+        for line in cart_lines_list
     ])
 
     # --- Create one Payment per tender entry ---
@@ -864,10 +1757,27 @@ def payment_complete(request):
                 (tl["desc"] for tl in tender_lines if tl["pcode"] == t["pcode"]),
                 t["pcode"]
             ),
-            payment_reference="",
+            payment_reference=(t.get("payment_reference") or "")[:20],
         )
         for t in tender_entries
     ])
+
+    # --- Clipper-style flat transaction log (TransactionLog / TLOG) ---
+    try:
+        service = TransactionService()
+        service.save_to_transaction_log(
+            cart_lines=cart_lines_qs,
+            transaction_no=trans_no,
+            transaction_date=biz_date,
+            transaction_time=now.strftime("%H:%M"),
+            user_id=user_id,
+            tender_entries=tender_entries_full,
+            subtotal_discount_pct=trans_disc.get("pct", Decimal("0")),
+            subtotal_discount_label=trans_disc.get("label", ""),
+            si_number=trans_no,
+        )
+    except Exception as e:
+        print(f"⚠️  TransactionService log failed: {e}")
 
     # --- Store receipt data ---
     request.session["last_receipt"] = {
@@ -881,9 +1791,11 @@ def payment_complete(request):
         "total": str(total),
         "tender": tender_display,
         "tender_lines": tender_lines,
-        "is_cash": any(t["is_cash"] for t in tender_lines),
-        "amount_tendered": str(total_tendered),
+        "is_cash": any(t["is_cash"] for t in tender_lines) or total < 0,
+        "amount_tendered": str(total_tendered) if tender_lines else "",
         "change_amount": str(change_amount),
+        "is_return_only": all_lines_return,
+        "is_exchange": has_return_lines and not all_lines_return,
         "lines": [
             {
                 "description": line.item_description or "",
@@ -899,11 +1811,16 @@ def payment_complete(request):
                     icode=line.item_code or "",
                     size=line.item_size or "",
                 ),
+                "is_return": (line.tag1 or "") == TAG_ITEM_RETURN,
+                "source_trans_no": line.item_ref or "",
+                "purchased_date": line.transaction_date_r.strftime("%Y-%m-%d") if line.transaction_date_r else "",
             }
             for line in cart_lines_list
         ],
     }
 
+    # --- Persist current transaction no, clear cart, advance transaction number ---
+    _save_current_transaction_no(trans_no)
     # --- Clear cart, advance transaction number ---
     cart_lines_qs.delete()
     request.session["pos_trans_no"] = _get_next_transaction_no()
@@ -1383,9 +2300,9 @@ def _do_print_z_reading(session):
     beg_si = si_numbers.first() or "00000000"
     end_si = si_numbers.last()  or "00000000"
  
-    void_line_items   = headers_qs.filter(transaction_type="L").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
-    void_transactions = headers_qs.filter(transaction_type="V").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
-    void_previous     = headers_qs.filter(transaction_type="P").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_line_items   = headers_qs.filter(transaction_type__in=[TRTYPE_VOID_ITEM, TRTYPE_VOID_ITEM_LEGACY]).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_transactions = headers_qs.filter(transaction_type__in=[TRTYPE_VOID_TRANS, TRTYPE_VOID_TRANS_LEGACY]).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_previous     = headers_qs.filter(transaction_type=TRTYPE_VOID_PREVIOUS).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
     item_returns      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price_ext"),      count=Count("id"))
     cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
  
@@ -1395,7 +2312,7 @@ def _do_print_z_reading(session):
         cash_withdrawals["total"],
     ]))
  
-    sales_headers = headers_qs.exclude(transaction_type__in=["V", "L", "P"]).exclude(return_code="R")
+    sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
  
     gross_sales = (
         TransactionItem.objects.filter(header__in=sales_headers)
@@ -1707,9 +2624,9 @@ def _do_print_x_reading(session):
     beg_si = si_numbers.first() or "00000000"
     end_si = si_numbers.last()  or "00000000"
 
-    void_line_items   = headers_qs.filter(transaction_type="L").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
-    void_transactions = headers_qs.filter(transaction_type="V").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
-    void_previous     = headers_qs.filter(transaction_type="P").aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_line_items   = headers_qs.filter(transaction_type__in=[TRTYPE_VOID_ITEM, TRTYPE_VOID_ITEM_LEGACY]).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_transactions = headers_qs.filter(transaction_type__in=[TRTYPE_VOID_TRANS, TRTYPE_VOID_TRANS_LEGACY]).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
+    void_previous     = headers_qs.filter(transaction_type=TRTYPE_VOID_PREVIOUS).aggregate(total=Sum("items__item_price_ext"), count=Count("id"))
     item_returns      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price_ext"),      count=Count("id"))
     cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
 
@@ -1719,7 +2636,7 @@ def _do_print_x_reading(session):
         cash_withdrawals["total"],
     ]))
 
-    sales_headers = headers_qs.exclude(transaction_type__in=["V", "L", "P"]).exclude(return_code="R")
+    sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
 
     gross_sales = (
         TransactionItem.objects.filter(header__in=sales_headers)

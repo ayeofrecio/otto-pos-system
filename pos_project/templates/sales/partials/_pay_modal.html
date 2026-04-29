@@ -4,7 +4,15 @@
 <div class="pay-modal-inner">
     <!-- Amount due box -->
     <div class="pay-total-box">
-        <div class="pay-total-label">Amount to Pay</div>
+        <div class="pay-total-label">
+            {% if total < 0 %}
+            Refund / Change to Give
+            {% elif total == 0 %}
+            No Payment Needed
+            {% else %}
+            Amount to Pay
+            {% endif %}
+        </div>
         <div class="pay-total-amount" data-total="{{ total|floatformat:2 }}">₱{{ total|floatformat:2 }}</div>
         {% if trans_disc_amt %}
         <div class="pay-total-breakdown">
@@ -14,62 +22,96 @@
         {% endif %}
     </div>
 
-    {% if tenders %}
+    {% if total > 0 and tenders %}
     <form method="post" action="{% url 'sales:payment_complete' %}" id="pay-form" onsubmit="return validatePayment()">
         {% csrf_token %}
         <input type="hidden" name="tender_entries" id="tender-entries" value="">
 
-        <!-- Tender entries list -->
-        <div class="pay-entries-section">
-            <div class="pay-tender-title">Payments</div>
-            <div class="pay-entries-list" id="pay-entries-list">
-                <p class="pay-entries-empty" id="pay-entries-empty">No payments added yet</p>
-            </div>
-            <div class="pay-summary-row">
-                <span class="pay-summary-label">Total tendered:</span>
-                <span class="pay-summary-value" id="total-tendered">₱0.00</span>
-            </div>
-            <div class="pay-summary-row">
-                <span class="pay-summary-label">Balance:</span>
-                <span class="pay-summary-value" id="balance-display">—</span>
-            </div>
-            <div class="pay-change-row" id="pay-change-row" style="display:none;">
-                <span class="pay-change-label">Change:</span>
-                <span class="pay-change-amount ok" id="change-display">₱0.00</span>
-            </div>
-        </div>
-
-        <!-- Add payment section -->
-        <div class="pay-add-section">
-            <div class="pay-tender-title">Add Payment</div>
-            <div class="pay-tenders">
-                {% for tender in tenders %}
-                <button type="button" class="pay-tender-btn"
-                        data-pcode="{{ tender.pcode }}"
-                        data-desc="{{ tender.description }}"
-                        data-pchange="{{ tender.pchange }}"
-                        onclick="selectTenderForAdd('{{ tender.pcode }}', '{{ tender.description }}', '{{ tender.pchange }}')">
-                    {{ tender.description }}
-                </button>
-                {% endfor %}
-            </div>
-
-            <div class="pay-cash-section" id="pay-cash-section">
-                <div class="pay-cash-section-title">Amount</div>
-                <div class="pay-quick-amounts" id="pay-quick-amounts"></div>
-                <div class="pay-tendered-row">
-                    <span class="pay-tendered-currency">₱</span>
-                    <input type="number" id="tendered-input" class="pay-tendered-input"
-                           min="0" step="0.01" placeholder="0.00"
-                           oninput="updateAddAmount()" onkeydown="handleTenderedKey(event)">
+        <div class="pay-layout">
+            <!-- Tender entries list -->
+            <div class="pay-col">
+                <div class="pay-entries-section">
+                    <div class="pay-tender-title">Payments</div>
+                    <div class="pay-entries-list" id="pay-entries-list">
+                        <p class="pay-entries-empty" id="pay-entries-empty">No payments added yet</p>
+                    </div>
+                    <div class="pay-summary-row">
+                        <span class="pay-summary-label">Total tendered:</span>
+                        <span class="pay-summary-value" id="total-tendered">₱0.00</span>
+                    </div>
+                    <div class="pay-summary-row">
+                        <span class="pay-summary-label">Balance:</span>
+                        <span class="pay-summary-value" id="balance-display">—</span>
+                    </div>
+                    <div class="pay-change-row" id="pay-change-row" style="display:none;">
+                        <span class="pay-change-label">Change:</span>
+                        <span class="pay-change-amount ok" id="change-display">₱0.00</span>
+                    </div>
                 </div>
             </div>
 
-            <button type="button" class="btn btn-secondary pay-add-btn" id="pay-add-btn" disabled onclick="addTenderEntry()">Add Payment</button>
+            <!-- Add payment section -->
+            <div class="pay-col">
+                <div class="pay-add-section">
+                    <div class="pay-tender-title">Add Payment</div>
+                    <div class="pay-tenders">
+                        {% for tender in tenders %}
+                        <button type="button" class="pay-tender-btn"
+                                data-pcode="{{ tender.pcode }}"
+                                data-desc="{{ tender.description }}"
+                                data-pchange="{{ tender.pchange }}"
+                                onclick="selectTenderForAdd('{{ tender.pcode }}', '{{ tender.description }}', '{{ tender.pchange }}')">
+                            {{ tender.description }}
+                        </button>
+                        {% endfor %}
+                    </div>
+
+                    <div class="pay-cash-section" id="pay-cash-section">
+                        <div class="pay-cash-section-title">Amount</div>
+                        <div class="pay-quick-amounts" id="pay-quick-amounts"></div>
+                        <div class="pay-tendered-row">
+                            <span class="pay-tendered-currency">₱</span>
+                            <input type="number" id="tendered-input" class="pay-tendered-input"
+                                   min="0" step="0.01" placeholder="0.00"
+                                   oninput="updateAddAmount()" onkeydown="handleTenderedKey(event)">
+                        </div>
+                        <div id="pay-reference-section" style="display:none;">
+                            <div class="pay-cash-section-title">Payment Reference</div>
+                            <input type="text" id="payment-reference-input" class="pay-tendered-input"
+                                   maxlength="20" placeholder="Enter reference (e.g. Maya ref no.)"
+                                   autocomplete="off" oninput="updateAddAmount()" onkeydown="handleReferenceKey(event)">
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary pay-add-btn" id="pay-add-btn" disabled onclick="addTenderEntry()">Add Payment</button>
+                </div>
+            </div>
         </div>
 
         <div class="pay-modal-actions">
             <button type="submit" class="btn btn-primary" id="pay-btn" disabled>Complete Payment</button>
+            {% if standalone %}
+            <a href="{% url 'sales:pos_cashier' %}" class="btn btn-secondary">Cancel</a>
+            {% else %}
+            <button type="button" class="btn btn-secondary" onclick="closePayModal()">Cancel</button>
+            {% endif %}
+        </div>
+    </form>
+    {% elif total <= 0 %}
+    <form method="post" action="{% url 'sales:payment_complete' %}" id="pay-form" onsubmit="return validatePayment()">
+        {% csrf_token %}
+        <input type="hidden" name="tender_entries" id="tender-entries" value="[]">
+
+        <div class="pay-empty" style="text-align:left;">
+            {% if total < 0 %}
+            This transaction has a net return amount. Complete to print a receipt with change/refund amount.
+            {% else %}
+            Return and replacement are equal. No payment is required.
+            {% endif %}
+        </div>
+
+        <div class="pay-modal-actions">
+            <button type="submit" class="btn btn-primary" id="pay-btn">Complete Transaction</button>
             {% if standalone %}
             <a href="{% url 'sales:pos_cashier' %}" class="btn btn-secondary">Cancel</a>
             {% else %}
@@ -99,8 +141,21 @@
 
     window.PAY_MODAL_TOTAL = TOTAL;
 
+    function focusDefaultTenderButton() {
+        const tenderButtons = Array.from(document.querySelectorAll('.pay-tender-btn'));
+        if (!tenderButtons.length) return;
+
+        // Prefer the tender that can return change (usually Cash), fallback to first.
+        const cashBtn = tenderButtons.find(btn => (btn.getAttribute('data-pchange') || '').toUpperCase() === 'Y');
+        (cashBtn || tenderButtons[0]).focus();
+    }
+
     function fmt(n) {
         return n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function getRemainingBalance() {
+        return Math.max(0, TOTAL - tenderEntries.reduce((s, e) => s + e.amount, 0));
     }
 
     window.selectTenderForAdd = function(pcode, desc, pchange) {
@@ -111,13 +166,31 @@
 
         const cashSection = document.getElementById('pay-cash-section');
         const inp = document.getElementById('tendered-input');
+        const refSection = document.getElementById('pay-reference-section');
+        const refInput = document.getElementById('payment-reference-input');
         if (cashSection) cashSection.classList.add('visible');
+        if (refSection) refSection.style.display = pchange === 'Y' ? 'none' : 'block';
+        if (refInput) {
+            refInput.value = '';
+            if (pchange !== 'Y') {
+                refInput.required = true;
+                refInput.placeholder = 'Enter ' + desc + ' reference';
+            } else {
+                refInput.required = false;
+                refInput.placeholder = 'Enter reference';
+            }
+        }
         if (inp) {
             inp.value = '';
             inp.placeholder = pchange === 'Y' ? '0.00 (exact or with change)' : '0.00';
+            if (pchange !== 'Y') {
+                inp.max = getRemainingBalance().toFixed(2);
+            } else {
+                inp.removeAttribute('max');
+            }
             inp.focus();
         }
-        buildQuickAyoutubemounts();
+        buildQuickAmounts();
         updateAddAmount();
     };
 
@@ -125,7 +198,7 @@
         const container = document.getElementById('pay-quick-amounts');
         if (!container) return;
         container.innerHTML = '';
-        const remaining = TOTAL - tenderEntries.reduce((s, e) => s + e.amount, 0);
+        const remaining = getRemainingBalance();
         const amounts = getQuickAmounts(Math.max(0, remaining));
         amounts.forEach((amt, i) => {
             const btn = document.createElement('button');
@@ -140,6 +213,10 @@
     function getQuickAmounts(remaining) {
         if (remaining <= 0) remaining = TOTAL;
         const amounts = [remaining];
+        // Non-cash tenders cannot exceed remaining balance.
+        if (selectedTender && selectedTender.pchange !== 'Y') {
+            return amounts;
+        }
         const steps = [100, 200, 500, 1000, 2000, 5000, 10000];
         for (const step of steps) {
             const rounded = Math.ceil(remaining / step) * step;
@@ -152,6 +229,9 @@
     function setTendered(amt) {
         const inp = document.getElementById('tendered-input');
         if (inp) {
+            if (selectedTender && selectedTender.pchange !== 'Y') {
+                amt = Math.min(amt, getRemainingBalance());
+            }
             inp.value = amt.toFixed(2);
             updateAddAmount();
             inp.focus();
@@ -160,26 +240,49 @@
 
     window.updateAddAmount = function() {
         const inp = document.getElementById('tendered-input');
-        const amt = inp ? parseFloat(inp.value) || 0 : 0;
+        let amt = inp ? parseFloat(inp.value) || 0 : 0;
+        const refInput = document.getElementById('payment-reference-input');
+        const reference = refInput ? refInput.value.trim() : '';
+        const needsReference = !!(selectedTender && selectedTender.pchange !== 'Y');
+        const remaining = getRemainingBalance();
+
+        if (selectedTender && selectedTender.pchange !== 'Y') {
+            if (inp) {
+                inp.max = remaining.toFixed(2);
+                if (amt > remaining) {
+                    amt = remaining;
+                    inp.value = remaining.toFixed(2);
+                }
+            }
+        }
+
         const addBtn = document.getElementById('pay-add-btn');
-        if (addBtn) addBtn.disabled = !selectedTender || amt <= 0;
+        if (addBtn) addBtn.disabled = !selectedTender || amt <= 0 || (needsReference && !reference);
     };
 
     window.addTenderEntry = function() {
         if (!selectedTender) return;
         const inp = document.getElementById('tendered-input');
-        const amt = inp ? parseFloat(inp.value) || 0 : 0;
+        let amt = inp ? parseFloat(inp.value) || 0 : 0;
+        const refInput = document.getElementById('payment-reference-input');
+        const paymentRef = refInput ? refInput.value.trim() : '';
+        if (selectedTender.pchange !== 'Y') {
+            amt = Math.min(amt, getRemainingBalance());
+        }
         if (amt <= 0) return;
+        if (selectedTender.pchange !== 'Y' && !paymentRef) return;
 
         tenderEntries.push({
             pcode: selectedTender.pcode,
             desc: selectedTender.desc,
             amount: amt,
-            pchange: selectedTender.pchange
+            pchange: selectedTender.pchange,
+            payment_reference: paymentRef
         });
 
         renderEntries();
         if (inp) inp.value = '';
+        if (refInput) refInput.value = '';
         updateAddAmount();
         buildQuickAmounts();
     };
@@ -203,7 +306,9 @@
 
         list.innerHTML = tenderEntries.map((e, i) =>
             '<div class="pay-entry-item">' +
-            '<span class="pay-entry-desc">' + escapeHtml(e.desc) + '</span>' +
+            '<span class="pay-entry-desc">' + escapeHtml(e.desc) +
+            (e.payment_reference ? ' <span class="pay-summary-label">[' + escapeHtml(e.payment_reference) + ']</span>' : '') +
+            '</span>' +
             '<span class="pay-entry-amt">₱' + fmt(e.amount) + '</span>' +
             '<button type="button" class="pay-entry-remove" onclick="removeTenderEntry(' + i + ')" title="Remove">×</button>' +
             '</div>'
@@ -259,8 +364,24 @@
 
         // Sync hidden input for form submit
         const hidden = document.getElementById('tender-entries');
-        if (hidden) hidden.value = JSON.stringify(tenderEntries.map(e => ({ pcode: e.pcode, amount: e.amount })));
+        if (hidden) {
+            hidden.value = JSON.stringify(tenderEntries.map(e => ({
+                pcode: e.pcode,
+                amount: e.amount,
+                payment_reference: e.payment_reference || ''
+            })));
+        }
     }
+
+    window.handleReferenceKey = function(evt) {
+        if (evt.key === 'Enter') {
+            evt.preventDefault();
+            const addBtn = document.getElementById('pay-add-btn');
+            if (addBtn && !addBtn.disabled) {
+                addTenderEntry();
+            }
+        }
+    };
 
     window.handleTenderedKey = function(evt) {
         if (evt.key === 'Enter') {
@@ -284,9 +405,16 @@
             return false;
         }
         document.getElementById('tender-entries').value = JSON.stringify(
-            tenderEntries.map(e => ({ pcode: e.pcode, amount: e.amount }))
+            tenderEntries.map(e => ({
+                pcode: e.pcode,
+                amount: e.amount,
+                payment_reference: e.payment_reference || ''
+            }))
         );
         return true;
     };
+
+    // Payment modal content is injected via HTMX; set initial keyboard focus after paint.
+    setTimeout(focusDefaultTenderButton, 0);
 })();
 </script>

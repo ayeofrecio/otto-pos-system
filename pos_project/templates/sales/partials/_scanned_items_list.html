@@ -1,14 +1,17 @@
 {% load sales_tags %}
-<h3 class="scanned-items-title">Items Entered <span class="scanned-items-hint">(click for discount, void, refund)</span></h3>
+<h3 class="scanned-items-title">Items Entered <span class="scanned-items-hint">(click for discount, price override, void, refund)</span></h3>
 <div class="scanned-items-inner">
 {% if cart_lines %}
 <div class="scanned-items-list">
     {% for line in cart_lines %}
-    <div class="scanned-item{% if forloop.last and show_new_anim %} scanned-item-new{% endif %} scanned-item-clickable" data-rec-ctr="{{ line.rec_ctr }}" onclick="openLineDiscModal({{ line.rec_ctr }})" title="Click for discount, void, or refund">
+    <div class="scanned-item{% if forloop.last and show_new_anim %} scanned-item-new{% endif %} scanned-item-clickable{% if line.tag1 == 'R' %} scanned-item-return{% endif %}" data-rec-ctr="{{ line.rec_ctr }}" data-is-return="{% if line.tag1 == 'R' %}1{% else %}0{% endif %}" data-unit-price="{{ line.item_price|floatformat:4 }}" onclick="openLineDiscModal({{ line.rec_ctr }})" title="Click for discount, price override, void, or refund">
         <div class="scanned-item-desc">{{ line.item_description }}</div>
         <div class="scanned-item-meta">
             {% if line.item_size or line.item_color %}
             <span class="scanned-item-variant">{% size_display line.item_size %}{% if line.item_size and line.item_color %}/{% endif %}{% color_display line.item_color line.item_code line.item_size %}</span>
+            {% endif %}
+            {% if line.tag1 == 'R' %}
+            <span class="scanned-item-return-badge">RETURN</span>
             {% endif %}
             {% if line.item_discount %}
             <span class="scanned-item-disc">{{ line.disc_pct|floatformat:-2 }}% disc</span>
