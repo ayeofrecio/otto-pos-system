@@ -440,6 +440,111 @@
             background: #3d454d;
         }
 
+        /* BUTTON */
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            color: #c4c3c3;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        /* Disabled */
+        .icon-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* ICON BASE */
+        .icon {
+            position: absolute;
+            width: 22px;
+            height: 22px;
+
+            opacity: 0;
+            transform: scale(0.8);
+
+            pointer-events: none;
+
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        /* DEFAULT (download visible) */
+        .icon-download {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* =========================
+        STATES
+        ========================= */
+
+        /* LOADING */
+        .icon-btn.loading {
+            color: #a79f9f;
+        }
+        .icon-btn.loading .icon {
+            opacity: 0;
+        }
+        .icon-btn.loading .icon-loading {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* SUCCESS */
+        .icon-btn.success {
+            color: #16a34a;
+        }
+        .icon-btn.success .icon {
+            opacity: 0;
+        }
+        .icon-btn.success .icon-success {
+            opacity: 1;
+            transform: scale(1);
+            animation: pop 0.35s ease;
+        }
+
+        /* ERROR */
+        .icon-btn.error {
+            color: #dc2626;
+        }
+        .icon-btn.error .icon {
+            opacity: 0;
+        }
+        .icon-btn.error .icon-error {
+            opacity: 1;
+            transform: scale(1);
+            animation: pop 0.35s ease;
+        }
+
+        /* =========================
+        ANIMATIONS
+        ========================= */
+
+        /* Spinner */
+        .icon-loading {
+            animation: spin 1s linear infinite;
+        }
+
+        /* Rotate */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Pop effect */
+        @keyframes pop {
+            0%   { transform: scale(0.6); opacity: 0; }
+            60%  { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); }
+        }
         #toast-container {
             position: fixed;
             bottom: 1rem;
@@ -1718,6 +1823,43 @@
             <span class="cashier">Cashier: {{ cashier }}</span>
         </div>
         <div class="header-right">
+            <button class="icon-btn" id="cloudBtn" title="cloudBtn">
+                <!-- Cloud Arrow Down -->
+                <svg class="icon icon-download" xmlns="http://www.w3.org/2000/svg" width="30" height="30"
+                    viewBox="0 0 24 24">
+                    <g fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M12 15.25a.75.75 0 0 1 .75.75v4.19l.72-.72a.75.75 0 1 1 1.06 1.06l-2 2a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06l.72.72V16a.75.75 0 0 1 .75-.75Z"
+                            clip-rule="evenodd" />
+                        <path
+                            d="M12.226 3.5c-2.75 0-4.964 2.2-4.964 4.897c0 .462.065.909.185 1.331c.497.144.963.36 1.383.64a.75.75 0 1 1-.827 1.25a3.54 3.54 0 0 0-1.967-.589c-1.961 0-3.536 1.57-3.536 3.486C2.5 16.43 4.075 18 6.036 18a.75.75 0 0 1 0 1.5C3.263 19.5 1 17.276 1 14.515c0-2.705 2.17-4.893 4.864-4.983a6.366 6.366 0 0 1-.102-1.135C5.762 4.856 8.664 2 12.226 2c3.158 0 5.796 2.244 6.355 5.221c2.3.977 3.919 3.238 3.919 5.882c0 3.074-2.188 5.631-5.093 6.253a.75.75 0 0 1-.314-1.467c2.24-.48 3.907-2.446 3.907-4.786c0-2.137-1.39-3.962-3.338-4.628a5.018 5.018 0 0 0-1.626-.27c-.583 0-1.14.1-1.658.28a.75.75 0 0 1-.494-1.416a6.517 6.517 0 0 1 3.024-.305A4.962 4.962 0 0 0 12.226 3.5Z" />
+                    </g>
+                </svg>
+                <!-- Cloud Check -->
+                <svg class="icon icon-success" xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24">
+                    <path fill="currentColor" fill-rule="evenodd"
+                        d="M12.476 3.75c-2.75 0-4.964 2.2-4.964 4.897c0 .462.065.909.185 1.331c.497.144.963.36 1.383.64a.75.75 0 1 1-.827 1.25a3.54 3.54 0 0 0-1.967-.589c-1.961 0-3.536 1.57-3.536 3.486c0 1.916 1.575 3.485 3.536 3.485a.75.75 0 0 1 0 1.5c-2.773 0-5.036-2.224-5.036-4.985c0-2.705 2.17-4.893 4.864-4.983a6.366 6.366 0 0 1-.102-1.135c0-3.541 2.902-6.397 6.464-6.397c3.158 0 5.796 2.244 6.355 5.221c2.3.977 3.919 3.238 3.919 5.882c0 3.074-2.188 5.631-5.093 6.253a.75.75 0 0 1-.314-1.467c2.24-.48 3.907-2.446 3.907-4.786c0-2.137-1.39-3.962-3.338-4.628a5.018 5.018 0 0 0-1.626-.27c-.583 0-1.14.1-1.658.28a.75.75 0 0 1-.494-1.416a6.517 6.517 0 0 1 3.024-.305a4.962 4.962 0 0 0-4.682-3.264Zm2.041 13.707c.3.286.312.76.026 1.06l-2.857 3a.75.75 0 0 1-1.086 0l-1.143-1.2a.75.75 0 1 1 1.086-1.034l.6.63l2.314-2.43a.75.75 0 0 1 1.06-.026Z"
+                        clip-rule="evenodd" />
+                </svg>
+                <!-- Cloud Cross -->
+                <svg class="icon icon-error" xmlns="http://www.w3.org/2000/svg" width="30" height="30"
+                    viewBox="0 0 24 24">
+                    <path fill="currentColor" fill-rule="evenodd"
+                        d="M12.476 3.75c-2.75 0-4.964 2.2-4.964 4.897c0 .462.065.909.185 1.331c.497.144.963.36 1.383.64a.75.75 0 1 1-.827 1.25a3.54 3.54 0 0 0-1.967-.589c-1.961 0-3.536 1.57-3.536 3.486c0 1.916 1.575 3.485 3.536 3.485a.75.75 0 0 1 0 1.5c-2.773 0-5.036-2.224-5.036-4.985c0-2.705 2.17-4.893 4.864-4.983a6.366 6.366 0 0 1-.102-1.135c0-3.541 2.902-6.397 6.464-6.397c3.158 0 5.796 2.244 6.355 5.221c2.3.977 3.919 3.238 3.919 5.882c0 3.074-2.188 5.631-5.093 6.253a.75.75 0 0 1-.314-1.467c2.24-.48 3.907-2.446 3.907-4.786c0-2.137-1.39-3.962-3.338-4.628a5.018 5.018 0 0 0-1.626-.27c-.583 0-1.14.1-1.658.28a.75.75 0 0 1-.494-1.416a6.517 6.517 0 0 1 3.024-.305a4.962 4.962 0 0 0-4.682-3.264ZM9.97 16.97a.75.75 0 0 1 1.06 0l.97.97l.97-.97a.75.75 0 1 1 1.06 1.06l-.97.97l.97.97a.75.75 0 0 1-1.06 1.06l-.97-.97l-.97.97a.75.75 0 1 1-1.06-1.06l.97-.97l-.97-.97a.75.75 0 0 1 0-1.06Z"
+                        clip-rule="evenodd" />
+                </svg>
+                <!-- Cloud Refresh -->
+                <svg class="icon icon-loading" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+                    <g fill="currentColor">
+                        <path
+                            d="M12.079 3v-.75V3Zm-8.4 8.333h-.75h.75Zm0 1.667l-.527.532a.75.75 0 0 0 1.056 0L3.68 13Zm2.209-1.134A.75.75 0 1 0 4.83 10.8l1.057 1.065ZM2.528 10.8a.75.75 0 0 0-1.056 1.065L2.528 10.8Zm16.088-3.408a.75.75 0 1 0 1.277-.786l-1.277.786ZM12.079 2.25c-5.047 0-9.15 4.061-9.15 9.083h1.5c0-4.182 3.42-7.583 7.65-7.583v-1.5Zm-9.15 9.083V13h1.5v-1.667h-1.5Zm1.28 2.2l1.679-1.667L4.83 10.8l-1.68 1.667l1.057 1.064Zm0-1.065L2.528 10.8l-1.057 1.065l1.68 1.666l1.056-1.064Zm15.684-5.86A9.158 9.158 0 0 0 12.08 2.25v1.5a7.658 7.658 0 0 1 6.537 3.643l1.277-.786Z" />
+                        <path
+                            d="M11.883 21v.75V21Zm8.43-8.333h.75h-.75Zm0-1.667l.528-.533a.75.75 0 0 0-1.055 0l.528.533ZM18.1 12.133a.75.75 0 1 0 1.055 1.067L18.1 12.133Zm3.373 1.067a.75.75 0 1 0 1.054-1.067L21.473 13.2ZM5.318 16.606a.75.75 0 1 0-1.277.788l1.277-.788Zm6.565 5.144c5.062 0 9.18-4.058 9.18-9.083h-1.5c0 4.18-3.43 7.583-7.68 7.583v1.5Zm9.18-9.083V11h-1.5v1.667h1.5Zm-1.277-2.2L18.1 12.133l1.055 1.067l1.686-1.667l-1.055-1.066Zm0 1.066l1.687 1.667l1.054-1.067l-1.686-1.666l-1.055 1.066Zm-15.745 5.86a9.197 9.197 0 0 0 7.841 4.357v-1.5a7.697 7.697 0 0 1-6.564-3.644l-1.277.788Z"
+                            opacity=".5" />
+                    </g>
+                </svg>
+            </button>
+
             <span class="time" id="live-time">{{ time }}</span>
             <a href="{% url 'pos_logout' %}" class="btn btn-secondary">Logout</a>
         </div>
@@ -2230,6 +2372,35 @@
             document.getElementById("close-trans-footer-default").style.display = "flex";
         };
         const Z_READING_REQUIRED = {{ z_reading_required|yesno:"true,false" }};
+    </script>
+    <script>
+        const btn = document.getElementById("cloudBtn");
+
+        btn.addEventListener("click", () => {
+            if (btn.disabled) return;
+
+            // Disable button + loading state
+            btn.disabled = true;
+            btn.className = "icon-btn loading";
+
+            // Simulate async process
+            setTimeout(() => {
+                const success = Math.random() > 0.5;
+
+                if (success) {
+                    btn.className = "icon-btn success";
+                } else {
+                    btn.className = "icon-btn error";
+                }
+
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    btn.className = "icon-btn";
+                    btn.disabled = false;
+                }, 2000);
+
+            }, 2000);
+        });
     </script>
     <script src="{% static 'sales/cashier.js' %}"></script>
 </body>
