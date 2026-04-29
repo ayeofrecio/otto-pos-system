@@ -24,6 +24,19 @@ from .color_lookup import get_color_description
 from .size_lookup import get_size_description
 from .decorators import require_open_session
 from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
+from .pos_constants import (
+    RCODE_ITEM_VOID,
+    TAG_ITEM_RETURN,
+    TAG_ITEM_VOID,
+    TAG_PRICE_OVERRIDE,
+    TAG_VOID_PREVIOUS,
+    TAG_VOID_TRANS,
+    TRTYPE_VOID_ITEM,
+    TRTYPE_VOID_ITEM_LEGACY,
+    TRTYPE_VOID_PREVIOUS,
+    TRTYPE_VOID_TRANS,
+    TRTYPE_VOID_TRANS_LEGACY,
+)
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
 
