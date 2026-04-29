@@ -19,7 +19,7 @@ def pos_login(request):
 
     if request.method == "POST":
         username = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "")
+        password = request.POST.get("password", "") 
         if username and password:
             user = authenticate(request, username=username, password=password)
             if user:

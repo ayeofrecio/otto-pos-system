@@ -1506,7 +1506,7 @@
 
         /* ── Close Transaction Modal ───────────────────────────────────── */
         .close-trans-modal-box {
-            width: 480px;
+            width: 500px;
             max-width: 95vw;
             max-height: 90vh;
             display: flex;
@@ -1514,40 +1514,72 @@
             overflow: hidden;
         }
 
+        /* ── Summary wrapper ──────────────────────────────────────────── */
         .close-trans-summary {
             background: #2d343e;
             border-bottom: 1px solid #2f3640;
-            padding: 0.75rem 1.5rem;
-
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            /* 3 columns */
-            gap: 1rem 2rem;
+            padding: 0.85rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
         }
 
+        .close-trans-summary-label {
+            font-size: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: #6e7681;
+        }
+
+        /* ── Reusable grid rows ───────────────────────────────────────── */
+        .close-trans-summary-grid {
+            display: grid;
+            gap: 0.6rem 1rem;
+        }
+
+        .close-trans-summary-grid--2 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .close-trans-summary-grid--3 {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .close-trans-summary-grid--top-border {
+            border-top: 1px solid #2f3640;
+            padding-top: 0.65rem;
+        }
+
+        /* ── Stat cell ────────────────────────────────────────────────── */
         .close-trans-summary-row {
             display: flex;
             flex-direction: column;
-            gap: 0.2rem;
-            font-size: 0.8rem;
+            gap: 2px;
+        }
+
+        .close-trans-summary-row span:first-child {
+            font-size: 15px;
             color: #8b949e;
         }
 
         .close-trans-summary-row span:last-child {
-            font-size: 1.1rem;
+            font-size: 20px;
             font-weight: 700;
             color: #e6edf3;
         }
 
-        /* Make the last item span 2 columns */
-        .close-trans-summary-row:last-child {
-            grid-column: span 2;
+        /* ── Value color modifiers ────────────────────────────────────── */
+        .close-trans-val--positive {
+            color: #6edb8f !important;
+        }
+
+        .close-trans-val--discount {
+            color: #f0a445 !important;
         }
 
         .close-trans-variance-val {
-            color: #ff6b6b;
+            color: #8b949e;
         }
-
 
         .close-trans-variance-val.over {
             color: #6edb8f;
@@ -1801,7 +1833,108 @@
             background: #1f4a63;
         }
 
-        /* Notes */
+        /* ── Credit / Debit inline section ───────────────────────────── */
+        .close-trans-credit-section {
+            border-top: 1px solid #2f3640;
+            padding-top: 0.65rem;
+        }
+
+        .close-trans-section-label {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #6e7681;
+            margin-bottom: 0.45rem;
+        }
+
+        .close-trans-credit-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .close-trans-credit-list div {
+            display: flex;
+            justify-content: space-between;
+            font-size: 17px;
+        }
+
+        .close-trans-credit-list span:first-child {
+            color: #8b949e;
+        }
+
+        .close-trans-credit-list span:last-child {
+            color: #e6edf3;
+            font-weight: 600;
+        }
+
+        .close-trans-credit-list .close-trans-credit-empty {
+            color: #6e7681;
+            font-style: italic;
+        }
+
+        .close-trans-credit-total {
+            display: flex;
+            justify-content: space-between;
+            font-size: 17px;
+            font-weight: 700;
+            border-top: 1px dashed #2f3640;
+            padding-top: 4px;
+            margin-top: 4px;
+            color: #e6edf3;
+        }
+
+        .close-trans-credit-total span:first-child {
+            color: #8b949e;
+        }
+
+        /* ── Cash input section ───────────────────────────────────────── */
+        .close-trans-input-section {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #2f3640;
+            background: #1f252c;
+        }
+
+        .close-trans-label {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #8b949e;
+            margin-bottom: 0.5rem;
+        }
+
+        .close-trans-input-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .close-trans-currency {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #8b949e;
+        }
+
+        .close-trans-cash-input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-align: right;
+            border: 2px solid #2f3640;
+            border-radius: 8px;
+            background: #252b33;
+            color: #e6edf3;
+            transition: border .15s, box-shadow .15s;
+        }
+
+        .close-trans-cash-input:focus {
+            outline: none;
+            border-color: #8b3d4a;
+        }
+
+        /* ── Notes ────────────────────────────────────────────────────── */
         .close-trans-notes-section {
             padding: 0.75rem 1.5rem;
             border-bottom: 1px solid #2f3640;
@@ -1809,6 +1942,8 @@
 
         .close-trans-notes-input {
             width: 100%;
+            min-height: 3rem;
+            max-height: 5rem;
             padding: 0.6rem 0.75rem;
             font-size: 0.9rem;
             border: 1.5px solid #2f3640;
@@ -1824,7 +1959,7 @@
             border-color: #8b3d4a;
         }
 
-        /* Footer */
+        /* ── Footer ───────────────────────────────────────────────────── */
         .close-trans-footer {
             display: flex;
             gap: 0.75rem;
@@ -1836,6 +1971,7 @@
 
         .close-trans-confirm-btn {
             background: #c54b58;
+            color: white;
             font-weight: 600;
             padding: 0.6rem 1.2rem;
         }
@@ -1848,6 +1984,41 @@
             background: #3d454d;
             color: #6e7681;
             cursor: not-allowed;
+        }
+
+        /* ── Confirm strip ────────────────────────────────────────────── */
+        .close-trans-confirm-strip {
+            border-top: 1px solid #5a2a2a;
+        }
+
+        .close-trans-confirm-strip-warning {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 0.75rem 1.5rem;
+            background: #2a1f1f;
+        }
+
+        .close-trans-confirm-strip-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #f85149;
+        }
+
+        .close-trans-confirm-strip-desc {
+            font-size: 11px;
+            color: #8b949e;
+        }
+
+        .close-trans-zread-final-btn {
+            background: #a83232;
+            font-weight: 600;
+            padding: 0.6rem 1.2rem;
+            color: #fff;
+        }
+
+        .close-trans-zread-final-btn:hover {
+            background: #922b2b;
         }
 
         @media (max-width: 600px) {
@@ -1947,6 +2118,10 @@
                         <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—" }}</dd>
                         <dt>Color:</dt>
                         <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as item_color_display %}{{ item_color_display|default:"—" }}</dd>
+                        <dd>{% size_display last_item.item_size %}{{ last_item.item_size|default:"—" }}</dd>
+                        <dt>Color:</dt>
+                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size
+                            %} {{ last_item.item_size|default:"—" }}</dd>
                         <dt>Price:</dt>
                         <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
                     </dl>
@@ -2118,23 +2293,30 @@
                 <h2>Apply Discount to Line</h2>
                 <button class="modal-close" onclick="closeLineDiscModal()">&#10005;</button>
             </div>
-            <form id="line-disc-form" hx-post="{% url 'sales:cart_line_disc' %}" hx-target="#cart-summary" hx-swap="outerHTML" hx-trigger="submit">
+            <form id="line-disc-form" hx-post="{% url 'sales:cart_line_disc' %}" hx-target="#cart-summary"
+                hx-swap="outerHTML" hx-trigger="submit">
                 {% csrf_token %}
                 <input type="hidden" id="line-disc-rec-ctr" name="rec_ctr" value="">
                 <input type="hidden" id="line-disc-type" name="disc_type" value="">
                 <div class="disc-type-grid">
-                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="REG" data-pct="0" onclick="selectLineDiscType(this,'REG','Regular',0)">Regular %</button>
-                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="SC" data-pct="20" onclick="selectLineDiscType(this,'SC','Senior Citizen',20)">Senior Citizen (20%)</button>
-                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="PWD" data-pct="20" onclick="selectLineDiscType(this,'PWD','PWD',20)">PWD (20%)</button>
-                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="EMP" data-pct="10" onclick="selectLineDiscType(this,'EMP','Employee',10)">Employee (10%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="REG" data-pct="0"
+                        onclick="selectLineDiscType(this,'REG','Regular',0)">Regular %</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="SC" data-pct="20"
+                        onclick="selectLineDiscType(this,'SC','Senior Citizen',20)">Senior Citizen (20%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="PWD" data-pct="20"
+                        onclick="selectLineDiscType(this,'PWD','PWD',20)">PWD (20%)</button>
+                    <button type="button" class="disc-type-btn line-disc-type-btn" data-code="EMP" data-pct="10"
+                        onclick="selectLineDiscType(this,'EMP','Employee',10)">Employee (10%)</button>
                 </div>
                 <div class="disc-pct-row">
                     <label class="disc-pct-label" for="line-disc-pct-input">Discount %:</label>
-                    <input type="number" id="line-disc-pct-input" name="disc_pct" class="disc-pct-num" value="0" min="0" max="100" step="0.01" autocomplete="off">
+                    <input type="number" id="line-disc-pct-input" name="disc_pct" class="disc-pct-num" value="0" min="0"
+                        max="100" step="0.01" autocomplete="off">
                     <span class="disc-pct-sym">%</span>
                 </div>
                 <div class="disc-modal-footer">
-                    <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove Discount</button>
+                    <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove
+                        Discount</button>
                     <button type="button" class="btn btn-secondary" onclick="closeLineDiscModal()">Cancel</button>
                     <button type="button" class="btn btn-apply-disc" onclick="applyLineDisc()">Apply</button>
                 </div>
@@ -2161,82 +2343,121 @@
             <div class="modal-header">
                 <h2>Close Transaction</h2>
                 <button class="btn btn-secondary" onclick="fetch('/pos/x-reading/', {
-                    method: 'GET',
-                    headers: {'X-CSRFToken': CSRF_TOKEN}
-                }).then(r => r.json()).then(d => alert(d.message || d.error))">
-                    Print X-Reading</button>
+                method: 'GET',
+                headers: {'X-CSRFToken': CSRF_TOKEN}
+            }).then(r => r.json()).then(d => alert(d.message || d.error))">
+                    Print X-Reading
+                </button>
                 <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
             </div>
 
             <form id="close-trans-form" method="POST" action="{% url 'sales:close_session' %}">
                 {% csrf_token %}
-
-                <!-- Hidden fields populated by JS -->
                 <input type="hidden" name="opening_cash" id="hidden-opening-cash" value="0">
                 <input type="hidden" name="paid_in_cash" id="hidden-paid-in-cash" value="0">
                 <input type="hidden" name="credit_debit_cash" id="hidden-credit-debit-cash" value="0">
                 <input type="hidden" name="expected_cash" id="hidden-expected-cash" value="0">
                 <input type="hidden" name="cash_variance" id="hidden-cash-variance" value="0">
+                <input type="hidden" name="net_worth" id="hidden-net-worth" value="0">
+                <input type="hidden" name="gross_sales" id="hidden-gross-sales" value="0">
+                <input type="hidden" name="total_discounts" id="hidden-total-discounts" value="0">
 
-                <!-- Summary strip -->
                 <div class="close-trans-summary">
-                    <div class="close-trans-summary-row">
-                        <span>Opening Cash</span>
-                        <span id="close-trans-opening-cash">₱0.00</span>
+                    <div class="close-trans-summary-label">Session Summary</div>
+
+                    <div class="close-trans-summary-grid close-trans-summary-grid--3">
+                        <div class="close-trans-summary-row">
+                            <span>Change Fund</span>
+                            <span id="close-trans-opening-cash">₱0.00</span>
+                        </div>
+                        <div class="close-trans-summary-row">
+                            <span>Paid in Cash</span>
+                            <span id="close-trans-paid-in-cash">₱0.00</span>
+                        </div>
+                        <div class="close-trans-summary-row">
+                            <span>Net Worth</span>
+                            <span id="close-trans-net-worth" class="close-trans-val--positive">₱0.00</span>
+                        </div>
                     </div>
-                    <div class="close-trans-summary-row">
-                        <span>Paid in Cash</span>
-                        <span id="close-trans-paid-in-cash">₱0.00</span>
+
+                    <div class="close-trans-summary-grid close-trans-summary-grid--2">
+                        <div class="close-trans-summary-row">
+                            <span>Gross Sales</span>
+                            <span id="close-trans-gross-sales">₱0.00</span>
+                        </div>
+                        <div class="close-trans-summary-row">
+                            <span>Total Discounts</span>
+                            <span id="close-trans-total-discounts" class="close-trans-val--discount">₱0.00</span>
+                        </div>
                     </div>
-                    <div class="close-trans-summary-row">
-                        <span>Credit/Debit Cash</span>
-                        <span id="close-trans-credit-debit-cash">₱0.00</span>
+
+                    <div class="close-trans-credit-section">
+                        <div class="close-trans-section-label">Credit / Debit Breakdown</div>
+                        <div id="close-trans-credit-debit-list" class="close-trans-credit-list"></div>
+                        <div class="close-trans-credit-total">
+                            <span>Total Credit/Debit</span>
+                            <span id="close-trans-credit-debit-cash">₱0.00</span>
+                        </div>
                     </div>
-                    <div class="close-trans-summary-row">
-                        <span>Expected Cash</span>
-                        <span id="close-trans-expected-cash">₱0.00</span>
-                    </div>
-                    <div class="close-trans-summary-row">
-                        <span>Variance</span>
-                        <span id="close-trans-variance" class="close-trans-variance-val">—</span>
+
+                    <div
+                        class="close-trans-summary-grid close-trans-summary-grid--3 close-trans-summary-grid--top-border">
+                        <div class="close-trans-summary-row">
+                            <span>Expected Cash</span>
+                            <span id="close-trans-expected-cash">₱0.00</span>
+                        </div>
+                        <div class="close-trans-summary-row">
+                            <span>Actual Cash</span>
+                            <span id="close-trans-actual-cash">₱0.00</span>
+                        </div>
+                        <!-- <div class="close-trans-summary-row">
+                            <span>Variance</span>
+                            <span id="close-trans-variance" class="close-trans-variance-val">—</span>
+                        </div> -->
                     </div>
                 </div>
 
-                <!-- Closing cash input -->
-                <div class="close-trans-input-section">
-                    <label class="close-trans-label" for="closing-cash-input">Closing Cash Amount</label>
+                <!-- <div class="close-trans-input-section">
+                    <label class="close-trans-label">Closing Cash</label>
                     <div class="close-trans-input-row">
                         <span class="close-trans-currency">₱</span>
                         <input type="number" id="closing-cash-input" name="closing_cash" class="close-trans-cash-input"
-                            placeholder="0.00" min="0" step="0.01" autocomplete="off">
+                            placeholder="0.00" step="0.01" min="0">
                     </div>
-                </div>
+                </div> -->
 
-                <!-- Denomination breakdown -->
-                <div class="close-trans-denom-open">
-                    <button type="button" class="btn btn-secondary" onclick="openDenominationModal()">
-                        Count by Denomination
-                    </button>
-                </div>
-
-                <!-- Notes -->
                 <div class="close-trans-notes-section">
                     <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
                     <textarea id="close-trans-notes" name="notes" class="close-trans-notes-input" rows="2"
                         placeholder="e.g. short due to petty cash withdrawal…"></textarea>
                 </div>
 
-                <div class="close-trans-footer">
+                <div class="close-trans-footer" id="close-trans-footer-default">
                     <button type="button" class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
-                    <button type="submit" class="btn close-trans-confirm-btn" id="close-trans-confirm-btn" disabled>
-                        Confirm Close
+                    <button type="button" class="btn close-trans-confirm-btn" id="close-trans-confirm-btn"
+                        onclick="showZReadConfirm()">
+                        Process Z-Read
                     </button>
                 </div>
-            </form>
 
+                <!-- Confirmation strip — hidden until Process Z-Read is clicked -->
+                <div class="close-trans-confirm-strip" id="close-trans-confirm-strip" style="display:none;">
+                    <div class="close-trans-confirm-strip-warning">
+                        <span class="close-trans-confirm-strip-title">Confirm Z-Read</span>
+                        <span class="close-trans-confirm-strip-desc">This will close the session and cannot be
+                            undone.</span>
+                    </div>
+                    <div class="close-trans-footer">
+                        <button type="button" class="btn btn-secondary" onclick="hideZReadConfirm()">No, go
+                            back</button>
+                        <button type="submit" form="close-trans-form" class="btn close-trans-zread-final-btn">
+                            Yes, process Z-Read
+                        </button>
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
-
     <!-- Close Transaction Modal -> Denomination Modal -->
     <div class="modal-overlay" id="denom-modal" onclick="closeDenominationModalOutside(event)">
         <div class="modal denom-modal-box" onclick="event.stopPropagation()">
@@ -2463,27 +2684,27 @@
         const CART_RETURN_IMPORT_URL = "{% url 'sales:cart_return_import' %}";
         const CSRF_TOKEN = "{{ csrf_token }}";
         const POS_KEYS = {
-            iDisc:    "{{ pos_keys.pIDiscKey|escapejs }}",
-            iView:    "{{ pos_keys.pIViewKey|escapejs }}",
-            stDisc:   "{{ pos_keys.pSTDiscKey|escapejs }}",
-            prOver:   "{{ pos_keys.pPrOverKey|escapejs }}",
-            iRet:     "{{ pos_keys.pIRetKey|escapejs }}",
-            iVoid:    "{{ pos_keys.pIVoidKey|escapejs }}",
-            iVoidA:   "{{ pos_keys.pIVoidAKey|escapejs }}",
-            voidTr:   "{{ pos_keys.pVoidTrKey|escapejs }}",
-            iSusRt:   "{{ pos_keys.pISusRtKey|escapejs }}",
-            stat:     "{{ pos_keys.pStatKey|escapejs }}",
-            subTot:   "{{ pos_keys.pSubTotKey|escapejs }}",
-            paymnt:   "{{ pos_keys.pPaymntKey|escapejs }}",
-            iQty:     "{{ pos_keys.pIQtyKey|escapejs }}",
-            tsRep:    "{{ pos_keys.pTSRepKey|escapejs }}",
-            zRead:    "{{ pos_keys.pZReadKey|escapejs }}",
-            jRep:     "{{ pos_keys.pJRepKey|escapejs }}",
-            sOff:     "{{ pos_keys.pSOffKey|escapejs }}",
-            menu:     "{{ pos_keys.pMenuKey|escapejs }}",
-            sman:     "{{ pos_keys.pSManKey|escapejs }}",
-            cWithD:   "{{ pos_keys.pCWithDKey|escapejs }}",
-            resendTxt:"{{ pos_keys.pResendTxt|escapejs }}",
+            iDisc: "{{ pos_keys.pIDiscKey|escapejs }}",
+            iView: "{{ pos_keys.pIViewKey|escapejs }}",
+            stDisc: "{{ pos_keys.pSTDiscKey|escapejs }}",
+            prOver: "{{ pos_keys.pPrOverKey|escapejs }}",
+            iRet: "{{ pos_keys.pIRetKey|escapejs }}",
+            iVoid: "{{ pos_keys.pIVoidKey|escapejs }}",
+            iVoidA: "{{ pos_keys.pIVoidAKey|escapejs }}",
+            voidTr: "{{ pos_keys.pVoidTrKey|escapejs }}",
+            iSusRt: "{{ pos_keys.pISusRtKey|escapejs }}",
+            stat: "{{ pos_keys.pStatKey|escapejs }}",
+            subTot: "{{ pos_keys.pSubTotKey|escapejs }}",
+            paymnt: "{{ pos_keys.pPaymntKey|escapejs }}",
+            iQty: "{{ pos_keys.pIQtyKey|escapejs }}",
+            tsRep: "{{ pos_keys.pTSRepKey|escapejs }}",
+            zRead: "{{ pos_keys.pZReadKey|escapejs }}",
+            jRep: "{{ pos_keys.pJRepKey|escapejs }}",
+            sOff: "{{ pos_keys.pSOffKey|escapejs }}",
+            menu: "{{ pos_keys.pMenuKey|escapejs }}",
+            sman: "{{ pos_keys.pSManKey|escapejs }}",
+            cWithD: "{{ pos_keys.pCWithDKey|escapejs }}",
+            resendTxt: "{{ pos_keys.pResendTxt|escapejs }}",
         };
         // Reverse map: Clipper chr() value → physical key name (e.g. "\xff" → "F12")
         // Mirrors KEY_LABELS in key_capture.js
@@ -2560,6 +2781,17 @@
             type: "{{ trans_disc.type|default:'' }}",
             label: "{{ trans_disc.label|default:'' }}"
         };
+
+        function showZReadConfirm() {
+            document.getElementById("close-trans-footer-default").style.display = "none";
+            document.getElementById("close-trans-confirm-strip").style.display = "block";
+        }
+
+        function hideZReadConfirm() {
+            document.getElementById("close-trans-confirm-strip").style.display = "none";
+            document.getElementById("close-trans-footer-default").style.display = "flex";
+        };
+        const Z_READING_REQUIRED = {{ z_reading_required|yesno:"true,false" }};
     </script>
     <script src="{% static 'sales/cashier.js' %}"></script>
 </body>

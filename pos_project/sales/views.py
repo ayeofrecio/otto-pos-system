@@ -350,8 +350,55 @@ def to_close_session_details(request):
     if not session:
         return JsonResponse({"error": "No open session found."}, status=400)
 
+    # Cash tenders are those configured to give change (pchange="Y").
+    cash_tender_codes = list(
+        Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
+    )
+
+    paid_in_cash = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+            pcode__in=cash_tender_codes,
+        ).aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
+    credit_debit_cash = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+        ).exclude(
+            pcode__in=cash_tender_codes,
+        ).aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+    credit_debit_cash_list = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+        ).exclude(
+            pcode__in=cash_tender_codes,
+        ).values("tender_desc")
+        .annotate(total=Sum("amount"))
+        .order_by("tender_desc")
+    )
+    discounts = TransactionItem.objects.filter(
+        header__session_id=session.id,
+        pcode="DISC"
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    print("DISCOUNTS:", discounts)
+    
+
     return JsonResponse({
         "opening_cash": float(session.opening_cash),
+        "paid_in_cash": float(paid_in_cash),
+        "credit_debit_cash": float(credit_debit_cash),
+        "credit_debit_cash_list": [
+            {
+                "tender_desc": row["tender_desc"] or "",
+                "total": float(row["total"] or 0),
+            }
+            for row in credit_debit_cash_list
+        ],
+
     })
 
 # ---------------------------------------------------------------------------
@@ -404,7 +451,8 @@ def cashier_view(request):
         "total": total,
         "item_count": item_count,
         "last_item": last_line,
-        "pos_keys": get_pos_keys(), 
+        "pos_keys": get_pos_keys(),
+        "z_reading_required": getattr(request, "z_reading_required", False),
     }
     return render(request, "sales/cashier.html", context)
 
@@ -1588,6 +1636,7 @@ def payment_complete(request):
 
     trans_disc = _get_trans_disc(request)
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines_list, trans_disc)
+    print("SUBTOTAL:", subtotal, "DISC_AMT:", trans_disc_amt, "TOTAL:", total)
 
     if total > 0 and not tender_entries:
         return redirect("sales:pay")
@@ -1658,6 +1707,16 @@ def payment_complete(request):
         transaction_time=now.strftime("%H:%M"),
         transaction_type="S",
         return_code=TAG_ITEM_RETURN if all_lines_return else "",
+
+        trans_disc_type=trans_disc.get("type", ""),
+        trans_disc_pct=trans_disc.get("pct", 0),
+        trans_disc_label=trans_disc.get("label", ""),
+        trans_disc_amount=trans_disc_amt,
+
+        subtotal=subtotal,
+        amount_total=total,
+        amount_tendered=total_tendered,
+        change_amount=change_amount,
     )
 
     # --- Create one TransactionItem per cart line ---
@@ -1762,6 +1821,7 @@ def payment_complete(request):
 
     # --- Persist current transaction no, clear cart, advance transaction number ---
     _save_current_transaction_no(trans_no)
+    # --- Clear cart, advance transaction number ---
     cart_lines_qs.delete()
     request.session["pos_trans_no"] = _get_next_transaction_no()
     _clear_trans_disc(request)
@@ -1842,10 +1902,6 @@ def close_session(request):
     expected_cash = parse_decimal(request.POST.get("expected_cash"))
     cash_variance = parse_decimal(request.POST.get("cash_variance"))
     notes         = request.POST.get("notes", "").strip()
-    print(session)
-    print(closing_cash)
-    print(expected_cash)
-    print(cash_variance)
     if closing_cash < 0:
         messages.error(request, "Closing cash cannot be negative.")
         return redirect("sales:pos_cashier")
@@ -2499,6 +2555,10 @@ def receipt_view(request):
         "change_amount":    receipt.get("change_amount", ""),
         "lines":            receipt["lines"],
         # "assisted_by":      receipt.get["salesperson"] or ""
+        "headers":      list(terminal_config.headers.all().order_by("line_number")),
+        "footers":      _get_customer_footers(terminal_config),
+        "cashier_name": session.cashier.get_full_name() or session.cashier.username,
+        "store_id":     session.store_id,
     }
  
     printer = None

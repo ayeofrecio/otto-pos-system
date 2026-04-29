@@ -12,6 +12,8 @@
         <dt>Code:</dt><dd>{{ last_item.item_code }}</dd>
         <dt>Size:</dt><dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—" }}</dd>
         <dt>Color:</dt><dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as item_color_display %}{{ item_color_display|default:"—" }}</dd>
+        <dt>Size:</dt><dd>{% size_display last_item.item_size %}{{ last_item.item_size|default:"—" }}</dd>
+        <dt>Color:</dt><dd>{% color_display last_item.item_color last_item.item_code last_item.item_size %}{{ last_item.item_colo|default:"—" }}</dd>
         <dt>Price:</dt><dd>&#8369;{{ last_item.item_price|floatformat:2 }}</dd>
     </dl>
     {% else %}
