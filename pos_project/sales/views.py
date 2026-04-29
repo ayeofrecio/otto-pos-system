@@ -1,6 +1,7 @@
 """
 POS Cashier views: login, cashier screen, cart operations.
 """
+import os
 
 import datetime
 import django.utils.timezone as timezone
@@ -23,6 +24,7 @@ from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, Te
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
 
+from sales.services import import_products_from_csv
 from setup.pos_keys import get_pos_keys
 
 
@@ -1911,3 +1913,55 @@ def print_x_reading(request):
 
     return redirect("sales:pos_cashier")
 
+# def _check_cloud_sync_status():
+
+
+
+
+# def get_update_cloud(request): # For Temporary, I will only use this for the imported csv file. After the cloud sync is working, we can remove this and just call the check_cloud_sync_status() function in the relevant places. 
+#     """
+#     Utility view to trigger an update check for cloud sync status.
+#     Not part of the regular flow, but can be called from the frontend or via curl.
+#     """
+#     try:
+#         check_cloud_sync_status()
+#         return JsonResponse({"status": "ok", "message": "Cloud sync status updated."})
+#     except Exception as e:
+#         print(f"❌ Cloud sync update error: {e}")
+#         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+# Configure these in settings.py or TerminalSetup instead of hardcoding
+CSV_ITEMS_PATH      = os.environ.get("CSV_ITEMS_PATH", "/data/exports/items.csv")
+CSV_ITEMDTL_PATH    = os.environ.get("CSV_ITEMDTL_PATH", "/data/exports/itemdtl.csv")
+CSV_ITEMSCOSTS_PATH = os.environ.get("CSV_ITEMSCOSTS_PATH", "/data/exports/itemscosts.csv")
+
+
+@login_required
+@require_http_methods(["POST"])          # cloud button should POST, not GET
+def update_from_csv(request):
+    """
+    Truncates Item/ItemDetail tables and re-imports from the exported CSV files.
+    Triggered by the cloud-download button in the cashier UI.
+    """
+    try:
+        summary = import_products_from_csv(
+            CSV_ITEMS_PATH,
+            CSV_ITEMDTL_PATH,
+            CSV_ITEMSCOSTS_PATH,
+        )
+        print(f"✅ CSV import summary: {summary}")
+        return JsonResponse({
+            "status": "ok",
+            "message": (
+                f"Import complete. "
+                f"{summary['items_loaded']} items, "
+                f"{summary['item_details_loaded']} variants, "
+                f"{summary['costs_updated']} costs updated."
+            ),
+            **summary,
+        })
+    except FileNotFoundError as e:
+        return JsonResponse({"status": "error", "message": f"CSV file not found: {e}"}, status=400)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)

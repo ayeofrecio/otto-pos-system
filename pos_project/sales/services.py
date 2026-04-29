@@ -23,13 +23,15 @@ Public API
 """
 
 import datetime
-
+import csv
+from decimal import Decimal, InvalidOperation
 from .exceptions import (
     OutsideBusinessHoursError,
     StoreAlreadyOpenError,
     StoreClosedError,
 )
-from .models import OpenTerminal, TerminalSetup
+from .models import OpenTerminal, TerminalSetup, Item, ItemDetail
+from django.db import connection, transaction
 
 
 # ---------------------------------------------------------------------------
@@ -241,3 +243,96 @@ def assert_store_open(
             f"{store_id}/{terminal_id} is not open for business date {biz_date}. "
             "Run open_store() before processing transactions."
         )
+
+
+
+def _truncate_product_tables():
+    """Truncate ItemDetail then Item, bypassing FK checks momentarily."""
+    with connection.cursor() as cursor:
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
+        cursor.execute("TRUNCATE TABLE itemdtl;")
+        cursor.execute("TRUNCATE TABLE items;")
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
+
+
+def _clean_code(value):
+    return value.split('-')[0] if value else ''
+
+
+def _load_items(filepath):
+    items = []
+    with open(filepath, newline='', encoding='utf-8') as f:
+        for row in csv.DictReader(f, delimiter=','):
+            if row.get("ACTIVE") != "1":
+                continue
+            items.append(Item(
+                icode=row["STOCKNO"].strip(),
+                short_desc=row["STOCKNAME"].strip(),
+                long_desc=row["STOCKDESC"].strip(),
+                department=_clean_code(row.get("DEPT", "")),
+                item_class=_clean_code(row.get("CLASS", "")),
+                category=_clean_code(row.get("CATEGORY", "")),
+                uom=row.get("UOM", "").strip(),
+                item_type=_clean_code(row.get("TYPE", "")),
+                inactive='0',
+            ))
+    Item.objects.bulk_create(items, ignore_conflicts=True)
+    return len(items)
+
+
+def _load_item_details(filepath):
+    details = []
+    with open(filepath, newline='', encoding='utf-8') as f:
+        for row in csv.DictReader(f, delimiter=','):
+            if row.get("ACTIVE") != "1":
+                continue
+            details.append(ItemDetail(
+                icode=row["STOCKNO"].strip(),
+                barcode=row["BARCODE"].strip(),
+                color=row.get("COLOR_CODE", "").strip(),
+                size=row.get("SIZE_CODE", "").strip(),
+                stocks1=Decimal("0"),
+                stocks2=Decimal("0"),
+                cost=Decimal("0"),
+                price=Decimal("0"),
+                min_qty=Decimal("0"),
+                max_qty=Decimal("0"),
+            ))
+    ItemDetail.objects.bulk_create(details, ignore_conflicts=True)
+    return len(details)
+
+
+def _load_items_costs(filepath):
+    updated = 0
+    with open(filepath, newline='', encoding='utf-8') as f:
+        for row in csv.DictReader(f, delimiter=','):
+            stockno = row.get("STOCKNO", "").strip()
+            cost_val = row.get("COST", "").strip()
+            if not stockno or not cost_val:
+                continue
+            try:
+                cost = Decimal(cost_val)
+            except InvalidOperation:
+                continue
+            if Item.objects.filter(icode=stockno).update(price=cost):
+                updated += 1
+    return updated
+
+
+def import_products_from_csv(items_path, itemdtl_path, itemscosts_path):
+    """
+    Truncate product tables then re-import from CSV files.
+    All-or-nothing: rolls back on any error.
+    Returns a summary dict.
+    """
+    with transaction.atomic():
+        _truncate_product_tables()
+        items_count = _load_items(items_path)
+        details_count = _load_item_details(itemdtl_path)
+        costs_updated = _load_items_costs(itemscosts_path)
+
+    return {
+        "items_loaded": items_count,
+        "item_details_loaded": details_count,
+        "costs_updated": costs_updated,
+    }

@@ -31,6 +31,53 @@
     setInterval(updateTime, 1000);
   }
 
+  // cashier.js — wire up the cloud button
+  const cloudBtn = document.getElementById("cloudBtn");
+
+  cloudBtn.addEventListener("click", async () => {
+      setCloudState("loading");
+
+      try {
+          const res = await fetch("/pos/update-from-csv/", {
+              method: "POST",
+              headers: { "X-CSRFToken": getCookie("csrftoken") },
+          });
+          const data = await res.json();
+
+          if (data.status === "ok") {
+              setCloudState("success");
+              console.log(data.message);
+          } else {
+              setCloudState("error");
+              console.error(data.message);
+          }
+      } catch (err) {
+          setCloudState("error");
+          console.error("Network error:", err);
+      } finally {
+          // Reset icon after 3 seconds
+          setTimeout(() => setCloudState("idle"), 3000);
+      }
+  });
+
+  function setCloudState(state) {
+      // Matches your icon-download / icon-success / icon-error / icon-loading CSS classes
+      const states = ["idle", "loading", "success", "error"];
+      const iconMap = {
+          idle:    "icon-download",
+          loading: "icon-loading",
+          success: "icon-success",
+          error:   "icon-error",
+      };
+      cloudBtn.dataset.state = state;
+      // Your CSS should show/hide .icon-* based on [data-state] on the button
+  }
+
+  function getCookie(name) {
+      return document.cookie.split("; ")
+          .find(r => r.startsWith(name + "="))
+          ?.split("=")[1];
+  }
   // ---------------------------------------------------------------------------
   // Dynamic max-height for Items Entered based on bottom bar position
   // ---------------------------------------------------------------------------
