@@ -147,6 +147,10 @@
     syncSelectedRowAfterRender();
     if (lastRequestWasCartAdd) {
       lastRequestWasCartAdd = false;
+      var scannedRows = document.querySelectorAll('.scanned-item[data-rec-ctr]');
+      if (scannedRows && scannedRows.length) {
+        setSelectedScannedRow(scannedRows[scannedRows.length - 1].getAttribute('data-rec-ctr'));
+      }
       const scannedInner = document.querySelector('.scanned-items-inner');
       if (scannedInner) { scannedInner.scrollTop = scannedInner.scrollHeight; }
       const cartList = document.querySelector('.cart-list');

@@ -36,6 +36,7 @@ from .pos_constants import (
     TRTYPE_VOID_PREVIOUS,
     TRTYPE_VOID_TRANS,
     TRTYPE_VOID_TRANS_LEGACY,
+    VOID_TRANSACTION_TYPES_ALL,
 )
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
