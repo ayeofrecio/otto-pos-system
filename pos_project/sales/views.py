@@ -1,6 +1,7 @@
 """
 POS Cashier views: login, cashier screen, cart operations.
 """
+import os
 
 import datetime
 import django.utils.timezone as timezone
@@ -25,21 +26,8 @@ from .decorators import require_open_session
 from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
-from .pos_constants import (
-    RCODE_ITEM_VOID,
-    TAG_ITEM_RETURN,
-    TAG_PRICE_OVERRIDE,
-    TAG_ITEM_VOID,
-    TAG_VOID_PREVIOUS,
-    TAG_VOID_TRANS,
-    TRTYPE_VOID_ITEM,
-    TRTYPE_VOID_ITEM_LEGACY,
-    TRTYPE_VOID_PREVIOUS,
-    TRTYPE_VOID_TRANS,
-    TRTYPE_VOID_TRANS_LEGACY,
-    VOID_TRANSACTION_TYPES_ALL,
-)
 
+from sales.services import import_products_from_csv
 from setup.pos_keys import get_pos_keys
 
 
@@ -350,8 +338,55 @@ def to_close_session_details(request):
     if not session:
         return JsonResponse({"error": "No open session found."}, status=400)
 
+    # Cash tenders are those configured to give change (pchange="Y").
+    cash_tender_codes = list(
+        Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
+    )
+
+    paid_in_cash = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+            pcode__in=cash_tender_codes,
+        ).aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
+    credit_debit_cash = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+        ).exclude(
+            pcode__in=cash_tender_codes,
+        ).aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+    credit_debit_cash_list = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+        ).exclude(
+            pcode__in=cash_tender_codes,
+        ).values("tender_desc")
+        .annotate(total=Sum("amount"))
+        .order_by("tender_desc")
+    )
+    discounts = TransactionItem.objects.filter(
+        header__session_id=session.id,
+        pcode="DISC"
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    print("DISCOUNTS:", discounts)
+    
+
     return JsonResponse({
         "opening_cash": float(session.opening_cash),
+        "paid_in_cash": float(paid_in_cash),
+        "credit_debit_cash": float(credit_debit_cash),
+        "credit_debit_cash_list": [
+            {
+                "tender_desc": row["tender_desc"] or "",
+                "total": float(row["total"] or 0),
+            }
+            for row in credit_debit_cash_list
+        ],
+
     })
 
 # ---------------------------------------------------------------------------
@@ -404,7 +439,8 @@ def cashier_view(request):
         "total": total,
         "item_count": item_count,
         "last_item": last_line,
-        "pos_keys": get_pos_keys(), 
+        "pos_keys": get_pos_keys(),
+        "z_reading_required": getattr(request, "z_reading_required", False),
     }
     return render(request, "sales/cashier.html", context)
 
@@ -1588,6 +1624,7 @@ def payment_complete(request):
 
     trans_disc = _get_trans_disc(request)
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines_list, trans_disc)
+    print("SUBTOTAL:", subtotal, "DISC_AMT:", trans_disc_amt, "TOTAL:", total)
 
     if total > 0 and not tender_entries:
         return redirect("sales:pay")
@@ -1658,6 +1695,16 @@ def payment_complete(request):
         transaction_time=now.strftime("%H:%M"),
         transaction_type="S",
         return_code=TAG_ITEM_RETURN if all_lines_return else "",
+
+        trans_disc_type=trans_disc.get("type", ""),
+        trans_disc_pct=trans_disc.get("pct", 0),
+        trans_disc_label=trans_disc.get("label", ""),
+        trans_disc_amount=trans_disc_amt,
+
+        subtotal=subtotal,
+        amount_total=total,
+        amount_tendered=total_tendered,
+        change_amount=change_amount,
     )
 
     # --- Create one TransactionItem per cart line ---
@@ -1685,7 +1732,7 @@ def payment_complete(request):
             tag4=getattr(line, 'tag4', ''),
             promo_tag=getattr(line, 'promo_tag', ''),
         )
-        for line in cart_lines_list
+        for line in cart_lines_qs
     ])
 
     # --- Create one Payment per tender entry ---
@@ -1842,10 +1889,6 @@ def close_session(request):
     expected_cash = parse_decimal(request.POST.get("expected_cash"))
     cash_variance = parse_decimal(request.POST.get("cash_variance"))
     notes         = request.POST.get("notes", "").strip()
-    print(session)
-    print(closing_cash)
-    print(expected_cash)
-    print(cash_variance)
     if closing_cash < 0:
         messages.error(request, "Closing cash cannot be negative.")
         return redirect("sales:pos_cashier")
@@ -2499,6 +2542,10 @@ def receipt_view(request):
         "change_amount":    receipt.get("change_amount", ""),
         "lines":            receipt["lines"],
         # "assisted_by":      receipt.get["salesperson"] or ""
+        "headers":      list(terminal_config.headers.all().order_by("line_number")),
+        "footers":      _get_customer_footers(terminal_config),
+        "cashier_name": session.cashier.get_full_name() or session.cashier.username,
+        "store_id":     session.store_id,
     }
  
     printer = None
@@ -2768,3 +2815,55 @@ def print_x_reading(request):
 
     return redirect("sales:pos_cashier")
 
+# def _check_cloud_sync_status():
+
+
+
+
+# def get_update_cloud(request): # For Temporary, I will only use this for the imported csv file. After the cloud sync is working, we can remove this and just call the check_cloud_sync_status() function in the relevant places. 
+#     """
+#     Utility view to trigger an update check for cloud sync status.
+#     Not part of the regular flow, but can be called from the frontend or via curl.
+#     """
+#     try:
+#         check_cloud_sync_status()
+#         return JsonResponse({"status": "ok", "message": "Cloud sync status updated."})
+#     except Exception as e:
+#         print(f"❌ Cloud sync update error: {e}")
+#         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+# Configure these in settings.py or TerminalSetup instead of hardcoding
+CSV_ITEMS_PATH      = os.environ.get("CSV_ITEMS_PATH", "/data/exports/items.csv")
+CSV_ITEMDTL_PATH    = os.environ.get("CSV_ITEMDTL_PATH", "/data/exports/itemdtl.csv")
+CSV_ITEMSCOSTS_PATH = os.environ.get("CSV_ITEMSCOSTS_PATH", "/data/exports/itemscosts.csv")
+
+
+@login_required
+@require_http_methods(["POST"])          # cloud button should POST, not GET
+def update_from_csv(request):
+    """
+    Truncates Item/ItemDetail tables and re-imports from the exported CSV files.
+    Triggered by the cloud-download button in the cashier UI.
+    """
+    try:
+        summary = import_products_from_csv(
+            CSV_ITEMS_PATH,
+            CSV_ITEMDTL_PATH,
+            CSV_ITEMSCOSTS_PATH,
+        )
+        print(f"✅ CSV import summary: {summary}")
+        return JsonResponse({
+            "status": "ok",
+            "message": (
+                f"Import complete. "
+                f"{summary['items_loaded']} items, "
+                f"{summary['item_details_loaded']} variants, "
+                f"{summary['costs_updated']} costs updated."
+            ),
+            **summary,
+        })
+    except FileNotFoundError as e:
+        return JsonResponse({"status": "error", "message": f"CSV file not found: {e}"}, status=400)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)

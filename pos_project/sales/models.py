@@ -26,6 +26,19 @@ class TransactionHeader(models.Model):
     transaction_date_r = models.DateField(null=True, blank=True)       # TRDATER
     transaction_time   = models.CharField(max_length=5,  blank=True)   # TRTIME
     transaction_type   = models.CharField(max_length=1,  blank=True)   # TRTYPE
+
+    # Transaction-level discount
+    trans_disc_type   = models.CharField(max_length=10, blank=True, default="")  # "pct" or "amt"
+    trans_disc_pct    = models.DecimalField(max_digits=6, decimal_places=2, default=0)  # e.g. 20.00
+    trans_disc_label  = models.CharField(max_length=30, blank=True, default="")  # e.g. "Senior"
+    trans_disc_amount = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # computed
+
+    # Totals snapshot
+    subtotal          = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    amount_total      = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    amount_tendered   = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    change_amount     = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+
     return_code        = models.CharField(max_length=1,  blank=True)   # RCODE
     item_ref           = models.CharField(max_length=8,  blank=True)   # TRREF1
 
