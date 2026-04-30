@@ -275,11 +275,11 @@ def to_close_session_details(request):
         .annotate(total=Sum("amount"))
         .order_by("tender_desc")
     )
-    discounts = TransactionItem.objects.filter(
-        header__session_id=session.id,
-        pcode="DISC"
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    print("DISCOUNTS:", discounts)
+    # discounts = TransactionItem.objects.filter(
+    #     header__session_id=session.id,
+    #     pcode="DISC"
+    # ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    # print("DISCOUNTS:", discounts)
     
 
     return JsonResponse({
