@@ -7,35 +7,134 @@
     <title>Receipt - {{ transaction_no }}</title>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: 'Courier New', monospace; margin: 0; background: #1e2328; color: #e6edf3; min-height: 100vh; }
-        .receipt { max-width: 400px; margin: 2rem auto; padding: 2rem; background: #fff; color: #000; border-radius: 8px; }
-        .receipt-header { text-align: center; border-bottom: 2px dashed #333; padding-bottom: 1rem; margin-bottom: 1rem; }
-        .store-name { font-size: 1.25rem; font-weight: 700; }
-        .receipt-meta { font-size: 0.85rem; color: #555; margin-top: 0.5rem; }
-        .receipt-no { font-weight: 700; margin-top: 0.25rem; }
-        .receipt-body { font-size: 0.9rem; }
-        .receipt-line { display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px dotted #ccc; }
-        .receipt-line-desc { flex: 1; }
-        .receipt-line-price { font-weight: 500; }
-        .receipt-total { font-size: 1.125rem; font-weight: 700; text-align: right; margin-top: 1rem; padding-top: 0.5rem; border-top: 2px solid #333; }
-        .receipt-cash-line { display: flex; justify-content: space-between; padding: 0.2rem 0; font-size: 0.9rem; }
-        .receipt-change-line { display: flex; justify-content: space-between; padding: 0.2rem 0; font-size: 0.95rem; font-weight: 700; border-top: 1px solid #ccc; margin-top: 0.25rem; }
-        .receipt-disc-line { display: flex; justify-content: space-between; padding: 0.15rem 0 0.15rem 1rem; font-size: 0.82rem; color: #1a7a35; }
-        .receipt-net-line { display: flex; justify-content: space-between; padding: 0.15rem 0 0.25rem 1rem; font-size: 0.85rem; font-weight: 600; border-bottom: 1px dotted #ccc; }
-        .receipt-footer { text-align: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 2px dashed #333; font-size: 0.85rem; color: #555; }
-        .actions { text-align: center; margin-top: 2rem; }
-        .btn { padding: 0.75rem 1.5rem; font-size: 1rem; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; background: #8b3d4a; color: white; }
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            background: #1e2328;
+            color: #e6edf3;
+            min-height: 100vh;
+        }
+
+        /* ── Receipt paper ─────────────────────────────── */
+        .receipt {
+            max-width: 380px;
+            margin: 2rem auto;
+            padding: 1.25rem 1.5rem;
+            background: #fff;
+            color: #000;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        /* ── Separator (mirrors "-" * paper_width) ─────── */
+        .sep {
+            border: none;
+            border-top: 1px dashed #555;
+            margin: 0.5rem 0;
+        }
+
+        /* ── Header ────────────────────────────────────── */
+        .r-header {
+            text-align: center;
+            margin-bottom: 0.25rem;
+        }
+
+        /* Mirrors is_capitalized → \x1b\x21\x10 (double-height) */
+        .r-header-bold {
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+        }
+
+        .r-header-normal {
+            font-size: 0.82rem;
+        }
+
+        /* ── "SALES INVOICE" title ──────────────────────── */
+        .r-title {
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.95rem;
+            margin: 0.6rem 0 0.4rem;
+        }
+
+        /* ── Meta block (SI#, User, StoreId) ───────────── */
+        .r-meta {
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+        }
+
+        /* ── Item rows ──────────────────────────────────── */
+        /* Description line — full width, truncated */
+        .r-item-desc {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* qty x price ··············· total  (mirrors item_line()) */
+        .r-item-amounts {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .r-item-amounts .r-left  { flex: 1; }
+        .r-item-amounts .r-right { text-align: right; font-weight: 500; }
+
+        /* Discount sub-line (mirrors "  disc_pct% - disc_total") */
+        .r-item-disc {
+            font-size: 0.78rem;
+            color: #1a7a35;
+            padding-left: 1rem;
+        }
+
+        /* ── LR pair (mirrors align_lr()) ──────────────── */
+        .r-lr {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.1rem 0;
+        }
+
+        /* ── Transaction discount block ─────────────────── */
+        .r-disc-label {
+            font-size: 0.8rem;
+            color: #555;
+        }
+
+        /* ── TOTAL (mirrors bold on/off) ────────────────── */
+        .r-total {
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        /* ── CHANGE (mirrors bold on/off) ───────────────── */
+        .r-change {
+            font-weight: 700;
+        }
+
+        /* ── Footer ─────────────────────────────────────── */
+        .r-footer-center { text-align: center; }
+        .r-footer-left   { text-align: left; }
+
+        /* ── Actions ─────────────────────────────────────── */
+        .actions { text-align: center; margin-top: 1.5rem; }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            background: #8b3d4a;
+            color: white;
+        }
         .btn:hover { background: #7a3540; }
     </style>
 </head>
 <body>
-    <div class="receipt">
-        <div class="receipt-header">
-            <div class="store-name">{{ store_name|default:"POS Store" }}</div>
-            <div class="receipt-meta">{{ date }}</div>
-            <div class="receipt-meta">{{ time }}</div>
-            <div class="receipt-no">Receipt #{{ transaction_no }}</div>
-        </div>
+<div class="receipt">
 
         <div class="receipt-body">
             {% for line in lines %}
@@ -52,55 +151,101 @@
                 <span>{{ line.disc_pct }}% discount &rarr; -₱{{ line.disc_total }}</span>
                 <span>Net: ₱{{ line.ext }}</span>
             </div>
+    <!-- ── Header (mirrors db_headers loop) ───────────────────── -->
+    <div class="r-header">
+        {% for h in headers %}
+            {% if h.is_capitalized %}
+                <div class="r-header-bold">{{ h.header_text }}</div>
+            {% else %}
+                <div class="r-header-normal">{{ h.header_text }}</div>
             {% endif %}
-            {% endfor %}
-
-            {% if trans_disc_amt and trans_disc_amt != "0" and trans_disc_amt != "0.0000" %}
-            <div class="receipt-line" style="margin-top:0.5rem; color:#555;">
-                <span>Subtotal</span>
-                <span>₱{{ subtotal }}</span>
-            </div>
-            <div class="receipt-line" style="color:#1a7a35; font-weight:500;">
-                <span>{{ trans_disc_label }} ({{ trans_disc_pct }}%) Discount</span>
-                <span>-₱{{ trans_disc_amt }}</span>
-            </div>
-            {% endif %}
-            <div class="receipt-total">
-                TOTAL: ₱{{ total }}
-            </div>
-            {% for t in tender_lines %}
-            <div class="receipt-cash-line">
-                <span>{{ t.desc }}:</span>
-                <span>₱{{ t.amount }}</span>
-            </div>
-            {% empty %}
-            <div class="receipt-line" style="margin-top:0.5rem;">
-                <span>Paid via:</span>
-                <span>{{ tender }}</span>
-            </div>
-            {% endfor %}
-            {% if amount_tendered %}
-            <div class="receipt-cash-line">
-                <span>Total Tendered:</span>
-                <span>₱{{ amount_tendered }}</span>
-            </div>
-            {% endif %}
-            {% if is_cash and change_amount and change_amount != "0" and change_amount != "0.0000" %}
-            <div class="receipt-change-line">
-                <span>Change:</span>
-                <span>₱{{ change_amount }}</span>
-            </div>
-            {% endif %}
-        </div>
-
-        <div class="receipt-footer">
-            Thank you for your purchase!<br>
-            Please come again
-        </div>
+        {% empty %}
+            <div class="r-header-bold">OTTO Store</div>
+        {% endfor %}
     </div>
 
-    <div class="actions">
-        <a href="{% url 'sales:pos_cashier' %}" class="btn">New Sale</a>
+    <!-- ── "SALES INVOICE" ────────────────────────────────────── -->
+    <div class="r-title">SALES INVOICE</div>
+
+    <!-- ── Meta (mirrors SI#, User Id, StoreId) ──────────────── -->
+    <div class="r-meta">SI #: {{ transaction_no }}</div>
+    <div class="r-meta">User Id    : {{ cashier_name }}</div>
+    <div class="r-meta">StoreId    : {{ store_id }}</div>
+
+    <hr class="sep">
+
+    <!-- ── Items (mirrors items loop) ────────────────────────── -->
+    {% for line in lines %}
+        <div class="r-item-desc">{{ line.description }}</div>
+        <div class="r-item-amounts">
+            <span class="r-left">{{ line.qty }} x {{ line.price }}</span>
+            <span class="r-right">{{ line.ext }}</span>
+        </div>
+        {% if line.disc_pct %}
+            <div class="r-item-disc">{{ line.disc_pct }}% - {{ line.disc_total }}</div>
+        {% endif %}
+    {% endfor %}
+
+    <!-- ── Transaction discount block (mirrors trans_disc_amt check) ── -->
+    {% if trans_disc_amt and trans_disc_amt != "0" and trans_disc_amt != "0.0000" %}
+        <hr class="sep">
+        <div class="r-lr">
+            <span>Subtotal</span>
+            <span>{{ subtotal }}</span>
+        </div>
+        <div class="r-disc-label">{{ trans_disc_label }} ({{ trans_disc_pct }}%)</div>
+        <div class="r-lr">
+            <span>Discount</span>
+            <span>-{{ trans_disc_amt }}</span>
+        </div>
+    {% endif %}
+
+    <!-- ── Total (mirrors bold TOTAL) ────────────────────────── -->
+    <hr class="sep">
+    <div class="r-lr r-total">
+        <span>TOTAL</span>
+        <span>{{ total }}</span>
     </div>
+    <hr class="sep">
+
+    <!-- ── Tender lines (mirrors tender_lines loop) ──────────── -->
+    {% for t in tender_lines %}
+        <div class="r-lr">
+            <span>{{ t.desc }}</span>
+            <span>{{ t.amount }}</span>
+        </div>
+    {% endfor %}
+
+    {% if amount_tendered %}
+        <div class="r-lr">
+            <span>Tendered</span>
+            <span>{{ amount_tendered }}</span>
+        </div>
+    {% endif %}
+
+    {% if is_cash and change_amount and change_amount != "0" and change_amount != "0.0000" %}
+        <div class="r-lr r-change">
+            <span>CHANGE</span>
+            <span>{{ change_amount }}</span>
+        </div>
+    {% endif %}
+
+    <!-- ── Footer (mirrors footers loop) ─────────────────────── -->
+    <hr class="sep">
+    {% if footers %}
+        {% for f in footers %}
+            <div class="{% if f.is_centered %}r-footer-center{% else %}r-footer-left{% endif %}">
+                {{ f.footer_text }}
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="r-footer-center">Thank you for your purchase!</div>
+    {% endif %}
+
+</div>
+
+<div class="actions">
+    <a href="{% url 'sales:pos_cashier' %}" class="btn">New Sale</a>
+</div>
 </body>
 </html>
