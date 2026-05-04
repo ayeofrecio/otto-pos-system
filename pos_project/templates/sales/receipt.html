@@ -136,6 +136,21 @@
 <body>
 <div class="receipt">
 
+        <div class="receipt-body">
+            {% for line in lines %}
+            <div class="receipt-line">
+                <span class="receipt-line-desc">{{ line.description }}{% if line.is_return %} [RETURN]{% endif %}{% if line.size or line.color %} ({{ line.size }}{% if line.size and line.color %}/{% endif %}{{ line.color }}){% endif %}</span>
+                <span class="receipt-line-price">₱{{ line.ext }}</span>
+            </div>
+            <div class="receipt-line" style="font-size:0.8rem;color:#666;">
+                <span>{{ line.qty }} × ₱{{ line.price }}</span>
+                <span>{% if line.disc_pct %}₱{{ line.gross }}{% endif %}</span>
+            </div>
+            {% if line.disc_pct %}
+            <div class="receipt-disc-line">
+                <span>{{ line.disc_pct }}% discount &rarr; -₱{{ line.disc_total }}</span>
+                <span>Net: ₱{{ line.ext }}</span>
+            </div>
     <!-- ── Header (mirrors db_headers loop) ───────────────────── -->
     <div class="r-header">
         {% for h in headers %}

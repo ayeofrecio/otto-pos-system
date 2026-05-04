@@ -38,7 +38,8 @@ INSTALLED_APPS = [
     # POS apps
     'sales.apps.SalesConfig',
     'reports.apps.ReportsConfig',
-    'setup.apps.SetupConfig', 
+    'setup.apps.SetupConfig',
+    'settings.apps.SettingsConfig',
     'users.apps.UsersConfig',
 ]
 

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POSNBR Admin Tool</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui, sans-serif;
+            background: #1e2328;
+            color: #e6edf3;
+        }
+        .wrap {
+            max-width: 720px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .card {
+            background: #252b33;
+            border: 1px solid #2f3640;
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+        h1 {
+            margin: 0 0 0.35rem;
+            font-size: 1.2rem;
+        }
+        .muted {
+            color: #8b949e;
+            margin: 0 0 1rem;
+        }
+        .row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-bottom: 0.9rem;
+        }
+        .row label {
+            min-width: 160px;
+            color: #8b949e;
+        }
+        input[type="text"] {
+            width: 220px;
+            padding: 0.55rem 0.65rem;
+            border-radius: 6px;
+            border: 1px solid #2f3640;
+            background: #2d343e;
+            color: #e6edf3;
+        }
+        input[type="checkbox"] {
+            transform: scale(1.1);
+        }
+        .btns {
+            display: flex;
+            gap: 0.6rem;
+            margin-top: 1rem;
+        }
+        .btn {
+            padding: 0.55rem 0.9rem;
+            border-radius: 6px;
+            border: 1px solid #2f3640;
+            color: #e6edf3;
+            text-decoration: none;
+            background: #2d343e;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background: #8b3d4a;
+            border-color: #8b3d4a;
+            color: #fff;
+        }
+        .msg {
+            margin-top: 1rem;
+            padding: 0.75rem 0.9rem;
+            border-radius: 6px;
+            white-space: pre-wrap;
+        }
+        .ok {
+            background: #12311f;
+            border: 1px solid #1e6b3f;
+            color: #89e1a9;
+        }
+        .err {
+            background: #3a1520;
+            border: 1px solid #8b3d4a;
+            color: #ffc3cf;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <h1>POSNBR Transaction Number</h1>
+            <p class="muted">Super-admin only. Initialize or update the current transaction number used for the next transaction sequence.</p>
+
+            <div class="row">
+                <label>Current POSNBR value</label>
+                <strong>{{ current_no }}</strong>
+            </div>
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="row">
+                    <label for="start">Starting number</label>
+                    <input id="start" name="start" type="text" placeholder="e.g. 00012345" required>
+                </div>
+
+                <div class="row">
+                    <label for="force">Force overwrite</label>
+                    <input id="force" name="force" type="checkbox">
+                    <span class="muted">Only needed if POSNBR already has a value.</span>
+                </div>
+
+                <div class="btns">
+                    <button class="btn btn-primary" type="submit">Apply</button>
+                    <a class="btn" href="{% url 'sales:pos_cashier' %}">Back to Cashier</a>
+                </div>
+            </form>
+
+            {% if command_output %}
+            <div class="msg ok">{{ command_output }}</div>
+            {% endif %}
+
+            {% if command_error %}
+            <div class="msg err">{{ command_error }}</div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
