@@ -33,6 +33,8 @@ def pos_login(request):
 
 def pos_logout(request):
     """Cashier logout."""
+
+    
     logout(request)
     return redirect("pos_login")
 

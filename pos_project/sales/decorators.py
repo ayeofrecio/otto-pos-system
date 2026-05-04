@@ -6,42 +6,34 @@ from users.models import POSSession
 
 def require_open_session(view_func):
     """
-    Ensures the logged-in user has an OPEN POS session
-    before accessing POS views.
+    Ensures the logged-in user is an active member of an open POS session.
+    Session is looked up via POSSessionUsers membership, not by store/terminal
+    on the user model.
     """
 
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
-
         user = request.user
 
         if not user.is_authenticated:
             return redirect("pos_login")
 
-        # # get Users profile
-        # profile = getattr(user, "profile", None)
-
-        # if not profile:
-        #     messages.error(request, "User profile not found.")
-        #     return redirect("pos_login")
-
-        # if profile.is_suspended:
-        #     messages.error(request, "Your account is suspended.")
-        #     return redirect("pos_login")
-
-        # check open session
-        session = POSSession.objects.filter(
-            cashier=user,
-            status="open"
-        ).first()
+        session = (
+            POSSession.objects.filter(
+                session_users__user=user,
+                session_users__left_at__isnull=True,
+                status=POSSession.STATUS_OPEN,
+            )
+            .order_by("-opened_at")
+            .first()
+        )
 
         if not session:
             messages.warning(request, "You must open a POS session first.")
             return redirect("sales:open_session")
 
-        # attach objects to request for easy access
+        # Attach to request so views can use it without re-querying
         request.pos_session = session
-        request.user_profile = user
 
         return view_func(request, *args, **kwargs)
 

@@ -5,7 +5,7 @@ import os
 
 import datetime
 import django.utils.timezone as timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pyexpat.errors import messages
 from django.http import JsonResponse
 
@@ -15,7 +15,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
-from users.models import POSSession
+from users.models import POSSession, POSSessionUsers
 
 from .color_lookup import get_color_description
 from .size_lookup import get_size_description
@@ -91,32 +91,22 @@ def _get_user_id(request):
     return request.user.username[:10] if request.user.is_authenticated else ""
 
 
-#    To be checked if we want to keep these as part of the user model instead of moving to TerminalSetup or TerminalConfiguration, which would allow for more flexible assignment of terminals to users in the future. For now, these are used as the default store_id and terminal_id for session tracking and transaction logging, but they could be overridden by fields in the POSSession model or by related TerminalSetup/Configuration records.
-# def _get_store_id(request):
-#     """Get store_id from logged-in user, fallback to default."""
-#     if request.user.is_authenticated:
-#         return request.user.store_id or "001"
-#     return "001"
-
-
-# def _get_terminal_id(request):
-#     """Get terminal_id from logged-in user, fallback to default."""
-#     if request.user.is_authenticated:
-#         return request.user.terminal_id or "001"
-#     return "001"
-
 # ----------------------------------------------------------------------------
 # Getting the current session's store_id and terminal_id from the POSSession model instead of the user model allows for more flexible assignment of terminals to users and better tracking of sessions across different terminals. This way, the store_id and terminal_id are tied to the actual POS session rather than the user account, which can be useful in scenarios where users may operate multiple terminals or when terminals are shared among users. The helper functions can be updated to retrieve this information from the current open session for the logged-in user, ensuring that all operations are correctly associated with the active session's store and terminal.
 # ----------------------------------------------------------------------------
 def get_current_session(request):
-    """Return the current open POS session of the logged-in user."""
     if not request.user.is_authenticated:
         return None
 
-    return POSSession.objects.filter(
-        cashier=request.user,
-        status=POSSession.STATUS_OPEN
-    ).order_by("-opened_at").first()
+    return (
+        POSSession.objects.filter(
+            session_users__user=request.user,
+            session_users__left_at__isnull=True,
+            status=POSSession.STATUS_OPEN,
+        )
+        .order_by("-opened_at")
+        .first()
+    )
 
 
 def get_current_session_or_error(request):
@@ -141,7 +131,7 @@ def validate_session_owner(request, session):
 def get_session_by_id(request, session_id):
     """Fetch session safely and ensure ownership."""
     try:
-        session = POSSession.objects.select_related("cashier").get(
+        session = POSSession.objects.select_related("opened_by").get(
             id=session_id
         )
     except POSSession.DoesNotExist:
@@ -172,6 +162,47 @@ def _get_store_details():
     except TerminalSetup.DoesNotExist:
         return None
 
+
+
+def _get_terminal_session(store_id, terminal_id):
+    """
+    Return the currently open session for this terminal+store, or None.
+    This is terminal-scoped — independent of which user is logged in.
+    """
+    return (
+        POSSession.objects.filter(
+            store_id=store_id,
+            terminal_id=terminal_id,
+            status=POSSession.STATUS_OPEN,
+        )
+        .order_by("-opened_at")
+        .first()
+    )
+
+
+def _enroll_if_needed(session, user):
+    """
+    Add the user to the session's member list if not already there.
+    Safe to call on every login — get_or_create avoids duplicates.
+    """
+    obj, created = POSSessionUsers.objects.get_or_create(
+        session=session,
+        user=user,
+        defaults={"left_at": None},
+    )
+    # If they were previously marked as left (e.g. logged out mid-shift
+    # and came back), reactivate them.
+    if not created and obj.left_at is not None:
+        obj.left_at = None
+        obj.save(update_fields=["left_at"])
+
+
+def _parse_decimal(value, default=Decimal("0")):
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError):
+        return default
+
 # ---------------------------------------------------------------------------
 
 def _get_next_transaction_no():
@@ -196,56 +227,56 @@ def _get_next_transaction_no():
 # Open session view
 # ---------------------------------------------------------------------------
 
+
 @login_required
+@require_http_methods(["GET", "POST"])
 def open_session(request):
     user = request.user
+    store_id = user.store_id
+    terminal_id = user.terminal_id
 
-    # Prevent multiple open sessions
-    if POSSession.objects.filter(cashier=user, status="open").exists():
-        messages.info(request, "You already have an open session.")
+    existing_session = _get_terminal_session(store_id, terminal_id)
+
+    if existing_session:
+        # Terminal already has an open session — just enroll this user in it
+        _enroll_if_needed(existing_session, user)
         return redirect("sales:pos_cashier")
 
+    # No open session on this terminal — only the first user creates one
     if request.method == "POST":
-        opening_cash = request.POST.get("opening_cash")
-
-        # Validate opening cash
-        try:
-            opening_cash = float(opening_cash) # I CHANGE ITO ACCORDING SA EXPECTED AMOUNT 
-        except (TypeError, ValueError):
-            messages.error(request, "Invalid opening cash amount.")
+        opening_cash = _parse_decimal(request.POST.get("opening_cash"))
+        if opening_cash < 0:
+            messages.error(request, "Opening cash cannot be negative.")
             return redirect("sales:open_session")
 
-        # Create new POS session
-        POSSession.objects.create(
-            cashier=user,
-            terminal_id="001",
-            store_id="001",
+        session = POSSession.objects.create(
+            opened_by=user,
+            terminal_id=terminal_id,
+            store_id=store_id,
             business_date=datetime.date.today(),
             opening_cash=opening_cash,
-            status="open"
+            status=POSSession.STATUS_OPEN,
         )
+        session.add_user(user)
 
-        # messages.success(request, "POS session opened successfully.")
         return redirect("sales:pos_cashier")
 
     return render(request, "sales/open_session.html")
 
+# ---------------------------------------------------------------------------
+# Close session details (GET — JSON for the close-session modal)
+# ---------------------------------------------------------------------------
 
 @login_required
 @require_open_session
 @require_http_methods(["GET"])
 def to_close_session_details(request):
     user = request.user
-    session = POSSession.objects.filter(
-        cashier=user,
-        store_id=STORE_ID,
-        status="open",
-    ).order_by("-opened_at").first()
 
+    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
     if not session:
         return JsonResponse({"error": "No open session found."}, status=400)
 
-    # Cash tenders are those configured to give change (pchange="Y").
     cash_tender_codes = list(
         Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
     )
@@ -258,42 +289,35 @@ def to_close_session_details(request):
         or Decimal("0")
     )
 
-    credit_debit_cash = (
-        Payment.objects.filter(
-            header__session_id=session.id,
-        ).exclude(
-            pcode__in=cash_tender_codes,
-        ).aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
+    non_cash_qs = Payment.objects.filter(
+        header__session_id=session.id,
+    ).exclude(pcode__in=cash_tender_codes)
+
+    credit_debit_total = (
+        non_cash_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
     )
-    credit_debit_cash_list = (
-        Payment.objects.filter(
-            header__session_id=session.id,
-        ).exclude(
-            pcode__in=cash_tender_codes,
-        ).values("tender_desc")
+
+    credit_debit_breakdown = list(
+        non_cash_qs
+        .values("tender_desc")
         .annotate(total=Sum("amount"))
         .order_by("tender_desc")
     )
-    # discounts = TransactionItem.objects.filter(
-    #     header__session_id=session.id,
-    #     pcode="DISC"
-    # ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    # print("DISCOUNTS:", discounts)
-    
+
+    expected_cash = session.opening_cash + paid_in_cash
 
     return JsonResponse({
         "opening_cash": float(session.opening_cash),
         "paid_in_cash": float(paid_in_cash),
-        "credit_debit_cash": float(credit_debit_cash),
+        "expected_cash": float(expected_cash),
+        "credit_debit_cash": float(credit_debit_total),
         "credit_debit_cash_list": [
             {
                 "tender_desc": row["tender_desc"] or "",
                 "total": float(row["total"] or 0),
             }
-            for row in credit_debit_cash_list
+            for row in credit_debit_breakdown
         ],
-
     })
 
 # ---------------------------------------------------------------------------
@@ -965,79 +989,32 @@ def item_search(request):
 def close_session(request):
     user = request.user
 
-    # Find the active cashier session for this user + terminal + store
-    session = POSSession.objects.filter(
-        cashier=user,
-        store_id=STORE_ID,       # your existing constant
-        status="open",
-    ).order_by("-opened_at").first()
-
+    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
     if not session:
         messages.error(request, "No active session found to close.")
         return redirect("sales:pos_cashier")
 
-    # --- Parse POST values ---
-    def parse_decimal(val, default=0):
-        try:
-            return float(val)
-        except (TypeError, ValueError):
-            return default
-
-    closing_cash  = parse_decimal(request.POST.get("closing_cash"))
-    expected_cash = parse_decimal(request.POST.get("expected_cash"))
-    cash_variance = parse_decimal(request.POST.get("cash_variance"))
-    notes         = request.POST.get("notes", "").strip()
+    closing_cash = _parse_decimal(request.POST.get("closing_cash"))
     if closing_cash < 0:
         messages.error(request, "Closing cash cannot be negative.")
         return redirect("sales:pos_cashier")
 
-    # --- Update and close the session ---
-    session.closing_cash  = closing_cash
-    session.expected_cash = expected_cash
-    session.cash_variance = cash_variance
-    session.notes         = notes or None
-    session.closed_at   = timezone.now()
-    session.status = "closed"
-    session.save(update_fields=[
-        "closing_cash", 
-        # "expected_cash",
-        # "cash_variance",
-        # "notes",
-        "closed_at", 
-        "status", 
-        # "updated_at",
-    ])
+    try:
+        session.close(closed_by_user=user, closing_cash=closing_cash)
+    except Exception as e:
+        messages.error(request, str(e))
+        return redirect("sales:pos_cashier")
 
-    # --- Audit trail entry ---
-    # AuditTrail.objects.create(
-    #     user_id=user.pk,
-    #     username=user.username,
-    #     action_type="LOGOUT",
-    #     action_description=(
-    #         f"Session closed. Closing cash: {closing_cash:.2f}, "
-    #         f"Expected: {expected_cash:.2f}, Variance: {cash_variance:.2f}"
-    #     ),
-    #     table_name="cashier_sessions",
-    #     record_id=str(session.pk),
-    #     new_values={
-    #         "closing_cash":  closing_cash,
-    #         "expected_cash": expected_cash,
-    #         "cash_variance": cash_variance,
-    #         "session_status": "closed",
-    #     },
-    #     terminal_id=TERMINAL_ID,
-    #     store_id=STORE_ID,
-    # )
-
-    # Clear session keys set during this POS session
-    for key in ("pos_trans_no", "pos_trans_disc_pct",
-                "pos_trans_disc_type", "pos_trans_disc_label", "last_receipt"):
+    for key in (
+        "pos_trans_no",
+        "pos_trans_disc_pct",
+        "pos_trans_disc_type",
+        "pos_trans_disc_label",
+        "last_receipt",
+    ):
         request.session.pop(key, None)
 
-    # messages.success(request, "Session closed successfully.")
     return redirect("pos_logout")
-
-
 
 
 def debug_sessions_json(request):
@@ -1050,11 +1027,12 @@ def debug_sessions_json(request):
     for session in sessions:
         session_data = {
             "id": session.id,
-            "cashier": str(session.cashier),
+            # "cashier": str(session.cashier),
             "terminal_id": session.terminal_id,
             "store_id": session.store_id,
             "business_date": str(session.business_date),
             "status": session.status,
+            "opened_by": str(session.opened_by),
             "transactions": []
         }
 
@@ -1064,6 +1042,7 @@ def debug_sessions_json(request):
                 "transaction_no": header.transaction_no,
                 "transaction_time": header.transaction_date,
                 "transaction_type": header.transaction_type,
+                "transacted_by": str(header.user_id),
                 "served_by": header.served_by,
                 "date": str(header.transaction_date),
                 "items": [],
@@ -1600,10 +1579,12 @@ def receipt_view(request):
     """Display receipt after payment and print it to the configured printer."""
     receipt = request.session.get("last_receipt")
     session = get_current_session_or_error(request)
-    session = POSSession.objects.select_related("cashier").get(
-        id=session.id,
-        status="open",
+    session = (
+        POSSession.objects.select_related("opened_by")
+        .prefetch_related("session_users__user")
+        .get(id=session.id, status=POSSession.STATUS_OPEN)
     )
+    current_operator = request.user
     if not receipt:
         return redirect("sales:pos_cashier")
  
@@ -1642,7 +1623,7 @@ def receipt_view(request):
         # "assisted_by":      receipt.get["salesperson"] or ""
         "headers":      list(terminal_config.headers.all().order_by("line_number")),
         "footers":      _get_customer_footers(terminal_config),
-        "cashier_name": session.cashier.get_full_name() or session.cashier.username,
+        "cashier_name": current_operator.get_full_name() or current_operator.username,
         "store_id":     session.store_id,
     }
  
@@ -1670,7 +1651,7 @@ def z_reading_view(request):
     """Trigger a Z-Reading print for the current open session."""
     try:
         session = get_current_session_or_error(request)
-        session = POSSession.objects.select_related("cashier").get(
+        session = POSSession.objects.select_related("opened_by").get(
             id=session.id,
             status="open",
         )
@@ -1892,8 +1873,8 @@ def _do_print_x_reading(session):
 @require_http_methods(["GET", "POST"])
 def print_x_reading(request):
     """Print X-Reading for the current open session. Session stays open."""
-    session = POSSession.objects.select_related("cashier").filter(
-        cashier=request.user,
+    session = POSSession.objects.select_related("opened_by").filter(
+        opened_by=request.user,
         store_id=STORE_ID,
         status="open",
     ).order_by("-opened_at").first()
