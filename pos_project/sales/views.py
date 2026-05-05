@@ -373,63 +373,6 @@ def open_session(request):
     return render(request, "sales/open_session.html")
 
 # ---------------------------------------------------------------------------
-# Close session details (GET — JSON for the close-session modal)
-# ---------------------------------------------------------------------------
-
-@login_required
-@require_open_session
-@require_http_methods(["GET"])
-def to_close_session_details(request):
-    user = request.user
-
-    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
-    if not session:
-        return JsonResponse({"error": "No open session found."}, status=400)
-
-    cash_tender_codes = list(
-        Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
-    )
-
-    paid_in_cash = (
-        Payment.objects.filter(
-            header__session_id=session.id,
-            pcode__in=cash_tender_codes,
-        ).aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
-    )
-
-    non_cash_qs = Payment.objects.filter(
-        header__session_id=session.id,
-    ).exclude(pcode__in=cash_tender_codes)
-
-    credit_debit_total = (
-        non_cash_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    )
-
-    credit_debit_breakdown = list(
-        non_cash_qs
-        .values("tender_desc")
-        .annotate(total=Sum("amount"))
-        .order_by("tender_desc")
-    )
-
-    expected_cash = session.opening_cash + paid_in_cash
-
-    return JsonResponse({
-        "opening_cash": float(session.opening_cash),
-        "paid_in_cash": float(paid_in_cash),
-        "expected_cash": float(expected_cash),
-        "credit_debit_cash": float(credit_debit_total),
-        "credit_debit_cash_list": [
-            {
-                "tender_desc": row["tender_desc"] or "",
-                "total": float(row["total"] or 0),
-            }
-            for row in credit_debit_breakdown
-        ],
-    })
-
-# ---------------------------------------------------------------------------
 # Cashier main view
 # ---------------------------------------------------------------------------
 
@@ -1896,6 +1839,64 @@ def item_search(request):
             })
 
     return JsonResponse({"results": results})
+
+
+# ---------------------------------------------------------------------------
+# Close session details (GET — JSON for the close-session modal)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_open_session
+@require_http_methods(["GET"])
+def to_close_session_details(request):
+    user = request.user
+
+    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
+    if not session:
+        return JsonResponse({"error": "No open session found."}, status=400)
+
+    cash_tender_codes = list(
+        Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
+    )
+
+    paid_in_cash = (
+        Payment.objects.filter(
+            header__session_id=session.id,
+            pcode__in=cash_tender_codes,
+        ).aggregate(total=Sum("amount"))["total"]
+        or Decimal("0")
+    )
+
+    non_cash_qs = Payment.objects.filter(
+        header__session_id=session.id,
+    ).exclude(pcode__in=cash_tender_codes)
+
+    credit_debit_total = (
+        non_cash_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    )
+
+    credit_debit_breakdown = list(
+        non_cash_qs
+        .values("tender_desc")
+        .annotate(total=Sum("amount"))
+        .order_by("tender_desc")
+    )
+
+    expected_cash = session.opening_cash + paid_in_cash
+
+    return JsonResponse({
+        "opening_cash": float(session.opening_cash),
+        "paid_in_cash": float(paid_in_cash),
+        "expected_cash": float(expected_cash),
+        "credit_debit_cash": float(credit_debit_total),
+        "credit_debit_cash_list": [
+            {
+                "tender_desc": row["tender_desc"] or "",
+                "total": float(row["total"] or 0),
+            }
+            for row in credit_debit_breakdown
+        ],
+    })
 
 
 # ---------------------------------------------------------------------------
