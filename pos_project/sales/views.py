@@ -168,7 +168,6 @@ def get_current_session(request):
         .first()
     )
 
-
 def get_current_session_or_error(request):
     """Return current session or raise API error response."""
     session = get_current_session(request)
@@ -223,6 +222,26 @@ def _get_store_details():
         return None
 
 
+# def _get_terminal_info_from_session(store_id, terminal_id):
+#     """Return (terminal_information) from the current open session for this user."""
+
+#     terminal_information = TerminalConfiguration.objects.filter(store_id=store_id, terminal_id=terminal_id).first()
+#     return terminal_information
+ 
+def _get_terminal_config():
+    """
+    Fetch TerminalConfiguration with all relations prefetched.
+    Footers are fetched unfiltered — callers filter in Python to avoid
+    the fragile to_attr list vs queryset confusion.
+    Returns None if not found.
+    """
+    return (
+        TerminalConfiguration.objects
+        .prefetch_related("headers", "footers", "ports", "display_codes")
+        .filter(store_id=STORE_ID, terminal_id=TERMINAL_ID)
+        .first()
+    )
+ 
 
 def _get_terminal_session(store_id, terminal_id):
     """
@@ -331,6 +350,11 @@ def admin_posnbr_init(request):
             "command_error": command_error,
         },
     )
+
+
+# Constants
+terminal_config = _get_terminal_config()
+VAT_RATE = terminal_config.vat if terminal_config and terminal_config.vat else Decimal("0.12")
 
 # ---------------------------------------------------------------------------
 # Open session view
@@ -1590,6 +1614,10 @@ def payment_complete(request):
     
     NOW WITH CLIPPER-STYLE TRANSACTION LOGGING
     """
+    # vat constants for transaction logging - not actually used in current calculations but stored for reference
+    vatable_gross = Decimal("0")
+    vat_exempt    = Decimal("0")
+    zero_rated    = Decimal("0")
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
     tender_entries = _parse_tender_entries(request)
@@ -1633,6 +1661,10 @@ def payment_complete(request):
         biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
     except Exception:
         biz_date = now.date()
+
+
+    # for item in cart_lines_list:
+
 
     # --- Build tender summary ---
     tender_lines = []
@@ -2052,21 +2084,6 @@ def _open_printer(printer_port):
  
     else:
         raise ValueError(f"Unsupported connection_type: {ct!r}")
- 
- 
-def _get_terminal_config():
-    """
-    Fetch TerminalConfiguration with all relations prefetched.
-    Footers are fetched unfiltered — callers filter in Python to avoid
-    the fragile to_attr list vs queryset confusion.
-    Returns None if not found.
-    """
-    return (
-        TerminalConfiguration.objects
-        .prefetch_related("headers", "footers", "ports", "display_codes")
-        .filter(store_id=STORE_ID, terminal_id=TERMINAL_ID)
-        .first()
-    )
  
  
 def _get_paper_width(terminal_config):
@@ -2525,7 +2542,7 @@ def receipt_view(request):
         }]
  
     context = {
-        "store_name":       setup_details.header01 or "OTTO Store",
+        "store_name":       terminal_config.store_name or "OTTO Store",
         "transaction_no":   receipt["transaction_no"],
         "date":             receipt["date"],
         "time":             receipt["time"],
@@ -2545,6 +2562,7 @@ def receipt_view(request):
         "footers":      _get_customer_footers(terminal_config),
         "cashier_name": current_operator.get_full_name() or current_operator.username,
         "store_id":     session.store_id,
+        "store_name":   terminal_config.store_name or "OTTO Store",
     }
  
     printer = None

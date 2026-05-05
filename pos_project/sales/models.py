@@ -39,6 +39,13 @@ class TransactionHeader(models.Model):
     amount_tendered   = models.DecimalField(max_digits=15, decimal_places=4, default=0)
     change_amount     = models.DecimalField(max_digits=15, decimal_places=4, default=0)
 
+    # VAT breakdown snapshot — computed at payment time
+    vat_rate          = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.12"))
+    vatable_amount    = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # net of VAT
+    vat_amount        = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # VAT portion
+    vat_exempt_amount = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    zero_rated_amount = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+
     return_code        = models.CharField(max_length=1,  blank=True)   # RCODE
     item_ref           = models.CharField(max_length=8,  blank=True)   # TRREF1
 
@@ -911,9 +918,9 @@ class TerminalConfiguration(models.Model):
         ("USB","USB"),
         ("NETWORK","Network"),
     ]
-    
     store_id = models.CharField(max_length=3)
     terminal_id = models.CharField(max_length=3)
+    store_name = models.CharField(max_length=50, blank=True)
     branch_name = models.CharField(max_length=20, blank=True)
     vat = models.DecimalField(max_digits=8, decimal_places=4, default=0)
     print_in = models.CharField(max_length=10, choices=CONNECTION_TYPES, default="SERIAL")
