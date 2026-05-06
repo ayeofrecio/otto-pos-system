@@ -187,10 +187,26 @@
 
     <!-- ── Total (mirrors bold TOTAL) ────────────────────────── -->
     <hr class="sep">
-    <div class="r-lr r-total">
-        <span>TOTAL</span>
-        <span>{{ total }}</span>
-    </div>
+        <div class="r-lr">
+            <span>VAT-Exempt</span>
+            <span>{{ vat_exempt_amount }}</span>
+        </div>
+
+        <div class="r-lr">
+            <span>VATable</span>
+            <span>{{ vatable_amount }}</span>
+        </div>
+
+        <div class="r-lr">
+            <span>VAT @ {{ vat_rate }}</span>
+            <span>{{ vat_amount }}</span>
+        </div>
+
+        <div class="r-lr r-total">
+            <span>TOTAL</span>
+            <span>{{ total }}</span>
+        </div>
+
     <hr class="sep">
 
     <!-- ── Tender lines (mirrors tender_lines loop) ──────────── -->

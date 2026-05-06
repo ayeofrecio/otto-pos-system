@@ -1664,6 +1664,20 @@ def payment_complete(request):
 
 
     # for item in cart_lines_list:
+    for line in cart_lines_list:
+        ext = line.item_price_ext or Decimal("0")
+        tax_code = (line.item_tax_code or "V").upper()
+        if tax_code == "V":
+            vatable_gross += ext
+        elif tax_code == "E":
+            vat_exempt += ext
+        elif tax_code == "Z":
+            zero_rated += ext
+        else:
+            vatable_gross += ext
+
+    vatable_net = (vatable_gross / (1 + VAT_RATE)).quantize(Decimal("0.0001"))
+    vat_amount  = (vatable_gross - vatable_net).quantize(Decimal("0.0001"))
 
 
     # --- Build tender summary ---
@@ -1715,6 +1729,12 @@ def payment_complete(request):
         trans_disc_pct=trans_disc.get("pct", 0),
         trans_disc_label=trans_disc.get("label", ""),
         trans_disc_amount=trans_disc_amt,
+
+        vat_rate=VAT_RATE,
+        vatable_amount=vatable_net,    
+        vat_amount=vat_amount,           
+        vat_exempt_amount=vat_exempt,
+        zero_rated_amount=zero_rated,
 
         subtotal=subtotal,
         amount_total=total,
@@ -1799,6 +1819,11 @@ def payment_complete(request):
         "change_amount": str(change_amount),
         "is_return_only": all_lines_return,
         "is_exchange": has_return_lines and not all_lines_return,
+        "vat_rate":       str(VAT_RATE),
+        "vatable_amount": str(vatable_net),
+        "vat_amount":     str(vat_amount),
+        "vat_exempt":     str(vat_exempt),
+        "zero_rated":     str(zero_rated),
         "lines": [
             {
                 "description": line.item_description or "",
@@ -2220,9 +2245,12 @@ def _print_receipt(printer, terminal_config, context, session):
         write_line(align_lr("Subtotal", format_money(context["subtotal"])))
         write_line(f"{context['trans_disc_label']} ({context['trans_disc_pct']}%)")
         write_line(align_lr("Discount", f"-{format_money(context['trans_disc_amt'])}"))
- 
+    
     # ── Total ─────────────────────────────────────────────────────────────────
     separator()
+    write_line(align_lr("VAT-Exempt", format_money(context["vat_exempt_amount"])))
+    write_line(align_lr("VATable", format_money(context["vatable_amount"])))
+    write_line(align_lr(f"VAT @ {context['vat_rate']}%", format_money(context["vat_amount"])))
     printer.write(b"\x1b\x45\x01")  # bold on
     write_line(align_lr("TOTAL", format_money(context["total"])))
     printer.write(b"\x1b\x45\x00")  # bold off
@@ -2540,7 +2568,7 @@ def receipt_view(request):
             "amount":  receipt.get("amount_tendered", receipt["total"]),
             "is_cash": receipt.get("is_cash", False),
         }]
- 
+    
     context = {
         "store_name":       terminal_config.store_name or "OTTO Store",
         "transaction_no":   receipt["transaction_no"],
@@ -2563,6 +2591,11 @@ def receipt_view(request):
         "cashier_name": current_operator.get_full_name() or current_operator.username,
         "store_id":     session.store_id,
         "store_name":   terminal_config.store_name or "OTTO Store",
+        "vat_exempt":    receipt.get("vat_exempt", ""),
+        "vatable_amount": receipt.get("vatable_amount", ""),
+        "vat_amount": receipt.get("vat_amount", ""),
+        "vat_rate": "{:.0%}".format(float(receipt.get("vat_rate", "0.12") or "0.12")),
+
     }
  
     printer = None

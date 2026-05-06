@@ -699,7 +699,7 @@ class Item(models.Model):
     size        = models.CharField(max_length=3, blank=True)           # ISIZE
     item_type   = models.CharField(max_length=1, blank=True)           # ITYPE
     price_type  = models.CharField(max_length=1, blank=True)           # IPTYPE
-    tax_code    = models.CharField(max_length=1, blank=True)           # ITAXC
+    tax_code    = models.CharField(max_length=1, blank=True, default="V")           # ITAXC
     bar_type    = models.CharField(max_length=1, blank=True)           # IBARTYPE
 
     # --- Pricing ---
