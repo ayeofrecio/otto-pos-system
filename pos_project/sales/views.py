@@ -1901,13 +1901,10 @@ def item_search(request):
 # ---------------------------------------------------------------------------
 # Close session details (GET — JSON for the close-session modal)
 # ---------------------------------------------------------------------------
-
 @login_required
 @require_open_session
 @require_http_methods(["GET"])
 def to_close_session_details(request):
-    user = request.user
-
     session = _get_terminal_session(STORE_ID, TERMINAL_ID)
     if not session:
         return JsonResponse({"error": "No open session found."}, status=400)
@@ -1916,17 +1913,76 @@ def to_close_session_details(request):
         Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
     )
 
-    paid_in_cash = (
-        Payment.objects.filter(
-            header__session_id=session.id,
-            pcode__in=cash_tender_codes,
-        ).aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
-    )
+    # --- Base querysets scoped to this session ---
+    session_headers = TransactionHeader.objects.filter(session_id=session.id)
+    session_items   = TransactionItem.objects.filter(header__session_id=session.id)
+    session_payments = Payment.objects.filter(header__session_id=session.id)
 
-    non_cash_qs = Payment.objects.filter(
-        header__session_id=session.id,
-    ).exclude(pcode__in=cash_tender_codes)
+    # --- Void transactions ---
+    # Headers whose transaction_type is a void type
+    void_headers = session_headers.filter(
+        transaction_type__in=VOID_TRANSACTION_TYPES_ALL
+    )
+    void_count  = void_headers.count()
+    void_amount = void_headers.aggregate(
+        total=Sum("amount_total")
+    )["total"] or Decimal("0")
+
+    # --- Return transactions ---
+    # Headers where return_code == TAG_ITEM_RETURN and transaction_type is normal sale
+    return_headers = session_headers.filter(return_code=TAG_ITEM_RETURN)
+    return_count   = return_headers.count()
+    return_amount  = return_headers.aggregate(
+        total=Sum("amount_total")
+    )["total"] or Decimal("0")
+
+    # --- Sales (exclude voids and pure returns) ---
+    sale_headers = session_headers.exclude(
+        transaction_type__in=VOID_TRANSACTION_TYPES_ALL
+    ).exclude(return_code=TAG_ITEM_RETURN)
+
+    gross_sales = sale_headers.aggregate(
+        total=Sum("subtotal")
+    )["total"] or Decimal("0")
+
+    total_discounts = sale_headers.aggregate(
+        total=Sum("trans_disc_amount")
+    )["total"] or Decimal("0")
+
+    # Item-level discounts from sale items only
+    item_discounts = session_items.filter(
+        header__transaction_type__in=["S", ""]  # normal sale type
+    ).exclude(
+        header__return_code=TAG_ITEM_RETURN
+    ).aggregate(
+        total=Sum(
+            models.ExpressionWrapper(
+                models.F("item_discount") * models.F("item_qty"),
+                output_field=models.DecimalField()
+            )
+        )
+    )["total"] or Decimal("0")
+
+    total_discounts += item_discounts
+
+    net_sales = gross_sales - total_discounts
+
+    # --- Cash tender breakdown ---
+    paid_in_cash = session_payments.filter(
+        pcode__in=cash_tender_codes,
+        header__transaction_type__in=["S", ""],  # exclude void cash reversals
+    ).exclude(
+        header__return_code=TAG_ITEM_RETURN
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    # Cash returned from return transactions
+    cash_returned = session_payments.filter(
+        pcode__in=cash_tender_codes,
+        header__return_code=TAG_ITEM_RETURN,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    # --- Non-cash breakdown ---
+    non_cash_qs = session_payments.exclude(pcode__in=cash_tender_codes)
 
     credit_debit_total = (
         non_cash_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
@@ -1939,23 +1995,33 @@ def to_close_session_details(request):
         .order_by("tender_desc")
     )
 
-    expected_cash = session.opening_cash + paid_in_cash
+    # --- Cash totals ---
+    # expected = change fund + cash sales - cash returned
+    expected_cash = session.opening_cash + paid_in_cash - cash_returned
+    net_worth     = expected_cash + credit_debit_total
 
     return JsonResponse({
-        "opening_cash": float(session.opening_cash),
-        "paid_in_cash": float(paid_in_cash),
-        "expected_cash": float(expected_cash),
-        "credit_debit_cash": float(credit_debit_total),
+        "opening_cash":          float(session.opening_cash),
+        "paid_in_cash":          float(paid_in_cash),
+        "cash_returned":         float(cash_returned),
+        "expected_cash":         float(expected_cash),
+        "credit_debit_cash":     float(credit_debit_total),
         "credit_debit_cash_list": [
             {
                 "tender_desc": row["tender_desc"] or "",
-                "total": float(row["total"] or 0),
+                "total":       float(row["total"] or 0),
             }
             for row in credit_debit_breakdown
         ],
+        "gross_sales":     float(gross_sales),
+        "total_discounts": float(total_discounts),
+        "net_sales":       float(net_sales),
+        "net_worth":       float(net_worth),
+        "void_count":      void_count,
+        "void_amount":     float(abs(void_amount)),
+        "return_count":    return_count,
+        "return_amount":   float(abs(return_amount)),
     })
-
-
 # ---------------------------------------------------------------------------
 # Close session view
 # ---------------------------------------------------------------------------
