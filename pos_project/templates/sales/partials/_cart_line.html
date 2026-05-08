@@ -1,6 +1,6 @@
 {% load sales_tags %}
 <div class="cart-line{% if show_new_anim %} cart-line-new{% endif %}{% if line.tag1 == 'R' %} cart-line-return{% endif %}" data-rec-ctr="{{ line.rec_ctr }}">
-    <span class="cart-line-desc">{{ line.item_description }}{% if line.item_size or line.item_color %} ({% size_display line.item_size %}{% if line.item_size and line.item_color %}/{% endif %}{% color_display line.item_color line.item_code line.item_size %}){% endif %}{% if line.tag1 == 'R' %} <span class="cart-line-return-badge">RETURN</span>{% endif %}</span>
+    <span class="cart-line-desc">{{ line.item_description }}{% if line.item_size or line.item_color_desc %} ({% size_display line.item_size %}{% if line.item_size and line.item_color_desc %}/{% endif %}{% color_display line.item_color_desc line.item_code line.item_size %}){% endif %}{% if line.tag1 == 'R' %} <span class="cart-line-return-badge">RETURN</span>{% endif %}</span>
     <div class="cart-line-details">
         <span>Qty: {{ line.item_qty }} × ₱{{ line.item_price|floatformat:2 }} = ₱{% if line.item_discount %}{{ line.item_gross|floatformat:2 }}{% else %}{{ line.item_price_ext|floatformat:2 }}{% endif %}</span>
         <form hx-post="{% url 'sales:cart_remove' %}" hx-target="#cart-summary" hx-swap="outerHTML" style="display:inline;">

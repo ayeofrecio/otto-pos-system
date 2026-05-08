@@ -570,6 +570,7 @@ def cart_add(request):
         price = item_detail.price or item.price
         size = item_detail.size
         color = item_detail.color
+        color_desc = item_detail.color_desc or ""
         item_code = item_detail.icode
     else:
         item = Item.objects.get(icode=barcode)
@@ -577,6 +578,7 @@ def cart_add(request):
         price = item.price
         size = item.size or ""
         color = item.color or ""
+        color_desc = item.color_desc or ""
         item_code = item.icode
 
     try:
@@ -618,6 +620,7 @@ def cart_add(request):
         item_price_ext=ext,
         item_size=size or "",
         item_color=color or "",
+        item_color_desc=color_desc or "",
         rec_ctr=rec_ctr,
     )
 
@@ -1755,6 +1758,7 @@ def payment_complete(request):
             item_class=getattr(line, 'item_class', ''),
             item_size=line.item_size or "",
             item_color=line.item_color or "",
+            item_color_desc=line.item_color_desc or "",
             item_type=getattr(line, 'item_type', ''),
             item_cost=getattr(line, 'item_cost', 0) or 0,
             item_price=line.item_price or 0,
@@ -1883,6 +1887,7 @@ def item_search(request):
                     "description": item.short_desc or item.long_desc,
                     "size": v.size,
                     "color": v.color,
+                    "color_desc": v.color_desc,
                     "price": str(v.price or item.price),
                 })
         else:
@@ -1892,6 +1897,7 @@ def item_search(request):
                 "description": item.short_desc or item.long_desc,
                 "size": item.size or "",
                 "color": item.color or "",
+                "color_desc": item.color_desc or "",
                 "price": str(item.price),
             })
 
@@ -1945,6 +1951,10 @@ def to_close_session_details(request):
         total=Sum("subtotal")
     )["total"] or Decimal("0")
 
+    total_change = sale_headers.aggregate(
+        total=Sum("change_amount")
+    )["total"] or Decimal("0")
+
     total_discounts = sale_headers.aggregate(
         total=Sum("trans_disc_amount")
     )["total"] or Decimal("0")
@@ -1970,7 +1980,7 @@ def to_close_session_details(request):
     # --- Cash tender breakdown ---
     paid_in_cash = session_payments.filter(
         pcode__in=cash_tender_codes,
-        header__transaction_type__in=["S", ""],  # exclude void cash reversals
+        header__transaction_type__in=["S", ""],
     ).exclude(
         header__return_code=TAG_ITEM_RETURN
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
@@ -1994,15 +2004,15 @@ def to_close_session_details(request):
         .annotate(total=Sum("amount"))
         .order_by("tender_desc")
     )
-
+    cash = paid_in_cash - cash_returned - total_change
     # --- Cash totals ---
     # expected = change fund + cash sales - cash returned
-    expected_cash = session.opening_cash + paid_in_cash - cash_returned
+    expected_cash = session.opening_cash + paid_in_cash - cash_returned - total_change
     net_worth     = expected_cash + credit_debit_total
 
     return JsonResponse({
         "opening_cash":          float(session.opening_cash),
-        "paid_in_cash":          float(paid_in_cash),
+        "paid_in_cash":          float(cash),
         "cash_returned":         float(cash_returned),
         "expected_cash":         float(expected_cash),
         "credit_debit_cash":     float(credit_debit_total),
@@ -2015,7 +2025,7 @@ def to_close_session_details(request):
         ],
         "gross_sales":     float(gross_sales),
         "total_discounts": float(total_discounts),
-        "net_sales":       float(net_sales),
+        "net_sales":       float(net_sales),    
         "net_worth":       float(net_worth),
         "void_count":      void_count,
         "void_amount":     float(abs(void_amount)),

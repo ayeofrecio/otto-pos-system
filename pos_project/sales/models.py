@@ -85,6 +85,7 @@ class TransactionItem(models.Model):
     item_class         = models.CharField(max_length=4,  blank=True)
     item_size          = models.CharField(max_length=3,  blank=True)
     item_color         = models.CharField(max_length=3,  blank=True)
+    item_color_desc    = models.CharField(max_length=15, blank=True)
     item_type          = models.CharField(max_length=1,  blank=True)
 
     item_cost          = models.DecimalField(max_digits=15, decimal_places=4, default=0)
@@ -328,6 +329,7 @@ class TempTransaction(models.Model):
     item_class         = models.CharField(max_length=4, blank=True)    # ICLASS
     item_size          = models.CharField(max_length=3, blank=True)    # ISIZE
     item_color         = models.CharField(max_length=3, blank=True)    # ICOLOR
+    item_color_desc    = models.CharField(max_length=15, blank=True)   # ICOLOR2
     item_type          = models.CharField(max_length=1, blank=True)    # ITYPE
     item_tax_code      = models.CharField(max_length=1, blank=True)    # ITAXC
     table_id           = models.CharField(max_length=3, blank=True)    # TABLEID
@@ -802,6 +804,7 @@ class ItemDetail(models.Model):
 
     icode    = models.CharField(max_length=15)                         # ICODE  (FK to Item)
     color    = models.CharField(max_length=3, blank=True)              # COLOR
+    color_desc = models.CharField(max_length=15, blank=True)         # COLOR2
     size     = models.CharField(max_length=3, blank=True)              # SIZE
     stocks1  = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # ISTOCKS1
     stocks2  = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # ISTOCKS2

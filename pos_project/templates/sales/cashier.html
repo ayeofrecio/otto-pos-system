@@ -2470,7 +2470,7 @@
                         <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—"
                             }}</dd>
                         <dt>Color:</dt>
-                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as
+                        <dd>{% color_display last_item.item_color_desc last_item.item_code_desc last_item.item_size as
                             item_color_display %}{{ item_color_display|default:"—" }}</dd>
                         <dt>Price:</dt>
                         <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
