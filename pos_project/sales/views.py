@@ -355,6 +355,7 @@ def admin_posnbr_init(request):
 # Constants
 terminal_config = _get_terminal_config()
 VAT_RATE = terminal_config.vat if terminal_config and terminal_config.vat else Decimal("0.12")
+# VAT_RATE = Decimal("0.12")
 
 # ---------------------------------------------------------------------------
 # Open session view
@@ -1489,7 +1490,7 @@ def cart_return_import(request):
             transaction_date=biz_date,
             transaction_date_r=source_header.transaction_date,
             transaction_time=now.strftime("%H:%M"),
-            transaction_type="S",
+            transaction_type=TAG_ITEM_RETURN,
             return_code=TAG_ITEM_RETURN,
             item_ref=source_header.transaction_no,
             item_code=src.item_code or "",
@@ -1975,7 +1976,7 @@ def to_close_session_details(request):
 
     total_discounts += item_discounts
 
-    net_sales = gross_sales - total_discounts
+    net_sales = gross_sales
 
     # --- Cash tender breakdown ---
     paid_in_cash = session_payments.filter(
@@ -2032,42 +2033,6 @@ def to_close_session_details(request):
         "return_count":    return_count,
         "return_amount":   float(abs(return_amount)),
     })
-# ---------------------------------------------------------------------------
-# Close session view
-# ---------------------------------------------------------------------------
-
-@login_required
-@require_open_session
-@require_http_methods(["POST"])
-def close_session(request):
-    user = request.user
-
-    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
-    if not session:
-        messages.error(request, "No active session found to close.")
-        return redirect("sales:pos_cashier")
-
-    closing_cash = _parse_decimal(request.POST.get("closing_cash"))
-    if closing_cash < 0:
-        messages.error(request, "Closing cash cannot be negative.")
-        return redirect("sales:pos_cashier")
-
-    try:
-        session.close(closed_by_user=user, closing_cash=closing_cash)
-    except Exception as e:
-        messages.error(request, str(e))
-        return redirect("sales:pos_cashier")
-
-    for key in (
-        "pos_trans_no",
-        "pos_trans_disc_pct",
-        "pos_trans_disc_type",
-        "pos_trans_disc_label",
-        "last_receipt",
-    ):
-        request.session.pop(key, None)
-
-    return redirect("pos_logout")
 
 
 def debug_sessions_json(request):
@@ -2235,7 +2200,7 @@ def _get_report_footers(terminal_config):
 # RECEIPT PRINTING
 # =============================================================================
  
-def _print_receipt(printer, terminal_config, context, session):
+def _print_receipt(printer, terminal_config, context, current_operator):
     """
     Stream the full customer receipt to an already-open printer connection.
     Separated from the view so it can be tested independently.
@@ -2299,8 +2264,8 @@ def _print_receipt(printer, terminal_config, context, session):
     # printer.write(b"\x1b\x21\x00")
     printer.write(b"\x1b\x61\x00")  # left
     write_line(f"SI #: {context['transaction_no']}")
-    write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
-    write_line(f"StoreId    : {session.store_id}")
+    write_line(f"User Id    : {current_operator}")
+    write_line(f"StoreId    : {terminal_config.store_id}")
     # write_line(f"Terminal No: {session.terminal_id}")
     separator()
  
@@ -2324,9 +2289,9 @@ def _print_receipt(printer, terminal_config, context, session):
     
     # ── Total ─────────────────────────────────────────────────────────────────
     separator()
-    write_line(align_lr("VAT-Exempt", format_money(context["vat_exempt_amount"])))
+    write_line(align_lr("VAT-Exempt", format_money(context["vat_exempt"] or "0.00")))
     write_line(align_lr("VATable", format_money(context["vatable_amount"])))
-    write_line(align_lr(f"VAT @ {context['vat_rate']}%", format_money(context["vat_amount"])))
+    write_line(align_lr(f"VAT @ {context['vat_rate']}", format_money(context["vat_amount"])))
     printer.write(b"\x1b\x45\x01")  # bold on
     write_line(align_lr("TOTAL", format_money(context["total"])))
     printer.write(b"\x1b\x45\x00")  # bold off
@@ -2386,7 +2351,7 @@ def _print_receipt(printer, terminal_config, context, session):
 # Z-READING PRINTING  (pure utility — NOT a Django view)
 # =============================================================================
  
-def _do_print_z_reading(session):
+def _do_print_z_reading(session, current_operator):
     """
     Print a Z-Reading report for an already-resolved POSSession object.
     Plain Python function — call it from a view after resolving the session.
@@ -2517,7 +2482,7 @@ def _do_print_z_reading(session):
         # ── Terminal info ─────────────────────────────────────────────────────
         write_line(f"StoreId    : {session.store_id}")
         write_line(f"Terminal No: {session.terminal_id}")
-        write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
+        write_line(f"User Id    : {current_operator}")
         write_line(f"Date       : {session.business_date.strftime('%m/%d/%Y')}")
         write_line(f"\nBEG. SI    : {beg_si}")
         write_line(f"END. SI    : {end_si}\n")
@@ -2597,7 +2562,7 @@ def _do_print_z_reading(session):
 
             # Always reset to left after all footers
             printer.write(b"\x1b\x61\x00")
-            write_line("\n\n\n")
+            write_line("\n\n\n\n\n\n")
         else:
             write_line("Thank you!")
         printer.write(b"\x1b\x61\x00")
@@ -2677,7 +2642,7 @@ def receipt_view(request):
     printer = None
     try:
         printer, _ = _get_printer(terminal_config)
-        _print_receipt(printer, terminal_config, context, session)
+        _print_receipt(printer, terminal_config, context, current_operator)
     except NotImplementedError as e:
         print(f"❌ Printer not supported: {e}")
     except Exception as e:
@@ -2706,9 +2671,10 @@ def z_reading_view(request):
         return JsonResponse({"error": "Open POS session not found."}, status=404)
     except POSSession.MultipleObjectsReturned:
         return JsonResponse({"error": "Multiple open sessions found."}, status=500)
- 
+    
+    current_operator = request.user
     try:
-        _do_print_z_reading(session)
+        _do_print_z_reading(session, current_operator)
     except NotImplementedError as e:
         return JsonResponse({"error": str(e)}, status=501)
     except Exception as e:
@@ -2718,7 +2684,7 @@ def z_reading_view(request):
     return JsonResponse({"status": "ok", "message": "Z-Reading printed."})
 
 
-def _do_print_x_reading(session):
+def _do_print_x_reading(session, current_operator):
     """
     Print an X-Reading report for an already-resolved POSSession object.
     X-Reading = snapshot of current session totals WITHOUT closing/resetting.
@@ -2843,7 +2809,7 @@ def _do_print_x_reading(session):
         # ── Terminal info ──────────────────────────────────────────────────────
         write_line(f"StoreId    : {session.store_id}")
         write_line(f"Terminal No: {session.terminal_id}")
-        write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
+        write_line(f"User Id    : {current_operator}")
         write_line(f"Date       : {session.business_date.strftime('%m/%d/%Y')}")
         write_line(f"Time       : {now.strftime('%I:%M:%S %p')}")
         write_line(f"\nBEG. SI    : {beg_si}")
@@ -2929,10 +2895,11 @@ def print_x_reading(request):
     if not session:
         messages.error(request, "No active session found.")
         return redirect("sales:pos_cashier")
-
+    
+    current_operator = request.user
     try:
-        _do_print_x_reading(session)
-        messages.success(request, "X-Reading printed successfully.")
+        _do_print_x_reading(session, current_operator)
+        # messages.success(request, "X-Reading printed successfully.")
     except NotImplementedError as e:
         messages.error(request, f"Printer not supported: {e}")
     except Exception as e:
@@ -2958,11 +2925,78 @@ def print_x_reading(request):
 #         print(f"❌ Cloud sync update error: {e}")
 #         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
+# ---------------------------------------------------------------------------
+# Close session view
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def close_session(request):
+    user = request.user
+
+    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
+    if not session:
+        messages.error(request, "No active session found to close.")
+        return redirect("sales:pos_cashier")
+
+    closing_cash = _parse_decimal(request.POST.get("closing_cash"))
+    if closing_cash < 0:
+        messages.error(request, "Closing cash cannot be negative.")
+        return redirect("sales:pos_cashier")
+
+    try:
+        session.close(closed_by_user=user, closing_cash=closing_cash)
+    except Exception as e:
+        messages.error(request, str(e))
+        return redirect("sales:pos_cashier")
+
+    # ── Step 2: Print Z-Reading ──────────────────────────────────────────────
+    # We intentionally separate the print from the close:
+    #   - A printer failure must NOT reopen/revert the session.
+    #   - We surface a non-fatal warning to the cashier if printing fails.
+    #
+    # _do_print_z_reading expects a POSSession that still carries its
+    # aggregated transaction data, which is all still in the DB — closing
+    # the session only changes its status, it does not delete records.
+    z_print_error = None
+    try:
+        # Re-fetch so _do_print_z_reading gets a fully up-to-date object
+        # (session.close() may have mutated fields like closed_at, status).
+        closed_session = POSSession.objects.select_related("opened_by").get(
+            id=session.id
+        )
+        _do_print_z_reading(closed_session, current_operator=user)
+    except Exception as e:
+        # Log for ops visibility; we'll show a warning to the cashier below.
+        print(f"⚠️  Z-Reading print failed after session close: {e}")
+        z_print_error = str(e)
+
+    
+    for key in (
+        "pos_trans_no",
+        "pos_trans_disc_pct",
+        "pos_trans_disc_type",
+        "pos_trans_disc_label",
+        "last_receipt",
+    ):
+        request.session.pop(key, None)
+        # ── Step 4: Redirect ─────────────────────────────────────────────────────
+    # Even when printing fails, we still log out — the session is closed.
+    # Stash a warning in the Django messages framework so the logout/login
+    # page can surface it (e.g. "Session closed. Z-Reading print failed: …").
+    if z_print_error:
+        messages.warning(
+            request,
+            f"Session closed successfully, but Z-Reading could not be printed: "
+            f"{z_print_error}. Please reprint manually.",
+        )
+    return redirect("pos_logout")
 
 # Configure these in settings.py or TerminalSetup instead of hardcoding
-CSV_ITEMS_PATH      = os.environ.get("CSV_ITEMS_PATH", "/data/exports/items.csv")
-CSV_ITEMDTL_PATH    = os.environ.get("CSV_ITEMDTL_PATH", "/data/exports/itemdtl.csv")
-CSV_ITEMSCOSTS_PATH = os.environ.get("CSV_ITEMSCOSTS_PATH", "/data/exports/itemscosts.csv")
+CSV_ITEMS_PATH      = os.environ.get("CSV_ITEMS_PATH")
+CSV_ITEMDTL_PATH    = os.environ.get("CSV_ITEMDTL_PATH")
+CSV_ITEMSCOSTS_PATH = os.environ.get("CSV_ITEMSCOSTS_PATH")
 
 
 @login_required
@@ -2978,7 +3012,7 @@ def update_from_csv(request):
             CSV_ITEMDTL_PATH,
             CSV_ITEMSCOSTS_PATH,
         )
-        print(f"✅ CSV import summary: {summary}")
+        # print(f"✅ CSV import summary: {summary}")
         return JsonResponse({
             "status": "ok",
             "message": (

@@ -1034,3 +1034,4 @@ class TerminalDisplayCode(models.Model):
 
     class Meta:
         db_table = "terminal_display_codes"
+
