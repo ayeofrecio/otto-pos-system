@@ -2377,9 +2377,11 @@ def _do_print_z_reading(session, current_operator):
     cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
  
     total_neg = sum(filter(None, [
-        void_line_items["total"], void_transactions["total"],
-        void_previous["total"],   item_returns["total"],
-        cash_withdrawals["total"],
+        abs(void_line_items["total"]) if void_line_items["total"] else None,
+        abs(void_transactions["total"]) if void_transactions["total"] else None,
+        abs(void_previous["total"]) if void_previous["total"] else None,
+        abs(item_returns["total"]) if item_returns["total"] else None,
+        abs(cash_withdrawals["total"]) if cash_withdrawals["total"] else None,
     ]))
  
     sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
@@ -2389,7 +2391,7 @@ def _do_print_z_reading(session, current_operator):
         .aggregate(total=Sum("item_price_ext"))["total"] or Decimal("0")
     )
  
-    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="ID").aggregate(total=Sum("item_discount"), count=Count("id"))
+    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="EMP").aggregate(total=Sum("item_discount"), count=Count("id"))
     item_amt_disc   = TransactionItem.objects.filter(header__in=sales_headers, discount_code="IA").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_disc     = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SC").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_amt_disc = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SA").aggregate(total=Sum("item_discount"), count=Count("id"))
@@ -2492,7 +2494,7 @@ def _do_print_z_reading(session, current_operator):
         write_line(neg_row("Void Line Item",   void_line_items["total"],   void_line_items["count"]))
         write_line(neg_row("Void Transaction", void_transactions["total"], void_transactions["count"]))
         write_line(neg_row("Void Previous",    void_previous["total"],     void_previous["count"]))
-        write_line(neg_row("Item Returns",     item_returns["total"],      item_returns["count"]))
+        write_line(neg_row("Item Returns",     abs(item_returns["total"] or 0),      item_returns["count"]))
         write_line(neg_row("Cash Withdrawal",  cash_withdrawals["total"],  cash_withdrawals["count"]))
         separator()
         write_line(neg_gross("Total", total_neg_entries_amt))
@@ -2710,19 +2712,20 @@ def _do_print_x_reading(session, current_operator):
     cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
 
     total_neg = sum(filter(None, [
-        void_line_items["total"], void_transactions["total"],
-        void_previous["total"],   item_returns["total"],
-        cash_withdrawals["total"],
+        abs(void_line_items["total"]) if void_line_items["total"] else None,
+        abs(void_transactions["total"]) if void_transactions["total"] else None,
+        abs(void_previous["total"]) if void_previous["total"] else None,
+        abs(item_returns["total"]) if item_returns["total"] else None,
+        abs(cash_withdrawals["total"]) if cash_withdrawals["total"] else None,
     ]))
 
     sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
-
     gross_sales = (
         TransactionItem.objects.filter(header__in=sales_headers)
         .aggregate(total=Sum("item_price_ext"))["total"] or Decimal("0")
     )
 
-    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="ID").aggregate(total=Sum("item_discount"), count=Count("id"))
+    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="EMP").aggregate(total=Sum("item_discount"), count=Count("id"))
     item_amt_disc   = TransactionItem.objects.filter(header__in=sales_headers, discount_code="IA").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_disc     = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SC").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_amt_disc = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SA").aggregate(total=Sum("item_discount"), count=Count("id"))
@@ -2820,7 +2823,7 @@ def _do_print_x_reading(session, current_operator):
         write_line(neg_row("Void Line Item",   void_line_items["total"],   void_line_items["count"]))
         write_line(neg_row("Void Transaction", void_transactions["total"], void_transactions["count"]))
         write_line(neg_row("Void Previous",    void_previous["total"],     void_previous["count"]))
-        write_line(neg_row("Item Returns",     item_returns["total"],      item_returns["count"]))
+        write_line(neg_row("Item Returns",     abs(item_returns["total"] or 0),      item_returns["count"]))
         write_line(neg_row("Cash Withdrawal",  cash_withdrawals["total"],  cash_withdrawals["count"]))
         separator()
         write_line(neg_gross("Total", total_neg_entries_amt))
