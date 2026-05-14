@@ -45,7 +45,7 @@ from .pos_constants import (
 
 from sales.services import import_products_from_csv
 from setup.pos_keys import get_pos_keys
-
+from sales.helper import update_z_reading_db
 
 #  for debugging
 from pprint import pprint
@@ -1948,8 +1948,8 @@ def to_close_session_details(request):
         transaction_type__in=VOID_TRANSACTION_TYPES_ALL
     ).exclude(return_code=TAG_ITEM_RETURN)
 
-    gross_sales = sale_headers.aggregate(
-        total=Sum("subtotal")
+    gross_sales = session_items.aggregate(
+        total=Sum("item_price")
     )["total"] or Decimal("0")
 
     total_change = sale_headers.aggregate(
@@ -1976,7 +1976,6 @@ def to_close_session_details(request):
 
     total_discounts += item_discounts
 
-    net_sales = gross_sales
 
     # --- Cash tender breakdown ---
     paid_in_cash = session_payments.filter(
@@ -2006,10 +2005,15 @@ def to_close_session_details(request):
         .order_by("tender_desc")
     )
     cash = paid_in_cash - cash_returned - total_change
+    final_gross_sale = gross_sales + (return_amount*return_count)
+    print(gross_sales)
+    print(return_amount)
     # --- Cash totals ---
     # expected = change fund + cash sales - cash returned
     expected_cash = session.opening_cash + paid_in_cash - cash_returned - total_change
     net_worth     = expected_cash + credit_debit_total
+
+    net_sales = final_gross_sale - total_discounts
 
     return JsonResponse({
         "opening_cash":          float(session.opening_cash),
@@ -2024,7 +2028,7 @@ def to_close_session_details(request):
             }
             for row in credit_debit_breakdown
         ],
-        "gross_sales":     float(gross_sales),
+        "gross_sales":     float(final_gross_sale),
         "total_discounts": float(total_discounts),
         "net_sales":       float(net_sales),    
         "net_worth":       float(net_worth),
@@ -2385,20 +2389,25 @@ def _do_print_z_reading(session, current_operator):
     ]))
  
     sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
- 
+     # my additions
+    item_returns_orig_price      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price"),      count=Count("id"))
     gross_sales = (
-        TransactionItem.objects.filter(header__in=sales_headers)
+        TransactionItem.objects.filter(header__in=headers_qs)
         .aggregate(total=Sum("item_price_ext"))["total"] or Decimal("0")
     )
- 
+
     item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="EMP").aggregate(total=Sum("item_discount"), count=Count("id"))
+    pwd_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="PWD").aggregate(total=Sum("item_discount"), count=Count("id"))
     item_amt_disc   = TransactionItem.objects.filter(header__in=sales_headers, discount_code="IA").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_disc     = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SC").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_amt_disc = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SA").aggregate(total=Sum("item_discount"), count=Count("id"))
- 
+
+    discounts_total_except_sc = (item_disc["total"] or 0) + (pwd_disc["total"] or 0)
+    discounts_count_except_sc = (item_disc["count"] or 0) + (pwd_disc["count"] or 0)
+
     total_disc = sum(filter(None, [
         item_disc["total"], item_amt_disc["total"],
-        senior_disc["total"], senior_amt_disc["total"],
+        senior_disc["total"], senior_amt_disc["total"], pwd_disc["total"],
     ]))
  
     customer_count   = sales_headers.aggregate(total=Sum("customer_count"))["total"] or 0
@@ -2412,14 +2421,30 @@ def _do_print_z_reading(session, current_operator):
     )
     gc_sales = Payment.objects.filter(header__in=sales_headers, pcode="GC").aggregate(total=Sum("amount"), count=Count("id"))
  
-    net_sales             = gross_sales - Decimal(str(total_disc))
+    item_returns_orig_price_total = item_returns_orig_price["total"] or Decimal("0")
+    final_gross_sales = gross_sales - Decimal(str(item_returns_orig_price_total or 0))
+    net_sales             = final_gross_sales - Decimal(str(total_disc))
     total_neg_entries_amt = Decimal(str(total_neg or 0))
  
     # TODO: replace with actual GrandTotal model lookup
-    old_grand_total = Decimal("75198919.10")
+    old_obj = POSTransNumber.objects.first()
+    if old_obj:
+        raw = (
+            getattr(old_obj, "grand_total", None)
+            or getattr(old_obj, "amount", None)
+            or getattr(old_obj, "value", None)
+            or getattr(old_obj, "number", None)
+        )
+        try:
+            old_grand_total = Decimal(str(raw)) if raw is not None else Decimal("0")
+        except Exception:
+            old_grand_total = Decimal("0")
+    else:
+        old_grand_total = Decimal("0")
+
     new_grand_total = old_grand_total + gross_sales
  
-    VAT_RATE      = Decimal("0.12")
+    # VAT_RATE      = Decimal("0.12")
     vatable_sales = net_sales / (1 + VAT_RATE)
     vat_amount    = net_sales - vatable_sales
     non_vat       = Decimal("0")
@@ -2502,7 +2527,7 @@ def _do_print_z_reading(session, current_operator):
         # ── Gross sales & discounts ───────────────────────────────────────────
         write_line(neg_gross("GROSS SALES", gross_sales))
         write_line("\nLess:Discounts")
-        write_line(neg_row("Item Disc.",     item_disc["total"],       item_disc["count"]))
+        write_line(neg_row("Item Disc.",     discounts_total_except_sc,       discounts_count_except_sc))
         write_line(neg_row("Item Amt Disc.", item_amt_disc["total"],   item_amt_disc["count"]))
         write_line(neg_row("Senior % Disc.", senior_disc["total"],     senior_disc["count"]))
         write_line(neg_row("     Amt.Disc.", senior_amt_disc["total"], senior_amt_disc["count"]))
@@ -2543,7 +2568,7 @@ def _do_print_z_reading(session, current_operator):
         # ── VAT summary ───────────────────────────────────────────────────────
         write_line(summary_row("Non-Vat:",       non_vat))
         write_line(summary_row("Vatable:",       vatable_sales))
-        write_line(summary_row("V.A.T. Amount:", vat_amount))
+        write_line(summary_row("VAT Amount:", vat_amount))
   
         # ── Footer ────────────────────────────────────────────────────────────
         printer.write(b"\x1b\x61\x01")
@@ -2720,19 +2745,27 @@ def _do_print_x_reading(session, current_operator):
     ]))
 
     sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
+
+    # my additions
+    item_returns_orig_price      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price"),      count=Count("id"))
     gross_sales = (
         TransactionItem.objects.filter(header__in=sales_headers)
-        .aggregate(total=Sum("item_price_ext"))["total"] or Decimal("0")
+        .aggregate(total=Sum("item_price"))["total"] or Decimal("0")
     )
 
+
     item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="EMP").aggregate(total=Sum("item_discount"), count=Count("id"))
+    pwd_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="PWD").aggregate(total=Sum("item_discount"), count=Count("id"))
     item_amt_disc   = TransactionItem.objects.filter(header__in=sales_headers, discount_code="IA").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_disc     = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SC").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_amt_disc = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SA").aggregate(total=Sum("item_discount"), count=Count("id"))
 
+    discounts_total_except_sc = (item_disc["total"] or 0) + (pwd_disc["total"] or 0)
+    discounts_count_except_sc = (item_disc["count"] or 0) + (pwd_disc["count"] or 0)
     total_disc = sum(filter(None, [
         item_disc["total"], item_amt_disc["total"],
         senior_disc["total"], senior_amt_disc["total"],
+        pwd_disc["total"],
     ]))
 
     customer_count   = sales_headers.aggregate(total=Sum("customer_count"))["total"] or 0
@@ -2745,10 +2778,13 @@ def _do_print_x_reading(session, current_operator):
         .order_by("tender_desc")
     )
 
-    net_sales             = gross_sales - Decimal(str(total_disc))
+
+    item_returns_orig_price_total = item_returns_orig_price["total"] or Decimal("0")
+    final_gross_sales = gross_sales - Decimal(str(item_returns_orig_price_total or 0))
+    net_sales             = final_gross_sales - Decimal(str(total_disc))
     total_neg_entries_amt = Decimal(str(total_neg or 0))
 
-    VAT_RATE      = Decimal("0.12")
+    # VAT_RATE      = Decimal("0.12")
     vatable_sales = net_sales / (1 + VAT_RATE)
     vat_amount    = net_sales - vatable_sales
     non_vat       = Decimal("0")
@@ -2830,9 +2866,9 @@ def _do_print_x_reading(session, current_operator):
         write_line("")
 
         # ── Gross sales & discounts ────────────────────────────────────────────
-        write_line(neg_gross("GROSS SALES", gross_sales))
+        write_line(neg_gross("GROSS SALES", final_gross_sales))
         write_line("\nLess:Discounts")
-        write_line(neg_row("Item Disc.",     item_disc["total"],       item_disc["count"]))
+        write_line(neg_row("Item Disc.",     discounts_total_except_sc,       discounts_count_except_sc))
         write_line(neg_row("Item Amt Disc.", item_amt_disc["total"],   item_amt_disc["count"]))
         write_line(neg_row("Senior % Disc.", senior_disc["total"],     senior_disc["count"]))
         write_line(neg_row("     Amt.Disc.", senior_amt_disc["total"], senior_amt_disc["count"]))
@@ -2931,7 +2967,6 @@ def print_x_reading(request):
 # ---------------------------------------------------------------------------
 # Close session view
 # ---------------------------------------------------------------------------
-
 @login_required
 @require_open_session
 @require_http_methods(["POST"])
@@ -2948,21 +2983,22 @@ def close_session(request):
         messages.error(request, "Closing cash cannot be negative.")
         return redirect("sales:pos_cashier")
 
+    # Step 1: Close the session
     try:
         session.close(closed_by_user=user, closing_cash=closing_cash)
     except Exception as e:
         messages.error(request, str(e))
         return redirect("sales:pos_cashier")
 
-    # ── Step 2: Print Z-Reading ──────────────────────────────────────────────
-    # We intentionally separate the print from the close:
+    # Step 2: Print Z-Reading
+    # Intentionally separate from close:
     #   - A printer failure must NOT reopen/revert the session.
     #   - We surface a non-fatal warning to the cashier if printing fails.
     #
     # _do_print_z_reading expects a POSSession that still carries its
-    # aggregated transaction data, which is all still in the DB — closing
-    # the session only changes its status, it does not delete records.
+    # aggregated transaction data (closing only changes status, not records).
     z_print_error = None
+    closed_session = None
     try:
         # Re-fetch so _do_print_z_reading gets a fully up-to-date object
         # (session.close() may have mutated fields like closed_at, status).
@@ -2971,11 +3007,22 @@ def close_session(request):
         )
         _do_print_z_reading(closed_session, current_operator=user)
     except Exception as e:
-        # Log for ops visibility; we'll show a warning to the cashier below.
-        print(f"⚠️  Z-Reading print failed after session close: {e}")
+        print(f"Z-Reading print failed after session close: {e}")
         z_print_error = str(e)
 
-    
+    # Step 3: Update POSTransNumber + AccountingSummary
+    # Only runs when the print succeeded, keeping paper and DB in sync.
+    # If the print failed we skip this so grand totals are not incremented
+    # for a report that was never actually printed.
+    z_db_error = None
+    if not z_print_error and closed_session is not None:
+        try:
+            update_z_reading_db(closed_session, user)
+        except Exception as e:
+            print(f"Z-Reading DB update failed after session close: {e}")
+            z_db_error = str(e)
+
+    # Step 4: Clear POS session keys
     for key in (
         "pos_trans_no",
         "pos_trans_disc_pct",
@@ -2984,16 +3031,23 @@ def close_session(request):
         "last_receipt",
     ):
         request.session.pop(key, None)
-        # ── Step 4: Redirect ─────────────────────────────────────────────────────
-    # Even when printing fails, we still log out — the session is closed.
-    # Stash a warning in the Django messages framework so the logout/login
-    # page can surface it (e.g. "Session closed. Z-Reading print failed: …").
+
+    # Step 5: Redirect
+    # Even when printing or DB update fails, we still log out — the session
+    # is already closed and cannot be reverted from here.
     if z_print_error:
-        messages.warning(
+        print(
             request,
             f"Session closed successfully, but Z-Reading could not be printed: "
             f"{z_print_error}. Please reprint manually.",
         )
+    elif z_db_error:
+        print(
+            request,
+            f"Session closed and Z-Reading printed, but the summary records "
+            f"could not be saved: {z_db_error}. Please notify your administrator.",
+        )
+
     return redirect("pos_logout")
 
 # Configure these in settings.py or TerminalSetup instead of hardcoding
@@ -3015,7 +3069,6 @@ def update_from_csv(request):
             CSV_ITEMDTL_PATH,
             CSV_ITEMSCOSTS_PATH,
         )
-        # print(f"✅ CSV import summary: {summary}")
         return JsonResponse({
             "status": "ok",
             "message": (
