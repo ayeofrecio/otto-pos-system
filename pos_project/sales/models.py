@@ -79,14 +79,14 @@ class TransactionItem(models.Model):
     item_code          = models.CharField(max_length=15, blank=True)   # ITEMCODE
     item_description   = models.CharField(max_length=25, blank=True)   # IDESC
     item_qty           = models.DecimalField(max_digits=15, decimal_places=4, default=0)
-    item_uom           = models.CharField(max_length=6,  blank=True)
-    item_supplier      = models.CharField(max_length=6,  blank=True)
-    item_department    = models.CharField(max_length=4,  blank=True)
-    item_class         = models.CharField(max_length=4,  blank=True)
+    item_uom           = models.CharField(max_length=6,  blank=True) # To be removed
+    item_supplier      = models.CharField(max_length=6,  blank=True) # To be removed
+    item_department    = models.CharField(max_length=4,  blank=True) # To be removed
+    item_class         = models.CharField(max_length=4,  blank=True) # To be removed
     item_size          = models.CharField(max_length=3,  blank=True)
     item_color         = models.CharField(max_length=3,  blank=True)
     item_color_desc    = models.CharField(max_length=15, blank=True)
-    item_type          = models.CharField(max_length=1,  blank=True)
+    item_type          = models.CharField(max_length=1,  blank=True) # To be removed
 
     item_cost          = models.DecimalField(max_digits=15, decimal_places=4, default=0)
     item_price         = models.DecimalField(max_digits=15, decimal_places=4, default=0)

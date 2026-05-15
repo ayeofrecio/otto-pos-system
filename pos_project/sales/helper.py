@@ -236,7 +236,7 @@ def update_z_reading_db(session, user) -> dict:
     acct_fields = {
         # Sales / counts
         "items_sold":        Decimal(str(data["total_items_sold"])),
-        "customer_count":    Decimal(str(data[" "])),
+        "customer_count":    Decimal(str(data["customer_count"])),
         # Returns
         "return_count":      Decimal(str(data["return_count"])),
         "return_total":      data["return_total"],
@@ -290,3 +290,5 @@ def update_z_reading_db(session, user) -> dict:
     )
 
     return data
+
+
