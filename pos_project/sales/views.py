@@ -1687,6 +1687,7 @@ def payment_complete(request):
     # --- Build tender summary ---
     tender_lines = []
     tender_entries_full = []  # For TransactionService
+    running_remaining = total
     total_cash = Decimal("0")
     for t in tender_entries:
         pcode = t["pcode"]
@@ -1695,11 +1696,21 @@ def payment_complete(request):
         tender = Tender.objects.filter(pcode=pcode).first()
         desc = tender.description if tender else pcode
         is_cash = bool(tender and tender.pchange == "Y")
+        
+        # For cash: effective amount is capped at remaining balance.
+        # Non-cash is already validated upstream to not exceed remaining.
+        if is_cash:
+            effective_amt = min(amt, max(Decimal("0"), running_remaining))
+        else:
+            effective_amt = amt
+
+        running_remaining = max(Decimal("0"), running_remaining - effective_amt)
 
         tender_lines.append({
             "pcode": pcode,
             "desc": desc,
-            "amount": str(amt),
+            "amount": str(effective_amt),
+            "gross_amount": str(amt),
             "is_cash": is_cash
         })
         tender_entries_full.append((pcode, amt, desc, is_cash))
@@ -1779,15 +1790,14 @@ def payment_complete(request):
     Payment.objects.bulk_create([
         Payment(
             header=header,
-            pcode=t["pcode"],
-            amount=t["amount"],
-            tender_desc=next(
-                (tl["desc"] for tl in tender_lines if tl["pcode"] == t["pcode"]),
-                t["pcode"]
-            ),
-            payment_reference=(t.get("payment_reference") or "")[:20],
+            pcode=tl["pcode"],
+            amount=Decimal(tl["amount"]),               # net applied
+            tendered_amount=Decimal(tl["gross_amount"]), # what customer handed over
+            change_amount=Decimal(tl["gross_amount"]) - Decimal(tl["amount"]),  # per-tender change
+            tender_desc=tl["desc"],
+            payment_reference=(t.get("payment_reference") or "") or None,
         )
-        for t in tender_entries
+        for tl, t in zip(tender_lines, tender_entries)
     ])
 
     # --- Clipper-style flat transaction log (TransactionLog / TLOG) ---
