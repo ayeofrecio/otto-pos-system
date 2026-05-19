@@ -2523,11 +2523,7 @@ def receipt_view(request):
     if not receipt:
         return redirect("sales:pos_cashier")
  
-    # Guard before any attribute access
     terminal_config = _get_terminal_config()
-    if not terminal_config:
-        print("❌ terminal_config is None")
-        return redirect("sales:pos_cashier")
  
     setup_details = _get_store_details()
  
@@ -2540,7 +2536,7 @@ def receipt_view(request):
         }]
  
     context = {
-        "store_name":       setup_details.header01 or "OTTO Store",
+        "store_name":       (setup_details.header01 if setup_details else "") or "OTTO Store",
         "transaction_no":   receipt["transaction_no"],
         "date":             receipt["date"],
         "time":             receipt["time"],
@@ -2556,16 +2552,17 @@ def receipt_view(request):
         "change_amount":    receipt.get("change_amount", ""),
         "lines":            receipt["lines"],
         # "assisted_by":      receipt.get["salesperson"] or ""
-        "headers":      list(terminal_config.headers.all().order_by("line_number")),
-        "footers":      _get_customer_footers(terminal_config),
+        "headers":      list(terminal_config.headers.all().order_by("line_number")) if terminal_config else [],
+        "footers":      _get_customer_footers(terminal_config) if terminal_config else [],
         "cashier_name": session.cashier.get_full_name() or session.cashier.username,
         "store_id":     session.store_id,
     }
  
     printer = None
     try:
-        printer, _ = _get_printer(terminal_config)
-        _print_receipt(printer, terminal_config, context, session)
+        if terminal_config:
+            printer, _ = _get_printer(terminal_config)
+            _print_receipt(printer, terminal_config, context, session)
     except NotImplementedError as e:
         print(f"❌ Printer not supported: {e}")
     except Exception as e:
