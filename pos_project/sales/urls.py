@@ -34,4 +34,5 @@ urlpatterns = [
     path('debug-json/', views.debug_sessions_json, name='debug_sessions_json'),
     path("z-reading/", views.z_reading_view, name="z_reading"),
     path("x-reading/", views.print_x_reading, name="x_reading"),
+    path("update-from-csv/", views.update_from_csv, name="update_from_csv"),
 ]

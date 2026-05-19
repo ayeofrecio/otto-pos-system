@@ -88,7 +88,12 @@ class TransactionService:
         Returns:
             int: Number of records saved to TLOG
         """
-        from sales.models import TransactionLog
+        try:
+            from sales.models import TransactionLog
+        except ImportError:
+            # TransactionLog is optional in the current schema.
+            # Keep checkout flow working even when legacy flat log table is absent.
+            return 0
         
         records_saved = 0
         
@@ -312,7 +317,10 @@ class TransactionService:
         Returns:
             List of transaction log records as dictionaries
         """
-        from sales.models import TransactionLog
+        try:
+            from sales.models import TransactionLog
+        except ImportError:
+            return []
         
         logs = TransactionLog.objects.filter(
             transaction_no=transaction_no
@@ -330,7 +338,19 @@ class TransactionService:
         Returns:
             Dictionary with transaction summary
         """
-        from sales.models import TransactionLog
+        try:
+            from sales.models import TransactionLog
+        except ImportError:
+            return {
+                "transaction_no": transaction_no,
+                "total_records": 0,
+                "item_records": 0,
+                "payment_records": 0,
+                "discount_records": 0,
+                "void_records": 0,
+                "total_amount": 0.0,
+                "payment_amount": 0.0,
+            }
         
         logs = TransactionLog.objects.filter(transaction_no=transaction_no)
         
