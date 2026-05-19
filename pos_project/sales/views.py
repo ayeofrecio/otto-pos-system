@@ -50,6 +50,7 @@ from sales.helper import update_z_reading_db
 #  for debugging
 from pprint import pprint
 from django.forms.models import model_to_dict
+import win32print
 
 from django.db.models import Sum, Count, Q
 import json
@@ -2124,8 +2125,27 @@ class _SocketPrinterWrapper:
  
     def close(self):
         self._sock.close()
- 
- 
+
+class _WindowsPrinterWrapper:
+    """Wraps the Windows Spooler API to expose the same .write()/.close() API as serial.Serial."""
+    def __init__(self, printer_name: str):
+        # Open the printer queue using its Windows shared/local name
+        self._h_printer = win32print.OpenPrinter(printer_name)
+        # Start a raw print job wrapper
+        self._job = win32print.StartDocPrinter(self._h_printer, 1, ("POS Receipt", None, "RAW"))
+        win32print.StartPagePrinter(self._h_printer)
+
+    def write(self, data: bytes):
+        # Sends bytes cleanly to the TM-U220A without translation
+        win32print.WritePrinter(self._h_printer, data)
+
+    def close(self):
+        # Properly close down the windows job pipeline
+        win32print.EndPagePrinter(self._h_printer)
+        win32print.EndDocPrinter(self._h_printer)
+        win32print.ClosePrinter(self._h_printer)
+
+
 def _open_printer(printer_port):
     """
     Open a printer connection based on TerminalPort.connection_type.
@@ -2157,10 +2177,12 @@ def _open_printer(printer_port):
         return _SocketPrinterWrapper(sock)
  
     elif ct == "WINDOWS":
-        raise NotImplementedError(
-            f"Windows printer support is not yet implemented "
-            f"(printer_name: {printer_port.printer_name!r})."
-        )
+            # Check if a printer name exists in your port configuration
+            if not hasattr(printer_port, 'port_name') or not printer_port.port_name:
+                raise ValueError("Windows printer connection type requires a configured 'port_name'.")
+            
+            # Returns the Windows print handler wrapper
+            return _WindowsPrinterWrapper(printer_port.port_name)
  
     else:
         raise ValueError(f"Unsupported connection_type: {ct!r}")
@@ -2177,18 +2199,49 @@ def _get_paper_width(terminal_config):
     return 40
  
  
+# def _get_printer(terminal_config):
+#     """
+#     Resolve the PRINTER port from terminal_config and open a connection.
+#     Returns (printer, ports_dict).
+#     Raises ValueError if the port is not configured.
+#     """
+#     ports = {p.port_type: p for p in terminal_config.ports.all()}
+#     if terminal_config.print_in == ports.connection.type:
+#         printer_port = ports.get("PRINTER")
+
+#     if not printer_port:
+#         raise ValueError("Printer port not configured in terminal settings.")
+    
+    
+#     return _open_printer(printer_port), ports
 def _get_printer(terminal_config):
     """
-    Resolve the PRINTER port from terminal_config and open a connection.
+    Resolve the active PRINTER port based on the active terminal_config.print_in setting.
     Returns (printer, ports_dict).
-    Raises ValueError if the port is not configured.
+    Raises ValueError if a matching printer configuration is not found.
     """
-    ports = {p.port_type: p for p in terminal_config.ports.all()}
-    printer_port = ports.get("PRINTER")
+    # 1. Fetch all ports for this terminal configuration
+    all_ports = list(terminal_config.ports.all())
+    
+    # 2. Find the specific PRINTER port that matches the target connection type
+    printer_port = None
+    for p in all_ports:
+        if p.port_type == "PRINTER" and p.connection_type == terminal_config.print_in:
+            printer_port = p
+            break  # Found our exact match, stop looking
+
+    # 3. If no exact match was found, raise a clear error
     if not printer_port:
-        raise ValueError("Printer port not configured in terminal settings.")
+        raise ValueError(
+            f"No PRINTER port configuration found matching the active print mode: '{terminal_config.print_in}'."
+        )
+    
+    # 4. Rebuild the ports dictionary mapping for the rest of your system (like 'DRAWER', etc.)
+    # If there are duplicates, this will keep the most relevant one or the last one evaluated.
+    ports = {p.port_type: p for p in all_ports}
+    
+    # 5. Open the connection using the precisely selected printer port
     return _open_printer(printer_port), ports
- 
  
 def _get_customer_footers(terminal_config):
     """Return footers for the customer copy, sorted by line_number."""
