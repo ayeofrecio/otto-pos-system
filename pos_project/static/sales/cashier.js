@@ -61,7 +61,8 @@
   // cashier.js — wire up the cloud button
   const cloudBtn = document.getElementById("cloudBtn");
 
-  cloudBtn.addEventListener("click", async () => {
+  if (cloudBtn) {
+    cloudBtn.addEventListener("click", async () => {
       setCloudState("loading");
 
       try {
@@ -96,9 +97,13 @@
           setCloudState("error");
           console.error("Error:", err);
       }
-  });
+    });
+  }
 
   function setCloudState(state) {
+      if (!cloudBtn) {
+        return;
+      }
       // Matches your icon-download / icon-success / icon-error / icon-loading CSS classes
       const states = ["idle", "loading", "success", "error"];
       const iconMap = {
@@ -289,6 +294,7 @@
   document.addEventListener('keydown', function (evt) {
     const barcodeInput = document.getElementById('barcode-input');
     const qtyInput = document.getElementById('qty-input');
+    const suspendHotkey = (typeof POS_FKEYS !== 'undefined' && POS_FKEYS.iSusRt) ? POS_FKEYS.iSusRt : 'F3';
 
     // Block browser defaults for ALL keys that are mapped to POS functions
     if (typeof POS_FKEYS !== 'undefined') {
@@ -340,6 +346,11 @@
       window.triggerItemReturn();
       return;
     }
+    if (evt.key === suspendHotkey) {
+      evt.preventDefault();
+      window.openSuspendModal();
+      return;
+    }
 
     if (evt.key === POS_FKEYS.paymnt) {
       evt.preventDefault();
@@ -347,7 +358,7 @@
       return;
     }
 
-    if (evt.key === POS_FKEYS.menu) {
+    if (POS_FKEYS.menu && POS_FKEYS.menu !== suspendHotkey && evt.key === POS_FKEYS.menu) {
       evt.preventDefault();
       window.openFkeyHelpModal();
       return;
@@ -385,11 +396,13 @@
       const poModal = document.getElementById('price-override-modal');
       const fkeyModal = document.getElementById('fkey-help-modal');
       const itemReturnModal = document.getElementById('item-return-modal');
+      const suspendModal = document.getElementById('suspend-modal');
       if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
       else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
       else if (poModal && poModal.classList.contains('open')) { window.closePriceOverrideModal(); }
       else if (itemReturnModal && itemReturnModal.classList.contains('open')) { window.closeItemReturnModal(); }
+      else if (suspendModal && suspendModal.classList.contains('open')) { window.closeSuspendModal(); }
       else if (fkeyModal && fkeyModal.classList.contains('open')) { window.closeFkeyHelpModal(); }
       else if (closeTransModal && closeTransModal.classList.contains('open')) { window.closeCloseTransModal(); }
     }
@@ -1330,10 +1343,210 @@
 
   var loadedReturnReceiptNo = '';
   var loadedReturnItems = [];
+  window.openSuspendModal = function () {
+    var modal = document.getElementById('suspend-modal');
+    var errorEl = document.getElementById('suspend-error');
+    if (!modal) {
+      return;
+    }
+    if (errorEl) {
+      errorEl.textContent = '';
+    }
+    modal.classList.add('open');
+    window.loadSuspendedTransactions();
+    setTimeout(function () {
+      var searchInput = document.getElementById('suspend-search-input');
+      if (searchInput) { searchInput.focus(); }
+    }, 80);
+  };
+
+  var suspendTriggerBtn = document.getElementById('suspend-trigger-btn');
+  if (suspendTriggerBtn) {
+    suspendTriggerBtn.addEventListener('click', function () {
+      window.openSuspendModal();
+    });
+  }
+
+  function setSuspendedBadgeCount(count) {
+    var badge = document.getElementById('suspended-count-badge');
+    if (!badge) {
+      return;
+    }
+    var safe = Number(count || 0);
+    if (!Number.isFinite(safe) || safe < 0) {
+      safe = 0;
+    }
+    safe = Math.trunc(safe);
+    badge.textContent = String(safe);
+    badge.classList.toggle('is-zero', safe === 0);
+  }
+
+  setSuspendedBadgeCount(typeof INITIAL_SUSPENDED_COUNT === 'undefined' ? 0 : INITIAL_SUSPENDED_COUNT);
+
+  window.closeSuspendModal = function () {
+    var modal = document.getElementById('suspend-modal');
+    if (modal) {
+      modal.classList.remove('open');
+    }
+    var barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) {
+      barcodeInput.focus();
+    }
+  };
+
+  window.closeSuspendModalOutside = function (evt) {
+    if (evt.target === document.getElementById('suspend-modal')) {
+      window.closeSuspendModal();
+    }
+  };
+
+  window.loadSuspendedTransactions = function () {
+    var searchInput = document.getElementById('suspend-search-input');
+    var resultsEl = document.getElementById('suspended-results');
+    var errorEl = document.getElementById('suspend-error');
+    var q = String((searchInput && searchInput.value) || '').trim();
+    var url = CART_SUSPENDED_LIST_URL;
+    if (q) {
+      url += '?q=' + encodeURIComponent(q);
+    }
+
+    if (resultsEl) {
+      resultsEl.innerHTML = '<div class="return-receipt-empty">Loading suspended transactions...</div>';
+    }
+    if (errorEl) {
+      errorEl.textContent = '';
+    }
+
+    fetch(url, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          return { ok: r.ok, data: data || {} };
+        }).catch(function () {
+          return { ok: r.ok, data: {} };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          if (resultsEl) {
+            resultsEl.innerHTML = '<div class="return-receipt-empty">Unable to load suspended transactions.</div>';
+          }
+          if (errorEl) {
+            errorEl.textContent = res.data.error || 'Unable to load suspended transactions.';
+          }
+          return;
+        }
+
+        setSuspendedBadgeCount(res.data.suspended_count || 0);
+        renderSuspendedRows(Array.isArray(res.data.suspended) ? res.data.suspended : []);
+      })
+      .catch(function () {
+        if (resultsEl) {
+          resultsEl.innerHTML = '<div class="return-receipt-empty">Unable to load suspended transactions.</div>';
+        }
+        if (errorEl) {
+          errorEl.textContent = 'Unable to load suspended transactions.';
+        }
+      });
+  };
+
+  function renderSuspendedRows(rows) {
+    var resultsEl = document.getElementById('suspended-results');
+    if (!resultsEl) {
+      return;
+    }
+    if (!rows || !rows.length) {
+      resultsEl.innerHTML = '<div class="return-receipt-empty">No suspended transactions found.</div>';
+      return;
+    }
+
+    resultsEl.innerHTML = rows.map(function (row) {
+      var transNo = escHtml(row.transaction_no || '');
+      var itemCount = Number(row.item_count || 0);
+      var total = Number(row.total || 0);
+      return '<label class="return-item-row">' +
+        '<div class="return-item-main">' +
+        '<div class="return-item-desc">Transaction #' + transNo + '</div>' +
+        '<div class="return-item-meta">Items: ' + escHtml(itemCount) + '</div>' +
+        '</div>' +
+        '<div class="return-item-meta" style="display:flex;gap:8px;align-items:center;">' +
+        '<span>' + formatPeso(total) + '</span>' +
+        '<button type="button" class="btn btn-secondary" onclick="retrieveSuspendedTransaction(\'' + transNo + '\')">Retrieve</button>' +
+        '</div>' +
+        '</label>';
+    }).join('');
+  }
+
+  window.retrieveSuspendedTransaction = function (transactionNo) {
+    var errorEl = document.getElementById('suspend-error');
+    if (!transactionNo) {
+      return;
+    }
+    if (!confirm('Retrieve suspended transaction #' + transactionNo + '?')) {
+      return;
+    }
+    if (errorEl) {
+      errorEl.textContent = '';
+    }
+
+    postFormEncoded(CART_SUSPENDED_RETRIEVE_URL, { transaction_no: transactionNo })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          if (errorEl) {
+            errorEl.textContent = res.data.error || 'Failed to retrieve transaction.';
+          }
+          return;
+        }
+        setSuspendedBadgeCount(Math.max(0, Number((document.getElementById('suspended-count-badge') || {}).textContent || 0) - 1));
+        window.location.reload();
+      })
+      .catch(function () {
+        if (errorEl) {
+          errorEl.textContent = 'Failed to retrieve transaction.';
+        }
+      });
+  };
+
+  window.suspendCurrentTransaction = function () {
+    var errorEl = document.getElementById('suspend-error');
+    if (!confirm('Suspend current unpaid transaction?')) {
+      return;
+    }
+    if (errorEl) {
+      errorEl.textContent = '';
+    }
+
+    postFormEncoded(CART_SUSPEND_URL, {})
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          if (errorEl) {
+            errorEl.textContent = res.data.error || 'Failed to suspend transaction.';
+          }
+          return;
+        }
+        setSuspendedBadgeCount(Number((document.getElementById('suspended-count-badge') || {}).textContent || 0) + 1);
+        window.location.reload();
+      })
+      .catch(function () {
+        if (errorEl) {
+          errorEl.textContent = 'Failed to suspend transaction.';
+        }
+      });
+  };
 
   window.triggerItemReturn = function () {
     window.openItemReturnModal();
   };
+  var suspendSearchInput = document.getElementById('suspend-search-input');
+  if (suspendSearchInput) {
+    suspendSearchInput.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Enter') {
+        evt.preventDefault();
+        window.loadSuspendedTransactions();
+      }
+    });
+  }
 
   window.openItemReturnModal = function () {
     const modal = document.getElementById('item-return-modal');

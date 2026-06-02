@@ -10,7 +10,7 @@ from io import StringIO
 from pyexpat.errors import messages
 from django.http import JsonResponse
 
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.management import call_command, CommandError
 from django.http import JsonResponse
@@ -23,7 +23,7 @@ from users.models import Users
 from .color_lookup import get_color_description
 from .size_lookup import get_size_description
 from .decorators import require_open_session
-from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem
+from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem, SuspendedTransaction
 from .pos_constants import (
     RCODE_ITEM_VOID,
     TAG_ITEM_RETURN,
@@ -144,6 +144,26 @@ def _build_temp_line_cart_context(request, trans_no):
     }
 
 
+def _temp_to_suspend_payload(line):
+    """Convert TempTransaction row to SuspendedTransaction payload."""
+    row_data = model_to_dict(line)
+    row_data.pop("id", None)
+    row_data["customer_count"] = 0
+    row_data["served_by"] = ""
+    return row_data
+
+
+def _suspend_to_temp_payload(line, user_id):
+    """Convert SuspendedTransaction row to TempTransaction payload for a cashier."""
+    row_data = model_to_dict(line)
+    row_data.pop("id", None)
+    row_data.pop("user_id2", None)
+    row_data.pop("customer_count", None)
+    row_data.pop("served_by", None)
+    row_data["user_id"] = user_id
+    return row_data
+
+
 def _get_user_id(request):
     """Return user_id for POS (Django username or ClarionUser id)."""
     return request.user.username[:10] if request.user.is_authenticated else ""
@@ -245,8 +265,12 @@ def _save_current_transaction_no(trans_no):
     current_no = _normalize_transaction_no(trans_no)
     row = POSTransNumber.objects.order_by("id").first()
     if row:
-        row.transaction_no = current_no
-        row.save(update_fields=["transaction_no"])
+        existing_no = _normalize_transaction_no(row.transaction_no)
+        # Keep POSNBR monotonic so completing an older resumed transaction
+        # does not rewind the global counter and cause duplicates.
+        if int(current_no) > int(existing_no):
+            row.transaction_no = current_no
+            row.save(update_fields=["transaction_no"])
         return row
 
     return POSTransNumber.objects.create(transaction_no=current_no)
@@ -264,6 +288,16 @@ def _get_next_transaction_no():
     row.transaction_no = next_no
     row.save(update_fields=["transaction_no"])
     return next_no
+
+
+def _peek_next_transaction_no():
+    """Return the next receipt number for display only (no DB writes)."""
+    row = POSTransNumber.objects.order_by("id").first()
+    if not row:
+        return "00000001"
+
+    current = _normalize_transaction_no(row.transaction_no)
+    return str(int(current) + 1).zfill(8)
 
 
 @login_required(login_url="pos_login")
@@ -419,19 +453,21 @@ def cashier_view(request):
     except Exception:
         biz_date = now.date()
 
-    # Get or create transaction number for this session's cart
+    # Keep transaction-number allocation lazy.
+    # A new number is reserved when the cashier actually starts a sale (cart_add),
+    # not every time cashier page loads.
     trans_no = request.session.get("pos_trans_no")
-    if not trans_no:
-        trans_no = _get_next_transaction_no()
-        request.session["pos_trans_no"] = trans_no
 
-    # Load cart from TempTransaction
-    cart_lines = TempTransaction.objects.filter(
-        user_id=user_id,
-        terminal_id=TERMINAL_ID,
-        store_id=STORE_ID,
-        transaction_no=trans_no,
-    ).order_by("rec_ctr")
+    # Load cart from TempTransaction only when a transaction is active.
+    if trans_no:
+        cart_lines = TempTransaction.objects.filter(
+            user_id=user_id,
+            terminal_id=TERMINAL_ID,
+            store_id=STORE_ID,
+            transaction_no=trans_no,
+        ).order_by("rec_ctr")
+    else:
+        cart_lines = TempTransaction.objects.none()
 
     trans_disc = _get_trans_disc(request)
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
@@ -439,19 +475,24 @@ def cashier_view(request):
 
     # Last scanned item for detail panel
     last_line = cart_lines.last()
+    suspended_count = SuspendedTransaction.objects.filter(
+        store_id=STORE_ID,
+        terminal_id=TERMINAL_ID,
+    ).values("transaction_no").distinct().count()
 
     context = {
         "store_name": _get_store_name(),
         "date": biz_date.strftime("%A %b %d %Y"),
         "time": now.strftime("%I:%M:%S %p"),
         "cashier": request.user.get_full_name() or request.user.username,
-        "receipt_no": trans_no,
+        "receipt_no": trans_no or _peek_next_transaction_no(),
         "cart_lines": cart_lines,
         "subtotal": subtotal,
         "trans_disc": trans_disc,
         "trans_disc_amt": trans_disc_amt,
         "total": total,
         "item_count": item_count,
+        "suspended_count": suspended_count,
         "last_item": last_line,
         "pos_keys": get_pos_keys(),
         "z_reading_required": getattr(request, "z_reading_required", False),
@@ -1003,6 +1044,149 @@ def cart_new(request):
     _clear_trans_disc(request)
 
     return redirect("sales:pos_cashier")
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_suspend(request):
+    """Move the current unpaid cart from temptrans to suspend."""
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "Cart is empty"}, status=400)
+
+    cart_qs = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+    cart_lines = list(cart_qs)
+    if not cart_lines:
+        return JsonResponse({"ok": False, "error": "Cart is empty"}, status=400)
+
+    if SuspendedTransaction.objects.filter(
+        store_id=STORE_ID,
+        terminal_id=TERMINAL_ID,
+        transaction_no=trans_no,
+    ).exists():
+        return JsonResponse({
+            "ok": False,
+            "error": f"Transaction {trans_no} is already suspended",
+        }, status=409)
+
+    with transaction.atomic():
+        suspended_rows = [
+            SuspendedTransaction(**_temp_to_suspend_payload(line))
+            for line in cart_lines
+        ]
+
+        SuspendedTransaction.objects.bulk_create(suspended_rows)
+        cart_qs.delete()
+
+    # Keep the reserved transaction number in suspend table; clear active cart context.
+    request.session.pop("pos_trans_no", None)
+    _clear_trans_disc(request)
+
+    return JsonResponse({
+        "ok": True,
+        "transaction_no": trans_no,
+        "item_count": len(cart_lines),
+        "message": f"Transaction {trans_no} suspended",
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["GET"])
+def cart_suspended_list(request):
+    """List suspended transactions for the current terminal (any cashier)."""
+    search_q = (request.GET.get("q") or "").strip()
+
+    qs = SuspendedTransaction.objects.filter(
+        store_id=STORE_ID,
+        terminal_id=TERMINAL_ID,
+    )
+    if search_q:
+        qs = qs.filter(transaction_no__icontains=search_q)
+
+    grouped = (
+        qs.values("transaction_no")
+        .annotate(item_count=Count("id"), amount_total=Sum("item_price_ext"))
+        .order_by("-transaction_no")
+    )
+
+    rows = [
+        {
+            "transaction_no": row["transaction_no"],
+            "item_count": int(row["item_count"] or 0),
+            "total": str(row["amount_total"] or Decimal("0")),
+        }
+        for row in grouped
+    ]
+
+    return JsonResponse({
+        "ok": True,
+        "suspended": rows,
+        "suspended_count": len(rows),
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_suspended_retrieve(request):
+    """Restore a suspended transaction into temptrans for the current cashier."""
+    user_id = _get_user_id(request)
+    trans_no = _normalize_transaction_no(request.POST.get("transaction_no"))
+    if trans_no == "00000000":
+        return JsonResponse({"ok": False, "error": "Invalid transaction number"}, status=400)
+
+    active_trans = request.session.get("pos_trans_no")
+    if active_trans:
+        active_cart_exists = TempTransaction.objects.filter(
+            user_id=user_id,
+            terminal_id=TERMINAL_ID,
+            store_id=STORE_ID,
+            transaction_no=active_trans,
+        ).exists()
+        if active_cart_exists:
+            return JsonResponse({
+                "ok": False,
+                "error": "Current cart is not empty. Suspend or clear it first.",
+            }, status=409)
+
+    suspended_qs = SuspendedTransaction.objects.filter(
+        store_id=STORE_ID,
+        terminal_id=TERMINAL_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+    suspended_lines = list(suspended_qs)
+    if not suspended_lines:
+        return JsonResponse({"ok": False, "error": "Suspended transaction not found"}, status=404)
+
+    with transaction.atomic():
+        temp_rows = [
+            TempTransaction(**_suspend_to_temp_payload(line, user_id))
+            for line in suspended_lines
+        ]
+
+        TempTransaction.objects.bulk_create(temp_rows)
+        suspended_qs.delete()
+
+    # Restoring a suspended transaction must not advance POSNBR.
+    # We only point the cashier session back to the restored transaction number.
+    request.session["pos_trans_no"] = trans_no
+    request.session.modified = True
+    _clear_trans_disc(request)
+
+    return JsonResponse({
+        "ok": True,
+        "transaction_no": trans_no,
+        "item_count": len(suspended_lines),
+        "message": f"Transaction {trans_no} restored",
+    })
 
 
 @login_required
@@ -1821,10 +2005,12 @@ def payment_complete(request):
         ],
     }
 
-    # --- Persist current transaction no, clear cart, advance transaction number ---
+    # --- Persist current transaction no and clear active cart ---
+    # Next transaction number is allocated lazily on next real sale start (cart_add),
+    # not immediately on close, to avoid counter drift with retrieve/pay flows.
     _save_current_transaction_no(trans_no)
     cart_lines_qs.delete()
-    request.session["pos_trans_no"] = _get_next_transaction_no()
+    request.session.pop("pos_trans_no", None)
     _clear_trans_disc(request)
 
     return redirect("sales:receipt")

@@ -69,6 +69,27 @@
             font-size: 1rem;
         }
 
+        .suspend-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.25rem;
+            height: 1.25rem;
+            padding: 0 0.35rem;
+            margin-left: 0.35rem;
+            border-radius: 999px;
+            background: #f08a5c;
+            color: #1e2328;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .suspend-badge.is-zero {
+            background: #6e7681;
+            color: #e6edf3;
+        }
+
         .main {
             flex: 1;
             min-height: 0;
@@ -2752,6 +2773,38 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="suspend-modal" onclick="closeSuspendModalOutside(event)">
+        <div class="modal return-modal">
+            <div class="modal-header">
+                <h2>Transaction Suspend / Retrieve</h2>
+                <button class="modal-close" onclick="closeSuspendModal()">&#10005;</button>
+            </div>
+            <div class="return-modal-body">
+                <div class="return-modal-line">Suspend current unpaid cart or retrieve a parked transaction for this terminal.</div>
+
+                <div class="return-lookup-row" style="margin-bottom:10px;">
+                    <button type="button" class="btn btn-secondary" onclick="suspendCurrentTransaction()">Suspend Current</button>
+                    <button type="button" class="btn btn-secondary" onclick="loadSuspendedTransactions()">Refresh List</button>
+                </div>
+
+                <label class="return-modal-label" for="suspend-search-input">Find Transaction No.</label>
+                <div class="return-lookup-row">
+                    <input id="suspend-search-input" class="return-modal-input" type="text" maxlength="8" placeholder="e.g. 00001234">
+                    <button type="button" class="btn btn-secondary" onclick="loadSuspendedTransactions()">Search</button>
+                </div>
+
+                <div class="return-receipt-results" id="suspended-results">
+                    <div class="return-receipt-empty">No suspended transactions loaded yet.</div>
+                </div>
+
+                <div class="return-modal-error" id="suspend-error"></div>
+            </div>
+            <div class="disc-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSuspendModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
 
     <footer class="actions">
         <!-- Primary Actions -->
@@ -2800,6 +2853,11 @@
                 title="Void previous transaction by receipt number">
                 <span class="fn-key" id="key-ivoida">F6</span><span class="fn-label">Void Prev</span>
             </button>
+
+            <button type="button" class="btn-fn btn-fn-grey" id="suspend-trigger-btn" onclick="window.openSuspendModal()"
+                title="Suspend or retrieve transaction">
+                <span class="fn-key" id="key-susrt">F3</span><span class="fn-label">Suspend/Retrieve <span id="suspended-count-badge" class="suspend-badge{% if suspended_count|default:0 == 0 %} is-zero{% endif %}">{{ suspended_count|default:0 }}</span></span>
+            </button>
             
             <!-- Admin -->
             <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
@@ -2817,6 +2875,10 @@
         const CART_VOID_ITEM_URL = "{% url 'sales:cart_void_item' %}";
         const CART_VOID_TRANSACTION_URL = "{% url 'sales:cart_void_transaction' %}";
         const CART_VOID_PREVIOUS_URL = "{% url 'sales:cart_void_previous' %}";
+        const CART_SUSPEND_URL = "{% url 'sales:cart_suspend' %}";
+        const CART_SUSPENDED_LIST_URL = "{% url 'sales:cart_suspended_list' %}";
+        const CART_SUSPENDED_RETRIEVE_URL = "{% url 'sales:cart_suspended_retrieve' %}";
+        const INITIAL_SUSPENDED_COUNT = {{ suspended_count|default:0 }};
         const CART_ITEM_RETURN_TOGGLE_URL = "{% url 'sales:cart_item_return_toggle' %}";
         const CART_RETURN_LOOKUP_URL = "{% url 'sales:cart_return_lookup' %}";
         const CART_RETURN_IMPORT_URL = "{% url 'sales:cart_return_import' %}";
@@ -2900,6 +2962,7 @@
                 'key-stdisc': 'stDisc',
                 'key-prover': 'prOver',
                 'key-iret': 'iRet',
+                'key-susrt': 'iSusRt',
                 'key-ivoid': 'iVoid',
                 'key-voidtr': 'voidTr',
                 'key-ivoida': 'iVoidA'
@@ -2934,6 +2997,7 @@
     <script>
         const btn = document.getElementById("cloudBtn");
 
+        if (btn) {
         btn.addEventListener("click", () => {
             if (btn.disabled) return;
 
@@ -2959,6 +3023,7 @@
 
             }, 2000);
         });
+        }
     </script>
     <script src="{% static 'sales/cashier.js' %}"></script>
 </body>
