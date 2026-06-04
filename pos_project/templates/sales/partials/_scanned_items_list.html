@@ -13,6 +13,9 @@
             {% if line.tag1 == 'R' %}
             <span class="scanned-item-return-badge">RETURN</span>
             {% endif %}
+            {% if line.tag1 == 'R' %}
+            <span class="scanned-item-return-badge">RETURN</span>
+            {% endif %}
             {% if line.item_discount %}
             <span class="scanned-item-disc">{{ line.disc_pct|floatformat:-2 }}% disc</span>
             {% endif %}

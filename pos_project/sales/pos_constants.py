@@ -14,7 +14,7 @@ TRTYPE_ENTRY = "1"
 RCODE_SIGN_ON = "A"
 RCODE_SIGN_OFF = "B"
 
-# Core record codesss
+# Core record codes
 RCODE_ITEM_ENTRY = "1"
 RCODE_ITEM_DISCOUNT = "2"
 RCODE_SUBTOTAL_DISCOUNT = "8"
