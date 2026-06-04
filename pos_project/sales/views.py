@@ -5,20 +5,22 @@ import os
 
 import datetime
 import django.utils.timezone as timezone
-from decimal import Decimal
 from io import StringIO
 from pyexpat.errors import messages
 from django.http import JsonResponse
 
 from django.db import models, transaction
+from decimal import Decimal, InvalidOperation
+
+from django.db import models
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.management import call_command, CommandError
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
-from users.models import POSSession
 from users.models import Users
+from users.models import POSSession, POSSessionUsers
 
 from .color_lookup import get_color_description
 from .size_lookup import get_size_description
@@ -40,14 +42,29 @@ from .pos_constants import (
 )
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
+from .pos_constants import (
+    RCODE_ITEM_VOID,
+    TAG_ITEM_RETURN,
+    TAG_PRICE_OVERRIDE,
+    TAG_ITEM_VOID,
+    TAG_VOID_PREVIOUS,
+    TAG_VOID_TRANS,
+    TRTYPE_VOID_ITEM,
+    TRTYPE_VOID_ITEM_LEGACY,
+    TRTYPE_VOID_PREVIOUS,
+    TRTYPE_VOID_TRANS,
+    TRTYPE_VOID_TRANS_LEGACY,
+    VOID_TRANSACTION_TYPES_ALL,
+)
 
 from sales.services import import_products_from_csv
 from setup.pos_keys import get_pos_keys
-
+from sales.helper import update_z_reading_db
 
 #  for debugging
 from pprint import pprint
 from django.forms.models import model_to_dict
+import win32print
 
 from django.db.models import Sum, Count, Q
 import json
@@ -168,34 +185,56 @@ def _get_user_id(request):
     """Return user_id for POS (Django username or ClarionUser id)."""
     return request.user.username[:10] if request.user.is_authenticated else ""
 
-
-#    To be checked if we want to keep these as part of the user model instead of moving to TerminalSetup or TerminalConfiguration, which would allow for more flexible assignment of terminals to users in the future. For now, these are used as the default store_id and terminal_id for session tracking and transaction logging, but they could be overridden by fields in the POSSession model or by related TerminalSetup/Configuration records.
-# def _get_store_id(request):
-#     """Get store_id from logged-in user, fallback to default."""
-#     if request.user.is_authenticated:
-#         return request.user.store_id or "001"
-#     return "001"
+    for user in managers:
+        if user.check_password(clean_pin):
+            return user
+    return None
 
 
-# def _get_terminal_id(request):
-#     """Get terminal_id from logged-in user, fallback to default."""
-#     if request.user.is_authenticated:
-#         return request.user.terminal_id or "001"
-#     return "001"
+def _build_temp_line_cart_context(request, trans_no):
+    """Build cart context values used by cart mutation endpoints."""
+    user_id = _get_user_id(request)
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+    return {
+        "cart_lines": cart_lines,
+        "subtotal": subtotal,
+        "trans_disc": trans_disc,
+        "trans_disc_amt": trans_disc_amt,
+        "total": total,
+        "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+        "last_item": cart_lines.last(),
+    }
+
+
+def _get_user_id(request):
+    """Return user_id for POS (Django username or ClarionUser id)."""
+    return request.user.username[:10] if request.user.is_authenticated else ""
+
 
 # ----------------------------------------------------------------------------
 # Getting the current session's store_id and terminal_id from the POSSession model instead of the user model allows for more flexible assignment of terminals to users and better tracking of sessions across different terminals. This way, the store_id and terminal_id are tied to the actual POS session rather than the user account, which can be useful in scenarios where users may operate multiple terminals or when terminals are shared among users. The helper functions can be updated to retrieve this information from the current open session for the logged-in user, ensuring that all operations are correctly associated with the active session's store and terminal.
 # ----------------------------------------------------------------------------
 def get_current_session(request):
-    """Return the current open POS session of the logged-in user."""
     if not request.user.is_authenticated:
         return None
 
-    return POSSession.objects.filter(
-        cashier=request.user,
-        status=POSSession.STATUS_OPEN
-    ).order_by("-opened_at").first()
-
+    return (
+        POSSession.objects.filter(
+            session_users__user=request.user,
+            session_users__left_at__isnull=True,
+            status=POSSession.STATUS_OPEN,
+        )
+        .order_by("-opened_at")
+        .first()
+    )
 
 def get_current_session_or_error(request):
     """Return current session or raise API error response."""
@@ -219,7 +258,7 @@ def validate_session_owner(request, session):
 def get_session_by_id(request, session_id):
     """Fetch session safely and ensure ownership."""
     try:
-        session = POSSession.objects.select_related("cashier").get(
+        session = POSSession.objects.select_related("opened_by").get(
             id=session_id
         )
     except POSSession.DoesNotExist:
@@ -249,6 +288,67 @@ def _get_store_details():
         ).first()
     except TerminalSetup.DoesNotExist:
         return None
+
+
+# def _get_terminal_info_from_session(store_id, terminal_id):
+#     """Return (terminal_information) from the current open session for this user."""
+
+#     terminal_information = TerminalConfiguration.objects.filter(store_id=store_id, terminal_id=terminal_id).first()
+#     return terminal_information
+ 
+def _get_terminal_config():
+    """
+    Fetch TerminalConfiguration with all relations prefetched.
+    Footers are fetched unfiltered — callers filter in Python to avoid
+    the fragile to_attr list vs queryset confusion.
+    Returns None if not found.
+    """
+    return (
+        TerminalConfiguration.objects
+        .prefetch_related("headers", "footers", "ports", "display_codes")
+        .filter(store_id=STORE_ID, terminal_id=TERMINAL_ID)
+        .first()
+    )
+ 
+
+def _get_terminal_session(store_id, terminal_id):
+    """
+    Return the currently open session for this terminal+store, or None.
+    This is terminal-scoped — independent of which user is logged in.
+    """
+    return (
+        POSSession.objects.filter(
+            store_id=store_id,
+            terminal_id=terminal_id,
+            status=POSSession.STATUS_OPEN,
+        )
+        .order_by("-opened_at")
+        .first()
+    )
+
+
+def _enroll_if_needed(session, user):
+    """
+    Add the user to the session's member list if not already there.
+    Safe to call on every login — get_or_create avoids duplicates.
+    """
+    obj, created = POSSessionUsers.objects.get_or_create(
+        session=session,
+        user=user,
+        defaults={"left_at": None},
+    )
+    # If they were previously marked as left (e.g. logged out mid-shift
+    # and came back), reactivate them.
+    if not created and obj.left_at is not None:
+        obj.left_at = None
+        obj.save(update_fields=["left_at"])
+
+
+def _parse_decimal(value, default=Decimal("0")):
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError):
+        return default
 
 # ---------------------------------------------------------------------------
 
@@ -333,109 +433,51 @@ def admin_posnbr_init(request):
         },
     )
 
+
+# Constants
+terminal_config = _get_terminal_config()
+VAT_RATE = terminal_config.vat if terminal_config and terminal_config.vat else Decimal("0.12")
+# VAT_RATE = Decimal("0.12")
+
 # ---------------------------------------------------------------------------
 # Open session view
 # ---------------------------------------------------------------------------
 
+
 @login_required
+@require_http_methods(["GET", "POST"])
 def open_session(request):
     user = request.user
+    store_id = user.store_id
+    terminal_id = user.terminal_id
 
-    # Prevent multiple open sessions
-    if POSSession.objects.filter(cashier=user, status="open").exists():
-        messages.info(request, "You already have an open session.")
+    existing_session = _get_terminal_session(store_id, terminal_id)
+
+    if existing_session:
+        # Terminal already has an open session — just enroll this user in it
+        _enroll_if_needed(existing_session, user)
         return redirect("sales:pos_cashier")
 
+    # No open session on this terminal — only the first user creates one
     if request.method == "POST":
-        opening_cash = request.POST.get("opening_cash")
-
-        # Validate opening cash
-        try:
-            opening_cash = float(opening_cash) # I CHANGE ITO ACCORDING SA EXPECTED AMOUNT 
-        except (TypeError, ValueError):
-            messages.error(request, "Invalid opening cash amount.")
+        opening_cash = _parse_decimal(request.POST.get("opening_cash"))
+        if opening_cash < 0:
+            messages.error(request, "Opening cash cannot be negative.")
             return redirect("sales:open_session")
 
-        # Create new POS session
-        POSSession.objects.create(
-            cashier=user,
-            terminal_id="001",
-            store_id="001",
+        session = POSSession.objects.create(
+            opened_by=user,
+            terminal_id=terminal_id,
+            store_id=store_id,
             business_date=datetime.date.today(),
             opening_cash=opening_cash,
-            status="open"
+            status=POSSession.STATUS_OPEN,
         )
+        session.add_user(user)
 
-        # messages.success(request, "POS session opened successfully.")
         return redirect("sales:pos_cashier")
 
     return render(request, "sales/open_session.html")
-
-
-@login_required
-@require_open_session
-@require_http_methods(["GET"])
-def to_close_session_details(request):
-    user = request.user
-    session = POSSession.objects.filter(
-        cashier=user,
-        store_id=STORE_ID,
-        status="open",
-    ).order_by("-opened_at").first()
-
-    if not session:
-        return JsonResponse({"error": "No open session found."}, status=400)
-
-    # Cash tenders are those configured to give change (pchange="Y").
-    cash_tender_codes = list(
-        Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
-    )
-
-    paid_in_cash = (
-        Payment.objects.filter(
-            header__session_id=session.id,
-            pcode__in=cash_tender_codes,
-        ).aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
-    )
-
-    credit_debit_cash = (
-        Payment.objects.filter(
-            header__session_id=session.id,
-        ).exclude(
-            pcode__in=cash_tender_codes,
-        ).aggregate(total=Sum("amount"))["total"]
-        or Decimal("0")
-    )
-    credit_debit_cash_list = (
-        Payment.objects.filter(
-            header__session_id=session.id,
-        ).exclude(
-            pcode__in=cash_tender_codes,
-        ).values("tender_desc")
-        .annotate(total=Sum("amount"))
-        .order_by("tender_desc")
-    )
-    discounts = TransactionItem.objects.filter(
-        header__session_id=session.id,
-        pcode="DISC"
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    print("DISCOUNTS:", discounts)
-    
-
-    return JsonResponse({
-        "opening_cash": float(session.opening_cash),
-        "paid_in_cash": float(paid_in_cash),
-        "credit_debit_cash": float(credit_debit_cash),
-        "credit_debit_cash_list": [
-            {
-                "tender_desc": row["tender_desc"] or "",
-                "total": float(row["total"] or 0),
-            }
-            for row in credit_debit_cash_list
-        ],
-
-    })
 
 # ---------------------------------------------------------------------------
 # Cashier main view
@@ -618,6 +660,7 @@ def cart_add(request):
         price = item_detail.price or item.price
         size = item_detail.size
         color = item_detail.color
+        color_desc = item_detail.color_desc or ""
         item_code = item_detail.icode
     else:
         item = Item.objects.get(icode=barcode)
@@ -625,6 +668,7 @@ def cart_add(request):
         price = item.price
         size = item.size or ""
         color = item.color or ""
+        color_desc = item.color_desc or ""
         item_code = item.icode
 
     try:
@@ -666,6 +710,7 @@ def cart_add(request):
         item_price_ext=ext,
         item_size=size or "",
         item_color=color or "",
+        item_color_desc=color_desc or "",
         rec_ctr=rec_ctr,
     )
 
@@ -1433,6 +1478,433 @@ def cart_item_return_toggle(request):
 
     price = line.item_price or Decimal("0")
     qty = line.item_qty or Decimal("1")
+#     item_discount = (price * disc_pct / 100).quantize(Decimal("0.0001")) if disc_pct > 0 else Decimal("0")
+#     ext = (price - item_discount) * qty
+#     if (line.tag1 or "") == TAG_ITEM_RETURN:
+#         ext = -abs(ext)
+    item_discount = line.item_discount or Decimal("0")
+    base_ext = abs((price - item_discount) * qty)
+
+    if mode == "clear":
+        line.tag1 = ""
+        line.return_code = ""
+        line.transaction_date_r = None
+        line.item_ref = ""
+        line.item_price_ext = base_ext
+        line.save(update_fields=[
+            "tag1", "return_code", "transaction_date_r", "item_ref", "item_price_ext"
+        ])
+    else:
+        source_trans_no = _normalize_transaction_no(request.POST.get("source_transaction_no", ""))
+        if source_trans_no == "00000000":
+            return JsonResponse({"ok": False, "error": "Original transaction number is required"}, status=400)
+
+        source_exists = TransactionHeader.objects.filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=source_trans_no,
+        ).exists()
+        if not source_exists:
+            return JsonResponse({
+                "ok": False,
+                "error": "Source transaction number was not found in historical transactions",
+            }, status=404)
+
+        purchased_raw = (request.POST.get("purchased_date") or "").strip()
+        if not purchased_raw:
+            return JsonResponse({"ok": False, "error": "Purchased date is required"}, status=400)
+        try:
+            purchased_date = datetime.datetime.strptime(purchased_raw, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({"ok": False, "error": "Invalid purchased date"}, status=400)
+
+        if purchased_date > datetime.date.today():
+            return JsonResponse({"ok": False, "error": "Purchased date cannot be in the future"}, status=400)
+
+        manager_pin = request.POST.get("manager_pin", "")
+        manager_user = _verify_manager_pin(manager_pin)
+        if not manager_user:
+            return JsonResponse({"ok": False, "error": "Admin/manager PIN is invalid"}, status=403)
+
+        line.tag1 = TAG_ITEM_RETURN
+        line.return_code = TAG_ITEM_RETURN
+        line.transaction_date_r = purchased_date
+        line.item_ref = source_trans_no
+        line.item_price_ext = -base_ext
+        line.save(update_fields=[
+            "tag1", "return_code", "transaction_date_r", "item_ref", "item_price_ext"
+        ])
+
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+
+    if request.headers.get("HX-Request"):
+        return render(
+            request,
+            "sales/partials/cart_line_disc_response.html",
+            {
+                "cart_lines": cart_lines,
+                "subtotal": subtotal,
+                "trans_disc": trans_disc,
+                "trans_disc_amt": trans_disc_amt,
+                "total": total,
+                "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+                "last_item": cart_lines.last(),
+            },
+        )
+
+    return JsonResponse({"ok": True, "total": str(total), "mode": mode})
+
+
+@login_required
+@require_open_session
+@require_http_methods(["GET"])
+def cart_return_lookup(request):
+    """Lookup a historical receipt and return its line items for return selection."""
+    receipt_no = _normalize_transaction_no(request.GET.get("receipt_no", ""))
+    if receipt_no == "00000000":
+        return JsonResponse({"ok": False, "error": "Receipt number is required"}, status=400)
+
+    source_header = (
+        TransactionHeader.objects
+        .filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=receipt_no,
+        )
+        .exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL)
+        .exclude(return_code=TAG_ITEM_RETURN)
+        .order_by("-id")
+        .first()
+    )
+    if not source_header:
+        return JsonResponse({
+            "ok": False,
+            "error": "Receipt not found or is not eligible for returns",
+        }, status=404)
+
+    items = []
+    for item in source_header.items.all().order_by("id"):
+        qty = item.item_qty or Decimal("0")
+        if qty <= 0:
+            continue
+        price = item.item_price or Decimal("0")
+        discount = item.item_discount or Decimal("0")
+        ext = item.item_price_ext or ((price - discount) * qty)
+        items.append({
+            "line_id": item.id,
+            "item_code": item.item_code or "",
+            "description": item.item_description or "",
+            "qty": str(qty),
+            "max_qty": str(qty),
+            "price": str(price),
+            "ext": str(ext),
+            "size": get_size_description(item.item_size or ""),
+            "color": get_color_description(
+                item.item_color or "",
+                icode=item.item_code or "",
+                size=item.item_size or "",
+            ),
+        })
+
+    if not items:
+        return JsonResponse({
+            "ok": False,
+            "error": "Receipt has no returnable items",
+        }, status=404)
+
+    return JsonResponse({
+        "ok": True,
+        "receipt_no": source_header.transaction_no,
+        "transaction_date": source_header.transaction_date.strftime("%Y-%m-%d") if source_header.transaction_date else "",
+        "items": items,
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_return_import(request):
+    """Insert selected historical receipt items directly into current cart as returns."""
+    manager_pin = request.POST.get("manager_pin", "")
+    manager_user = _verify_manager_pin(manager_pin)
+    if not manager_user:
+        return JsonResponse({"ok": False, "error": "Admin/manager PIN is invalid"}, status=403)
+
+    receipt_no = _normalize_transaction_no(request.POST.get("receipt_no", ""))
+    if receipt_no == "00000000":
+        return JsonResponse({"ok": False, "error": "Receipt number is required"}, status=400)
+
+    source_header = (
+        TransactionHeader.objects
+        .filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=receipt_no,
+        )
+        .exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL)
+        .exclude(return_code=TAG_ITEM_RETURN)
+        .order_by("-id")
+        .first()
+    )
+    if not source_header:
+        return JsonResponse({"ok": False, "error": "Receipt not found or is not eligible for returns"}, status=404)
+
+    try:
+        item_ids = json.loads((request.POST.get("item_ids") or "[]").strip() or "[]")
+        item_ids = [int(x) for x in item_ids]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "error": "Invalid selected items"}, status=400)
+
+    try:
+        raw_qty_map = json.loads((request.POST.get("item_qtys") or "{}").strip() or "{}")
+        if not isinstance(raw_qty_map, dict):
+            raise ValueError("qty map must be object")
+        requested_qty_map = {}
+        for key, value in raw_qty_map.items():
+            line_id = int(key)
+            qty = Decimal(str(value or "0"))
+            requested_qty_map[line_id] = qty
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "error": "Invalid return quantities"}, status=400)
+
+    if not item_ids:
+        return JsonResponse({"ok": False, "error": "Select at least one item"}, status=400)
+
+    source_items = list(source_header.items.filter(id__in=item_ids).order_by("id"))
+    if not source_items:
+        return JsonResponse({"ok": False, "error": "Selected items were not found on this receipt"}, status=404)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        trans_no = _get_next_transaction_no()
+        request.session["pos_trans_no"] = trans_no
+
+    now = datetime.datetime.now()
+    try:
+        biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
+    except Exception:
+        biz_date = now.date()
+
+    max_rec = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).aggregate(mx=models.Max("rec_ctr"))
+    rec_ctr = int(max_rec["mx"] or 0)
+
+    rows = []
+    for src in source_items:
+        source_qty = src.item_qty or Decimal("0")
+        requested_qty = requested_qty_map.get(src.id, source_qty)
+        if requested_qty <= 0:
+            continue
+        if requested_qty > source_qty:
+            return JsonResponse({
+                "ok": False,
+                "error": f"Requested return quantity exceeds sold quantity for item {src.item_code or src.id}",
+            }, status=400)
+
+        rec_ctr += 1
+        price = src.item_price or Decimal("0")
+        discount = src.item_discount or Decimal("0")
+        ext = (price - discount) * requested_qty
+        rows.append(TempTransaction(
+            user_id=user_id,
+            terminal_id=TERMINAL_ID,
+            store_id=STORE_ID,
+            transaction_no=trans_no,
+            transaction_date=biz_date,
+            transaction_date_r=source_header.transaction_date,
+            transaction_time=now.strftime("%H:%M"),
+            transaction_type=TAG_ITEM_RETURN,
+            return_code=TAG_ITEM_RETURN,
+            item_ref=source_header.transaction_no,
+            item_code=src.item_code or "",
+            item_description=(src.item_description or "")[:25],
+            item_qty=requested_qty,
+            item_uom=src.item_uom or "",
+            item_supplier=src.item_supplier or "",
+            item_department=src.item_department or "",
+            item_class=src.item_class or "",
+            item_size=src.item_size or "",
+            item_color=src.item_color or "",
+            item_type=src.item_type or "",
+            item_cost=src.item_cost or 0,
+            item_price=price,
+            item_discount=discount,
+            discount_code=src.discount_code or "",
+            item_price_ext=-abs(ext),
+            tag1=TAG_ITEM_RETURN,
+            tag2=src.tag2 or "",
+            tag3=src.tag3 or "",
+            tag4=src.tag4 or "",
+            promo_tag=src.promo_tag or "",
+            rec_ctr=rec_ctr,
+        ))
+
+    if not rows:
+        return JsonResponse({"ok": False, "error": "No valid items selected for return"}, status=400)
+
+    TempTransaction.objects.bulk_create(rows)
+
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+
+    return JsonResponse({
+        "ok": True,
+        "imported_count": len(rows),
+        "total": str(total),
+        "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+    })
+
+
+@login_required(login_url="sales:pos_login")
+@require_open_session
+@require_http_methods(["POST"])
+def cart_line_price_override(request):
+    """Override unit price for a specific cart line and preserve existing line-discount rate."""
+    try:
+        rec_ctr = int(Decimal(str(request.POST.get("rec_ctr", "0") or "0")))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    try:
+        new_price = Decimal(str(request.POST.get("new_price", "0") or "0"))
+    except (ValueError, TypeError, ArithmeticError):
+        return JsonResponse({"ok": False, "error": "Invalid price"}, status=400)
+
+    if new_price < 0:
+        return JsonResponse({"ok": False, "error": "Price cannot be negative"}, status=400)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    line = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        rec_ctr=rec_ctr,
+    ).first()
+
+    if not line:
+        if request.headers.get("HX-Request"):
+            return render(request, "sales/partials/cart_error.html", {"error": "Line not found"}, status=404)
+        return JsonResponse({"ok": False, "error": "Line not found"}, status=404)
+
+    old_price = line.item_price or Decimal("0")
+    if new_price != old_price:
+        old_discount = line.item_discount or Decimal("0")
+        qty = line.item_qty or Decimal("1")
+
+        disc_rate = Decimal("0")
+        if old_price > 0 and old_discount > 0:
+            disc_rate = old_discount / old_price
+
+        new_item_discount = (new_price * disc_rate).quantize(Decimal("0.0001")) if disc_rate > 0 else Decimal("0")
+        ext = (new_price - new_item_discount) * qty
+        if (line.tag1 or "") == TAG_ITEM_RETURN:
+            ext = -abs(ext)
+
+        if (line.old_price or Decimal("0")) <= 0:
+            line.old_price = old_price
+
+        line.item_price = new_price
+        line.item_discount = new_item_discount
+        line.item_price_ext = ext
+        line.price_override = TAG_PRICE_OVERRIDE
+        line.save(update_fields=[
+            "old_price",
+            "item_price",
+            "item_discount",
+            "item_price_ext",
+            "price_override",
+        ])
+
+    cart_lines = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+    ).order_by("rec_ctr")
+
+    trans_disc = _get_trans_disc(request)
+    subtotal, trans_disc_amt, total = _compute_totals(cart_lines, trans_disc)
+
+    if request.headers.get("HX-Request"):
+        return render(
+            request,
+            "sales/partials/cart_line_disc_response.html",
+            {
+                "cart_lines": cart_lines,
+                "subtotal": subtotal,
+                "trans_disc": trans_disc,
+                "trans_disc_amt": trans_disc_amt,
+                "total": total,
+                "item_count": sum(int(l.item_qty or 0) for l in cart_lines),
+                "last_item": cart_lines.last(),
+            },
+        )
+
+    return JsonResponse({"ok": True, "total": str(total)})
+
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_item_return_toggle(request):
+    """Tag or untag a cart line as item return with manager/admin validation."""
+    raw_rec_ctr = str(request.POST.get("rec_ctr", "") or "").strip()
+    if not raw_rec_ctr:
+        return JsonResponse({"ok": False, "error": "Select an item first"}, status=400)
+
+    try:
+        rec_ctr = int(Decimal(raw_rec_ctr))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    if rec_ctr <= 0:
+        return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
+
+    mode = (request.POST.get("mode") or "set").strip().lower()
+    if mode not in {"set", "clear"}:
+        return JsonResponse({"ok": False, "error": "Invalid mode"}, status=400)
+
+    user_id = _get_user_id(request)
+    trans_no = request.session.get("pos_trans_no")
+    if not trans_no:
+        return JsonResponse({"ok": False, "error": "No active transaction"}, status=400)
+
+    line = TempTransaction.objects.filter(
+        user_id=user_id,
+        terminal_id=TERMINAL_ID,
+        store_id=STORE_ID,
+        transaction_no=trans_no,
+        rec_ctr=rec_ctr,
+    ).first()
+    if not line:
+        return JsonResponse({"ok": False, "error": "Line not found"}, status=404)
+
+    price = line.item_price or Decimal("0")
+    qty = line.item_qty or Decimal("1")
     item_discount = line.item_discount or Decimal("0")
     base_ext = abs((price - item_discount) * qty)
 
@@ -1805,6 +2277,10 @@ def payment_complete(request):
     
     NOW WITH CLIPPER-STYLE TRANSACTION LOGGING
     """
+    # vat constants for transaction logging - not actually used in current calculations but stored for reference
+    vatable_gross = Decimal("0")
+    vat_exempt    = Decimal("0")
+    zero_rated    = Decimal("0")
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
     tender_entries = _parse_tender_entries(request)
@@ -1849,9 +2325,28 @@ def payment_complete(request):
     except Exception:
         biz_date = now.date()
 
+
+    # for item in cart_lines_list:
+    for line in cart_lines_list:
+        ext = line.item_price_ext or Decimal("0")
+        tax_code = (line.item_tax_code or "V").upper()
+        if tax_code == "V":
+            vatable_gross += ext
+        elif tax_code == "E":
+            vat_exempt += ext
+        elif tax_code == "Z":
+            zero_rated += ext
+        else:
+            vatable_gross += ext
+
+    vatable_net = (vatable_gross / (1 + VAT_RATE)).quantize(Decimal("0.0001"))
+    vat_amount  = (vatable_gross - vatable_net).quantize(Decimal("0.0001"))
+
+
     # --- Build tender summary ---
     tender_lines = []
     tender_entries_full = []  # For TransactionService
+    running_remaining = total
     total_cash = Decimal("0")
     for t in tender_entries:
         pcode = t["pcode"]
@@ -1860,11 +2355,21 @@ def payment_complete(request):
         tender = Tender.objects.filter(pcode=pcode).first()
         desc = tender.description if tender else pcode
         is_cash = bool(tender and tender.pchange == "Y")
+        
+        # For cash: effective amount is capped at remaining balance.
+        # Non-cash is already validated upstream to not exceed remaining.
+        if is_cash:
+            effective_amt = min(amt, max(Decimal("0"), running_remaining))
+        else:
+            effective_amt = amt
+
+        running_remaining = max(Decimal("0"), running_remaining - effective_amt)
 
         tender_lines.append({
             "pcode": pcode,
             "desc": desc,
-            "amount": str(amt),
+            "amount": str(effective_amt),
+            "gross_amount": str(amt),
             "is_cash": is_cash
         })
         tender_entries_full.append((pcode, amt, desc, is_cash))
@@ -1899,6 +2404,12 @@ def payment_complete(request):
         trans_disc_label=trans_disc.get("label", ""),
         trans_disc_amount=trans_disc_amt,
 
+        vat_rate=VAT_RATE,
+        vatable_amount=vatable_net,    
+        vat_amount=vat_amount,           
+        vat_exempt_amount=vat_exempt,
+        zero_rated_amount=zero_rated,
+
         subtotal=subtotal,
         amount_total=total,
         amount_tendered=total_tendered,
@@ -1918,6 +2429,7 @@ def payment_complete(request):
             item_class=getattr(line, 'item_class', ''),
             item_size=line.item_size or "",
             item_color=line.item_color or "",
+            item_color_desc=line.item_color_desc or "",
             item_type=getattr(line, 'item_type', ''),
             item_cost=getattr(line, 'item_cost', 0) or 0,
             item_price=line.item_price or 0,
@@ -1930,22 +2442,28 @@ def payment_complete(request):
             tag4=getattr(line, 'tag4', ''),
             promo_tag=getattr(line, 'promo_tag', ''),
         )
-        for line in cart_lines_qs
+        for line in cart_lines_list
     ])
 
     # --- Create one Payment per tender entry ---
     Payment.objects.bulk_create([
         Payment(
             header=header,
-            pcode=t["pcode"],
-            amount=t["amount"],
-            tender_desc=next(
-                (tl["desc"] for tl in tender_lines if tl["pcode"] == t["pcode"]),
-                t["pcode"]
-            ),
-            payment_reference=(t.get("payment_reference") or "")[:20],
+#             pcode=t["pcode"],
+#             amount=t["amount"],
+#             tender_desc=next(
+#                 (tl["desc"] for tl in tender_lines if tl["pcode"] == t["pcode"]),
+#                 t["pcode"]
+#             ),
+#             payment_reference=(t.get("payment_reference") or "")[:20],
+            pcode=tl["pcode"],
+            amount=Decimal(tl["amount"]),               # net applied
+            tendered_amount=Decimal(tl["gross_amount"]), # what customer handed over
+            change_amount=Decimal(tl["gross_amount"]) - Decimal(tl["amount"]),  # per-tender change
+            tender_desc=tl["desc"],
+            payment_reference=(t.get("payment_reference") or "") or None,
         )
-        for t in tender_entries
+        for tl, t in zip(tender_lines, tender_entries)
     ])
 
     # --- Clipper-style flat transaction log (TransactionLog / TLOG) ---
@@ -1982,6 +2500,11 @@ def payment_complete(request):
         "change_amount": str(change_amount),
         "is_return_only": all_lines_return,
         "is_exchange": has_return_lines and not all_lines_return,
+        "vat_rate":       str(VAT_RATE),
+        "vatable_amount": str(vatable_net),
+        "vat_amount":     str(vat_amount),
+        "vat_exempt":     str(vat_exempt),
+        "zero_rated":     str(zero_rated),
         "lines": [
             {
                 "description": line.item_description or "",
@@ -2009,6 +2532,9 @@ def payment_complete(request):
     # Next transaction number is allocated lazily on next real sale start (cart_add),
     # not immediately on close, to avoid counter drift with retrieve/pay flows.
     _save_current_transaction_no(trans_no)
+#     # --- Persist current transaction no, clear cart, advance transaction number ---
+#     _save_current_transaction_no(trans_no)
+#     # --- Clear cart, advance transaction number ---
     cart_lines_qs.delete()
     request.session.pop("pos_trans_no", None)
     _clear_trans_disc(request)
@@ -2042,6 +2568,7 @@ def item_search(request):
                     "description": item.short_desc or item.long_desc,
                     "size": v.size,
                     "color": v.color,
+                    "color_desc": v.color_desc,
                     "price": str(v.price or item.price),
                 })
         else:
@@ -2051,6 +2578,7 @@ def item_search(request):
                 "description": item.short_desc or item.long_desc,
                 "size": item.size or "",
                 "color": item.color or "",
+                "color_desc": item.color_desc or "",
                 "price": str(item.price),
             })
 
@@ -2058,88 +2586,137 @@ def item_search(request):
 
 
 # ---------------------------------------------------------------------------
-# Close session view
+# Close session details (GET — JSON for the close-session modal)
 # ---------------------------------------------------------------------------
-
 @login_required
 @require_open_session
-@require_http_methods(["POST"])
-def close_session(request):
-    user = request.user
-
-    # Find the active cashier session for this user + terminal + store
-    session = POSSession.objects.filter(
-        cashier=user,
-        store_id=STORE_ID,       # your existing constant
-        status="open",
-    ).order_by("-opened_at").first()
-
+@require_http_methods(["GET"])
+def to_close_session_details(request):
+    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
     if not session:
-        messages.error(request, "No active session found to close.")
-        return redirect("sales:pos_cashier")
+        return JsonResponse({"error": "No open session found."}, status=400)
 
-    # --- Parse POST values ---
-    def parse_decimal(val, default=0):
-        try:
-            return float(val)
-        except (TypeError, ValueError):
-            return default
+    cash_tender_codes = list(
+        Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
+    )
 
-    closing_cash  = parse_decimal(request.POST.get("closing_cash"))
-    expected_cash = parse_decimal(request.POST.get("expected_cash"))
-    cash_variance = parse_decimal(request.POST.get("cash_variance"))
-    notes         = request.POST.get("notes", "").strip()
-    if closing_cash < 0:
-        messages.error(request, "Closing cash cannot be negative.")
-        return redirect("sales:pos_cashier")
+    # --- Base querysets scoped to this session ---
+    session_headers = TransactionHeader.objects.filter(session_id=session.id)
+    session_items   = TransactionItem.objects.filter(header__session_id=session.id)
+    session_payments = Payment.objects.filter(header__session_id=session.id)
 
-    # --- Update and close the session ---
-    session.closing_cash  = closing_cash
-    session.expected_cash = expected_cash
-    session.cash_variance = cash_variance
-    session.notes         = notes or None
-    session.closed_at   = timezone.now()
-    session.status = "closed"
-    session.save(update_fields=[
-        "closing_cash", 
-        # "expected_cash",
-        # "cash_variance",
-        # "notes",
-        "closed_at", 
-        "status", 
-        # "updated_at",
-    ])
+    # --- Void transactions ---
+    # Headers whose transaction_type is a void type
+    void_headers = session_headers.filter(
+        transaction_type__in=VOID_TRANSACTION_TYPES_ALL
+    )
+    void_count  = void_headers.count()
+    void_amount = void_headers.aggregate(
+        total=Sum("amount_total")
+    )["total"] or Decimal("0")
 
-    # --- Audit trail entry ---
-    # AuditTrail.objects.create(
-    #     user_id=user.pk,
-    #     username=user.username,
-    #     action_type="LOGOUT",
-    #     action_description=(
-    #         f"Session closed. Closing cash: {closing_cash:.2f}, "
-    #         f"Expected: {expected_cash:.2f}, Variance: {cash_variance:.2f}"
-    #     ),
-    #     table_name="cashier_sessions",
-    #     record_id=str(session.pk),
-    #     new_values={
-    #         "closing_cash":  closing_cash,
-    #         "expected_cash": expected_cash,
-    #         "cash_variance": cash_variance,
-    #         "session_status": "closed",
-    #     },
-    #     terminal_id=TERMINAL_ID,
-    #     store_id=STORE_ID,
-    # )
+    # --- Return transactions ---
+    # Headers where return_code == TAG_ITEM_RETURN and transaction_type is normal sale
+    return_headers = session_headers.filter(return_code=TAG_ITEM_RETURN)
+    return_count   = return_headers.count()
+    return_amount  = return_headers.aggregate(
+        total=Sum("amount_total")
+    )["total"] or Decimal("0")
 
-    # Clear session keys set during this POS session
-    for key in ("pos_trans_no", "pos_trans_disc_pct",
-                "pos_trans_disc_type", "pos_trans_disc_label", "last_receipt"):
-        request.session.pop(key, None)
+    # --- Sales (exclude voids and pure returns) ---
+    sale_headers = session_headers.exclude(
+        transaction_type__in=VOID_TRANSACTION_TYPES_ALL
+    ).exclude(return_code=TAG_ITEM_RETURN)
 
-    # messages.success(request, "Session closed successfully.")
-    return redirect("pos_logout")
+    gross_sales = session_items.aggregate(
+        total=Sum("item_price")
+    )["total"] or Decimal("0")
+
+    total_change = sale_headers.aggregate(
+        total=Sum("change_amount")
+    )["total"] or Decimal("0")
+
+    total_discounts = sale_headers.aggregate(
+        total=Sum("trans_disc_amount")
+    )["total"] or Decimal("0")
+
+    # Item-level discounts from sale items only
+    item_discounts = session_items.filter(
+        header__transaction_type__in=["S", ""]  # normal sale type
+    ).exclude(
+        header__return_code=TAG_ITEM_RETURN
+    ).aggregate(
+        total=Sum(
+            models.ExpressionWrapper(
+                models.F("item_discount") * models.F("item_qty"),
+                output_field=models.DecimalField()
+            )
+        )
+    )["total"] or Decimal("0")
+
+    total_discounts += item_discounts
 
 
+    # --- Cash tender breakdown ---
+    paid_in_cash = session_payments.filter(
+        pcode__in=cash_tender_codes,
+        header__transaction_type__in=["S", ""],
+    ).exclude(
+        header__return_code=TAG_ITEM_RETURN
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    # Cash returned from return transactions
+    cash_returned = session_payments.filter(
+        pcode__in=cash_tender_codes,
+        header__return_code=TAG_ITEM_RETURN,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    # --- Non-cash breakdown ---
+    non_cash_qs = session_payments.exclude(pcode__in=cash_tender_codes)
+
+    credit_debit_total = (
+        non_cash_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    )
+
+    credit_debit_breakdown = list(
+        non_cash_qs
+        .values("tender_desc")
+        .annotate(total=Sum("amount"))
+        .order_by("tender_desc")
+    )
+    cash = paid_in_cash - cash_returned - total_change
+    final_gross_sale = gross_sales + (return_amount*return_count)
+    print(gross_sales)
+    print(return_amount)
+    # --- Cash totals ---
+    # expected = change fund + cash sales - cash returned
+    expected_cash = session.opening_cash + paid_in_cash - cash_returned - total_change
+    net_worth     = expected_cash + credit_debit_total
+
+    net_sales = final_gross_sale - total_discounts
+
+    return JsonResponse({
+        "opening_cash":          float(session.opening_cash),
+        "paid_in_cash":          float(cash),
+        "cash_returned":         float(cash_returned),
+        "expected_cash":         float(expected_cash),
+        "credit_debit_cash":     float(credit_debit_total),
+        "credit_debit_cash_list": [
+            {
+                "tender_desc": row["tender_desc"] or "",
+                "total":       float(row["total"] or 0),
+            }
+            for row in credit_debit_breakdown
+        ],
+        "gross_sales":     float(final_gross_sale),
+        "total_discounts": float(total_discounts),
+        "net_sales":       float(net_sales),    
+        "net_worth":       float(net_worth),
+        "void_count":      void_count,
+        "void_amount":     float(abs(void_amount)),
+        "return_count":    return_count,
+        "return_amount":   float(abs(return_amount)),
+    })
 
 
 def debug_sessions_json(request):
@@ -2152,11 +2729,12 @@ def debug_sessions_json(request):
     for session in sessions:
         session_data = {
             "id": session.id,
-            "cashier": str(session.cashier),
+            # "cashier": str(session.cashier),
             "terminal_id": session.terminal_id,
             "store_id": session.store_id,
             "business_date": str(session.business_date),
             "status": session.status,
+            "opened_by": str(session.opened_by),
             "transactions": []
         }
 
@@ -2166,6 +2744,7 @@ def debug_sessions_json(request):
                 "transaction_no": header.transaction_no,
                 "transaction_time": header.transaction_date,
                 "transaction_type": header.transaction_type,
+                "transacted_by": str(header.user_id),
                 "served_by": header.served_by,
                 "date": str(header.transaction_date),
                 "items": [],
@@ -2215,8 +2794,27 @@ class _SocketPrinterWrapper:
  
     def close(self):
         self._sock.close()
- 
- 
+
+class _WindowsPrinterWrapper:
+    """Wraps the Windows Spooler API to expose the same .write()/.close() API as serial.Serial."""
+    def __init__(self, printer_name: str):
+        # Open the printer queue using its Windows shared/local name
+        self._h_printer = win32print.OpenPrinter(printer_name)
+        # Start a raw print job wrapper
+        self._job = win32print.StartDocPrinter(self._h_printer, 1, ("POS Receipt", None, "RAW"))
+        win32print.StartPagePrinter(self._h_printer)
+
+    def write(self, data: bytes):
+        # Sends bytes cleanly to the TM-U220A without translation
+        win32print.WritePrinter(self._h_printer, data)
+
+    def close(self):
+        # Properly close down the windows job pipeline
+        win32print.EndPagePrinter(self._h_printer)
+        win32print.EndDocPrinter(self._h_printer)
+        win32print.ClosePrinter(self._h_printer)
+
+
 def _open_printer(printer_port):
     """
     Open a printer connection based on TerminalPort.connection_type.
@@ -2248,28 +2846,15 @@ def _open_printer(printer_port):
         return _SocketPrinterWrapper(sock)
  
     elif ct == "WINDOWS":
-        raise NotImplementedError(
-            f"Windows printer support is not yet implemented "
-            f"(printer_name: {printer_port.printer_name!r})."
-        )
+            # Check if a printer name exists in your port configuration
+            if not hasattr(printer_port, 'port_name') or not printer_port.port_name:
+                raise ValueError("Windows printer connection type requires a configured 'port_name'.")
+            
+            # Returns the Windows print handler wrapper
+            return _WindowsPrinterWrapper(printer_port.port_name)
  
     else:
         raise ValueError(f"Unsupported connection_type: {ct!r}")
- 
- 
-def _get_terminal_config():
-    """
-    Fetch TerminalConfiguration with all relations prefetched.
-    Footers are fetched unfiltered — callers filter in Python to avoid
-    the fragile to_attr list vs queryset confusion.
-    Returns None if not found.
-    """
-    return (
-        TerminalConfiguration.objects
-        .prefetch_related("headers", "footers", "ports", "display_codes")
-        .filter(store_id=STORE_ID, terminal_id=TERMINAL_ID)
-        .first()
-    )
  
  
 def _get_paper_width(terminal_config):
@@ -2283,18 +2868,49 @@ def _get_paper_width(terminal_config):
     return 40
  
  
+# def _get_printer(terminal_config):
+#     """
+#     Resolve the PRINTER port from terminal_config and open a connection.
+#     Returns (printer, ports_dict).
+#     Raises ValueError if the port is not configured.
+#     """
+#     ports = {p.port_type: p for p in terminal_config.ports.all()}
+#     if terminal_config.print_in == ports.connection.type:
+#         printer_port = ports.get("PRINTER")
+
+#     if not printer_port:
+#         raise ValueError("Printer port not configured in terminal settings.")
+    
+    
+#     return _open_printer(printer_port), ports
 def _get_printer(terminal_config):
     """
-    Resolve the PRINTER port from terminal_config and open a connection.
+    Resolve the active PRINTER port based on the active terminal_config.print_in setting.
     Returns (printer, ports_dict).
-    Raises ValueError if the port is not configured.
+    Raises ValueError if a matching printer configuration is not found.
     """
-    ports = {p.port_type: p for p in terminal_config.ports.all()}
-    printer_port = ports.get("PRINTER")
+    # 1. Fetch all ports for this terminal configuration
+    all_ports = list(terminal_config.ports.all())
+    
+    # 2. Find the specific PRINTER port that matches the target connection type
+    printer_port = None
+    for p in all_ports:
+        if p.port_type == "PRINTER" and p.connection_type == terminal_config.print_in:
+            printer_port = p
+            break  # Found our exact match, stop looking
+
+    # 3. If no exact match was found, raise a clear error
     if not printer_port:
-        raise ValueError("Printer port not configured in terminal settings.")
+        raise ValueError(
+            f"No PRINTER port configuration found matching the active print mode: '{terminal_config.print_in}'."
+        )
+    
+    # 4. Rebuild the ports dictionary mapping for the rest of your system (like 'DRAWER', etc.)
+    # If there are duplicates, this will keep the most relevant one or the last one evaluated.
+    ports = {p.port_type: p for p in all_ports}
+    
+    # 5. Open the connection using the precisely selected printer port
     return _open_printer(printer_port), ports
- 
  
 def _get_customer_footers(terminal_config):
     """Return footers for the customer copy, sorted by line_number."""
@@ -2320,7 +2936,7 @@ def _get_report_footers(terminal_config):
 # RECEIPT PRINTING
 # =============================================================================
  
-def _print_receipt(printer, terminal_config, context, session):
+def _print_receipt(printer, terminal_config, context, current_operator):
     """
     Stream the full customer receipt to an already-open printer connection.
     Separated from the view so it can be tested independently.
@@ -2384,8 +3000,8 @@ def _print_receipt(printer, terminal_config, context, session):
     # printer.write(b"\x1b\x21\x00")
     printer.write(b"\x1b\x61\x00")  # left
     write_line(f"SI #: {context['transaction_no']}")
-    write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
-    write_line(f"StoreId    : {session.store_id}")
+    write_line(f"User Id    : {current_operator}")
+    write_line(f"StoreId    : {terminal_config.store_id}")
     # write_line(f"Terminal No: {session.terminal_id}")
     separator()
  
@@ -2406,9 +3022,12 @@ def _print_receipt(printer, terminal_config, context, session):
         write_line(align_lr("Subtotal", format_money(context["subtotal"])))
         write_line(f"{context['trans_disc_label']} ({context['trans_disc_pct']}%)")
         write_line(align_lr("Discount", f"-{format_money(context['trans_disc_amt'])}"))
- 
+    
     # ── Total ─────────────────────────────────────────────────────────────────
     separator()
+    write_line(align_lr("VAT-Exempt", format_money(context["vat_exempt"] or "0.00")))
+    write_line(align_lr("VATable", format_money(context["vatable_amount"])))
+    write_line(align_lr(f"VAT @ {context['vat_rate']}", format_money(context["vat_amount"])))
     printer.write(b"\x1b\x45\x01")  # bold on
     write_line(align_lr("TOTAL", format_money(context["total"])))
     printer.write(b"\x1b\x45\x00")  # bold off
@@ -2468,7 +3087,7 @@ def _print_receipt(printer, terminal_config, context, session):
 # Z-READING PRINTING  (pure utility — NOT a Django view)
 # =============================================================================
  
-def _do_print_z_reading(session):
+def _do_print_z_reading(session, current_operator):
     """
     Print a Z-Reading report for an already-resolved POSSession object.
     Plain Python function — call it from a view after resolving the session.
@@ -2494,26 +3113,33 @@ def _do_print_z_reading(session):
     cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
  
     total_neg = sum(filter(None, [
-        void_line_items["total"], void_transactions["total"],
-        void_previous["total"],   item_returns["total"],
-        cash_withdrawals["total"],
+        abs(void_line_items["total"]) if void_line_items["total"] else None,
+        abs(void_transactions["total"]) if void_transactions["total"] else None,
+        abs(void_previous["total"]) if void_previous["total"] else None,
+        abs(item_returns["total"]) if item_returns["total"] else None,
+        abs(cash_withdrawals["total"]) if cash_withdrawals["total"] else None,
     ]))
  
     sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
- 
+     # my additions
+    item_returns_orig_price      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price"),      count=Count("id"))
     gross_sales = (
-        TransactionItem.objects.filter(header__in=sales_headers)
+        TransactionItem.objects.filter(header__in=headers_qs)
         .aggregate(total=Sum("item_price_ext"))["total"] or Decimal("0")
     )
- 
-    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="ID").aggregate(total=Sum("item_discount"), count=Count("id"))
+
+    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="EMP").aggregate(total=Sum("item_discount"), count=Count("id"))
+    pwd_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="PWD").aggregate(total=Sum("item_discount"), count=Count("id"))
     item_amt_disc   = TransactionItem.objects.filter(header__in=sales_headers, discount_code="IA").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_disc     = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SC").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_amt_disc = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SA").aggregate(total=Sum("item_discount"), count=Count("id"))
- 
+
+    discounts_total_except_sc = (item_disc["total"] or 0) + (pwd_disc["total"] or 0)
+    discounts_count_except_sc = (item_disc["count"] or 0) + (pwd_disc["count"] or 0)
+
     total_disc = sum(filter(None, [
         item_disc["total"], item_amt_disc["total"],
-        senior_disc["total"], senior_amt_disc["total"],
+        senior_disc["total"], senior_amt_disc["total"], pwd_disc["total"],
     ]))
  
     customer_count   = sales_headers.aggregate(total=Sum("customer_count"))["total"] or 0
@@ -2527,14 +3153,30 @@ def _do_print_z_reading(session):
     )
     gc_sales = Payment.objects.filter(header__in=sales_headers, pcode="GC").aggregate(total=Sum("amount"), count=Count("id"))
  
-    net_sales             = gross_sales - Decimal(str(total_disc))
+    item_returns_orig_price_total = item_returns_orig_price["total"] or Decimal("0")
+    final_gross_sales = gross_sales - Decimal(str(item_returns_orig_price_total or 0))
+    net_sales             = final_gross_sales - Decimal(str(total_disc))
     total_neg_entries_amt = Decimal(str(total_neg or 0))
  
     # TODO: replace with actual GrandTotal model lookup
-    old_grand_total = Decimal("75198919.10")
+    old_obj = POSTransNumber.objects.first()
+    if old_obj:
+        raw = (
+            getattr(old_obj, "grand_total", None)
+            or getattr(old_obj, "amount", None)
+            or getattr(old_obj, "value", None)
+            or getattr(old_obj, "number", None)
+        )
+        try:
+            old_grand_total = Decimal(str(raw)) if raw is not None else Decimal("0")
+        except Exception:
+            old_grand_total = Decimal("0")
+    else:
+        old_grand_total = Decimal("0")
+
     new_grand_total = old_grand_total + gross_sales
  
-    VAT_RATE      = Decimal("0.12")
+    # VAT_RATE      = Decimal("0.12")
     vatable_sales = net_sales / (1 + VAT_RATE)
     vat_amount    = net_sales - vatable_sales
     non_vat       = Decimal("0")
@@ -2599,7 +3241,7 @@ def _do_print_z_reading(session):
         # ── Terminal info ─────────────────────────────────────────────────────
         write_line(f"StoreId    : {session.store_id}")
         write_line(f"Terminal No: {session.terminal_id}")
-        write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
+        write_line(f"User Id    : {current_operator}")
         write_line(f"Date       : {session.business_date.strftime('%m/%d/%Y')}")
         write_line(f"\nBEG. SI    : {beg_si}")
         write_line(f"END. SI    : {end_si}\n")
@@ -2609,7 +3251,7 @@ def _do_print_z_reading(session):
         write_line(neg_row("Void Line Item",   void_line_items["total"],   void_line_items["count"]))
         write_line(neg_row("Void Transaction", void_transactions["total"], void_transactions["count"]))
         write_line(neg_row("Void Previous",    void_previous["total"],     void_previous["count"]))
-        write_line(neg_row("Item Returns",     item_returns["total"],      item_returns["count"]))
+        write_line(neg_row("Item Returns",     abs(item_returns["total"] or 0),      item_returns["count"]))
         write_line(neg_row("Cash Withdrawal",  cash_withdrawals["total"],  cash_withdrawals["count"]))
         separator()
         write_line(neg_gross("Total", total_neg_entries_amt))
@@ -2617,7 +3259,7 @@ def _do_print_z_reading(session):
         # ── Gross sales & discounts ───────────────────────────────────────────
         write_line(neg_gross("GROSS SALES", gross_sales))
         write_line("\nLess:Discounts")
-        write_line(neg_row("Item Disc.",     item_disc["total"],       item_disc["count"]))
+        write_line(neg_row("Item Disc.",     discounts_total_except_sc,       discounts_count_except_sc))
         write_line(neg_row("Item Amt Disc.", item_amt_disc["total"],   item_amt_disc["count"]))
         write_line(neg_row("Senior % Disc.", senior_disc["total"],     senior_disc["count"]))
         write_line(neg_row("     Amt.Disc.", senior_amt_disc["total"], senior_amt_disc["count"]))
@@ -2658,7 +3300,7 @@ def _do_print_z_reading(session):
         # ── VAT summary ───────────────────────────────────────────────────────
         write_line(summary_row("Non-Vat:",       non_vat))
         write_line(summary_row("Vatable:",       vatable_sales))
-        write_line(summary_row("V.A.T. Amount:", vat_amount))
+        write_line(summary_row("VAT Amount:", vat_amount))
   
         # ── Footer ────────────────────────────────────────────────────────────
         printer.write(b"\x1b\x61\x01")
@@ -2679,7 +3321,7 @@ def _do_print_z_reading(session):
 
             # Always reset to left after all footers
             printer.write(b"\x1b\x61\x00")
-            write_line("\n\n\n")
+            write_line("\n\n\n\n\n\n")
         else:
             write_line("Thank you!")
         printer.write(b"\x1b\x61\x00")
@@ -2702,10 +3344,12 @@ def receipt_view(request):
     """Display receipt after payment and print it to the configured printer."""
     receipt = request.session.get("last_receipt")
     session = get_current_session_or_error(request)
-    session = POSSession.objects.select_related("cashier").get(
-        id=session.id,
-        status="open",
+    session = (
+        POSSession.objects.select_related("opened_by")
+        .prefetch_related("session_users__user")
+        .get(id=session.id, status=POSSession.STATUS_OPEN)
     )
+    current_operator = request.user
     if not receipt:
         return redirect("sales:pos_cashier")
  
@@ -2720,9 +3364,10 @@ def receipt_view(request):
             "amount":  receipt.get("amount_tendered", receipt["total"]),
             "is_cash": receipt.get("is_cash", False),
         }]
- 
+    
     context = {
-        "store_name":       (setup_details.header01 if setup_details else "") or "OTTO Store",
+#         "store_name":       (setup_details.header01 if setup_details else "") or "OTTO Store",
+        "store_name":       terminal_config.store_name or "OTTO Store",
         "transaction_no":   receipt["transaction_no"],
         "date":             receipt["date"],
         "time":             receipt["time"],
@@ -2738,17 +3383,28 @@ def receipt_view(request):
         "change_amount":    receipt.get("change_amount", ""),
         "lines":            receipt["lines"],
         # "assisted_by":      receipt.get["salesperson"] or ""
-        "headers":      list(terminal_config.headers.all().order_by("line_number")) if terminal_config else [],
-        "footers":      _get_customer_footers(terminal_config) if terminal_config else [],
-        "cashier_name": session.cashier.get_full_name() or session.cashier.username,
+#         "headers":      list(terminal_config.headers.all().order_by("line_number")) if terminal_config else [],
+#         "footers":      _get_customer_footers(terminal_config) if terminal_config else [],
+#         "cashier_name": session.cashier.get_full_name() or session.cashier.username,
+        "headers":      list(terminal_config.headers.all().order_by("line_number")),
+        "footers":      _get_customer_footers(terminal_config),
+        "cashier_name": current_operator.get_full_name() or current_operator.username,
         "store_id":     session.store_id,
+        "store_name":   terminal_config.store_name or "OTTO Store",
+        "vat_exempt":    receipt.get("vat_exempt", ""),
+        "vatable_amount": receipt.get("vatable_amount", ""),
+        "vat_amount": receipt.get("vat_amount", ""),
+        "vat_rate": "{:.0%}".format(float(receipt.get("vat_rate", "0.12") or "0.12")),
+
     }
  
     printer = None
     try:
-        if terminal_config:
-            printer, _ = _get_printer(terminal_config)
-            _print_receipt(printer, terminal_config, context, session)
+#         if terminal_config:
+#             printer, _ = _get_printer(terminal_config)
+#             _print_receipt(printer, terminal_config, context, session)
+        printer, _ = _get_printer(terminal_config)
+        _print_receipt(printer, terminal_config, context, current_operator)
     except NotImplementedError as e:
         print(f"❌ Printer not supported: {e}")
     except Exception as e:
@@ -2769,7 +3425,7 @@ def z_reading_view(request):
     """Trigger a Z-Reading print for the current open session."""
     try:
         session = get_current_session_or_error(request)
-        session = POSSession.objects.select_related("cashier").get(
+        session = POSSession.objects.select_related("opened_by").get(
             id=session.id,
             status="open",
         )
@@ -2777,9 +3433,10 @@ def z_reading_view(request):
         return JsonResponse({"error": "Open POS session not found."}, status=404)
     except POSSession.MultipleObjectsReturned:
         return JsonResponse({"error": "Multiple open sessions found."}, status=500)
- 
+    
+    current_operator = request.user
     try:
-        _do_print_z_reading(session)
+        _do_print_z_reading(session, current_operator)
     except NotImplementedError as e:
         return JsonResponse({"error": str(e)}, status=501)
     except Exception as e:
@@ -2789,7 +3446,7 @@ def z_reading_view(request):
     return JsonResponse({"status": "ok", "message": "Z-Reading printed."})
 
 
-def _do_print_x_reading(session):
+def _do_print_x_reading(session, current_operator):
     """
     Print an X-Reading report for an already-resolved POSSession object.
     X-Reading = snapshot of current session totals WITHOUT closing/resetting.
@@ -2815,26 +3472,35 @@ def _do_print_x_reading(session):
     cash_withdrawals  = Payment.objects.filter(header__session=session, pcode="CW").aggregate(total=Sum("amount"), count=Count("id"))
 
     total_neg = sum(filter(None, [
-        void_line_items["total"], void_transactions["total"],
-        void_previous["total"],   item_returns["total"],
-        cash_withdrawals["total"],
+        abs(void_line_items["total"]) if void_line_items["total"] else None,
+        abs(void_transactions["total"]) if void_transactions["total"] else None,
+        abs(void_previous["total"]) if void_previous["total"] else None,
+        abs(item_returns["total"]) if item_returns["total"] else None,
+        abs(cash_withdrawals["total"]) if cash_withdrawals["total"] else None,
     ]))
 
     sales_headers = headers_qs.exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL).exclude(return_code="R")
 
+    # my additions
+    item_returns_orig_price      = headers_qs.filter(return_code="R").aggregate(total=Sum("items__item_price"),      count=Count("id"))
     gross_sales = (
         TransactionItem.objects.filter(header__in=sales_headers)
-        .aggregate(total=Sum("item_price_ext"))["total"] or Decimal("0")
+        .aggregate(total=Sum("item_price"))["total"] or Decimal("0")
     )
 
-    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="ID").aggregate(total=Sum("item_discount"), count=Count("id"))
+
+    item_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="EMP").aggregate(total=Sum("item_discount"), count=Count("id"))
+    pwd_disc       = TransactionItem.objects.filter(header__in=sales_headers, discount_code="PWD").aggregate(total=Sum("item_discount"), count=Count("id"))
     item_amt_disc   = TransactionItem.objects.filter(header__in=sales_headers, discount_code="IA").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_disc     = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SC").aggregate(total=Sum("item_discount"), count=Count("id"))
     senior_amt_disc = TransactionItem.objects.filter(header__in=sales_headers, discount_code="SA").aggregate(total=Sum("item_discount"), count=Count("id"))
 
+    discounts_total_except_sc = (item_disc["total"] or 0) + (pwd_disc["total"] or 0)
+    discounts_count_except_sc = (item_disc["count"] or 0) + (pwd_disc["count"] or 0)
     total_disc = sum(filter(None, [
         item_disc["total"], item_amt_disc["total"],
         senior_disc["total"], senior_amt_disc["total"],
+        pwd_disc["total"],
     ]))
 
     customer_count   = sales_headers.aggregate(total=Sum("customer_count"))["total"] or 0
@@ -2847,10 +3513,13 @@ def _do_print_x_reading(session):
         .order_by("tender_desc")
     )
 
-    net_sales             = gross_sales - Decimal(str(total_disc))
+
+    item_returns_orig_price_total = item_returns_orig_price["total"] or Decimal("0")
+    final_gross_sales = gross_sales - Decimal(str(item_returns_orig_price_total or 0))
+    net_sales             = final_gross_sales - Decimal(str(total_disc))
     total_neg_entries_amt = Decimal(str(total_neg or 0))
 
-    VAT_RATE      = Decimal("0.12")
+    # VAT_RATE      = Decimal("0.12")
     vatable_sales = net_sales / (1 + VAT_RATE)
     vat_amount    = net_sales - vatable_sales
     non_vat       = Decimal("0")
@@ -2914,7 +3583,7 @@ def _do_print_x_reading(session):
         # ── Terminal info ──────────────────────────────────────────────────────
         write_line(f"StoreId    : {session.store_id}")
         write_line(f"Terminal No: {session.terminal_id}")
-        write_line(f"User Id    : {session.cashier.get_full_name() or session.cashier.username}")
+        write_line(f"User Id    : {current_operator}")
         write_line(f"Date       : {session.business_date.strftime('%m/%d/%Y')}")
         write_line(f"Time       : {now.strftime('%I:%M:%S %p')}")
         write_line(f"\nBEG. SI    : {beg_si}")
@@ -2925,16 +3594,16 @@ def _do_print_x_reading(session):
         write_line(neg_row("Void Line Item",   void_line_items["total"],   void_line_items["count"]))
         write_line(neg_row("Void Transaction", void_transactions["total"], void_transactions["count"]))
         write_line(neg_row("Void Previous",    void_previous["total"],     void_previous["count"]))
-        write_line(neg_row("Item Returns",     item_returns["total"],      item_returns["count"]))
+        write_line(neg_row("Item Returns",     abs(item_returns["total"] or 0),      item_returns["count"]))
         write_line(neg_row("Cash Withdrawal",  cash_withdrawals["total"],  cash_withdrawals["count"]))
         separator()
         write_line(neg_gross("Total", total_neg_entries_amt))
         write_line("")
 
         # ── Gross sales & discounts ────────────────────────────────────────────
-        write_line(neg_gross("GROSS SALES", gross_sales))
+        write_line(neg_gross("GROSS SALES", final_gross_sales))
         write_line("\nLess:Discounts")
-        write_line(neg_row("Item Disc.",     item_disc["total"],       item_disc["count"]))
+        write_line(neg_row("Item Disc.",     discounts_total_except_sc,       discounts_count_except_sc))
         write_line(neg_row("Item Amt Disc.", item_amt_disc["total"],   item_amt_disc["count"]))
         write_line(neg_row("Senior % Disc.", senior_disc["total"],     senior_disc["count"]))
         write_line(neg_row("     Amt.Disc.", senior_amt_disc["total"], senior_amt_disc["count"]))
@@ -2991,8 +3660,8 @@ def _do_print_x_reading(session):
 @require_http_methods(["GET", "POST"])
 def print_x_reading(request):
     """Print X-Reading for the current open session. Session stays open."""
-    session = POSSession.objects.select_related("cashier").filter(
-        cashier=request.user,
+    session = POSSession.objects.select_related("opened_by").filter(
+        opened_by=request.user,
         store_id=STORE_ID,
         status="open",
     ).order_by("-opened_at").first()
@@ -3000,10 +3669,11 @@ def print_x_reading(request):
     if not session:
         messages.error(request, "No active session found.")
         return redirect("sales:pos_cashier")
-
+    
+    current_operator = request.user
     try:
-        _do_print_x_reading(session)
-        messages.success(request, "X-Reading printed successfully.")
+        _do_print_x_reading(session, current_operator)
+        # messages.success(request, "X-Reading printed successfully.")
     except NotImplementedError as e:
         messages.error(request, f"Printer not supported: {e}")
     except Exception as e:
@@ -3029,11 +3699,96 @@ def print_x_reading(request):
 #         print(f"❌ Cloud sync update error: {e}")
 #         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
+# ---------------------------------------------------------------------------
+# Close session view
+# ---------------------------------------------------------------------------
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def close_session(request):
+    user = request.user
+
+    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
+    if not session:
+        messages.error(request, "No active session found to close.")
+        return redirect("sales:pos_cashier")
+
+    closing_cash = _parse_decimal(request.POST.get("closing_cash"))
+    if closing_cash < 0:
+        messages.error(request, "Closing cash cannot be negative.")
+        return redirect("sales:pos_cashier")
+
+    # Step 1: Close the session
+    try:
+        session.close(closed_by_user=user, closing_cash=closing_cash)
+    except Exception as e:
+        messages.error(request, str(e))
+        return redirect("sales:pos_cashier")
+
+    # Step 2: Print Z-Reading
+    # Intentionally separate from close:
+    #   - A printer failure must NOT reopen/revert the session.
+    #   - We surface a non-fatal warning to the cashier if printing fails.
+    #
+    # _do_print_z_reading expects a POSSession that still carries its
+    # aggregated transaction data (closing only changes status, not records).
+    z_print_error = None
+    closed_session = None
+    try:
+        # Re-fetch so _do_print_z_reading gets a fully up-to-date object
+        # (session.close() may have mutated fields like closed_at, status).
+        closed_session = POSSession.objects.select_related("opened_by").get(
+            id=session.id
+        )
+        _do_print_z_reading(closed_session, current_operator=user)
+    except Exception as e:
+        print(f"Z-Reading print failed after session close: {e}")
+        z_print_error = str(e)
+
+    # Step 3: Update POSTransNumber + AccountingSummary
+    # Only runs when the print succeeded, keeping paper and DB in sync.
+    # If the print failed we skip this so grand totals are not incremented
+    # for a report that was never actually printed.
+    z_db_error = None
+    if not z_print_error and closed_session is not None:
+        try:
+            update_z_reading_db(closed_session, user)
+        except Exception as e:
+            print(f"Z-Reading DB update failed after session close: {e}")
+            z_db_error = str(e)
+
+    # Step 4: Clear POS session keys
+    for key in (
+        "pos_trans_no",
+        "pos_trans_disc_pct",
+        "pos_trans_disc_type",
+        "pos_trans_disc_label",
+        "last_receipt",
+    ):
+        request.session.pop(key, None)
+
+    # Step 5: Redirect
+    # Even when printing or DB update fails, we still log out — the session
+    # is already closed and cannot be reverted from here.
+    if z_print_error:
+        print(
+            request,
+            f"Session closed successfully, but Z-Reading could not be printed: "
+            f"{z_print_error}. Please reprint manually.",
+        )
+    elif z_db_error:
+        print(
+            request,
+            f"Session closed and Z-Reading printed, but the summary records "
+            f"could not be saved: {z_db_error}. Please notify your administrator.",
+        )
+
+    return redirect("pos_logout")
 
 # Configure these in settings.py or TerminalSetup instead of hardcoding
-CSV_ITEMS_PATH      = os.environ.get("CSV_ITEMS_PATH", "/data/exports/items.csv")
-CSV_ITEMDTL_PATH    = os.environ.get("CSV_ITEMDTL_PATH", "/data/exports/itemdtl.csv")
-CSV_ITEMSCOSTS_PATH = os.environ.get("CSV_ITEMSCOSTS_PATH", "/data/exports/itemscosts.csv")
+CSV_ITEMS_PATH      = os.environ.get("CSV_ITEMS_PATH")
+CSV_ITEMDTL_PATH    = os.environ.get("CSV_ITEMDTL_PATH")
+CSV_ITEMSCOSTS_PATH = os.environ.get("CSV_ITEMSCOSTS_PATH")
 
 
 @login_required
@@ -3049,7 +3804,6 @@ def update_from_csv(request):
             CSV_ITEMDTL_PATH,
             CSV_ITEMSCOSTS_PATH,
         )
-        print(f"✅ CSV import summary: {summary}")
         return JsonResponse({
             "status": "ok",
             "message": (

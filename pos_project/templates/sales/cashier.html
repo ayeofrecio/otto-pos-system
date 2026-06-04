@@ -578,9 +578,11 @@
         .icon-btn.loading {
             color: #a79f9f;
         }
+
         .icon-btn.loading .icon {
             opacity: 0;
         }
+
         .icon-btn.loading .icon-loading {
             opacity: 1;
             transform: scale(1);
@@ -590,9 +592,11 @@
         .icon-btn.success {
             color: #16a34a;
         }
+
         .icon-btn.success .icon {
             opacity: 0;
         }
+
         .icon-btn.success .icon-success {
             opacity: 1;
             transform: scale(1);
@@ -603,9 +607,11 @@
         .icon-btn.error {
             color: #dc2626;
         }
+
         .icon-btn.error .icon {
             opacity: 0;
         }
+
         .icon-btn.error .icon-error {
             opacity: 1;
             transform: scale(1);
@@ -623,16 +629,32 @@
 
         /* Rotate */
         @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* Pop effect */
         @keyframes pop {
-            0%   { transform: scale(0.6); opacity: 0; }
-            60%  { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(0.6);
+                opacity: 0;
+            }
+
+            60% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+            }
         }
+
         #toast-container {
             position: fixed;
             bottom: 1rem;
@@ -1074,12 +1096,14 @@
         .color-size-modal {
             width: 640px;
         }
+
         .color-size-modal .modal-subtitle {
             padding: 0.4rem 1.25rem 0.75rem;
             font-size: 0.85rem;
             color: #8b949e;
             border-bottom: 1px solid #2f3640;
         }
+
         #color-size-variant-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -1088,6 +1112,7 @@
             overflow-y: auto;
             max-height: 55vh;
         }
+
         .variant-btn {
             display: flex;
             flex-direction: column;
@@ -1101,22 +1126,27 @@
             text-align: left;
             font-size: 0.9rem;
         }
+
         .variant-btn:hover {
             border-color: #8b3d4a;
             background: #3a1520;
         }
+
         .variant-btn:focus {
             outline: none;
             border-color: #8b3d4a;
         }
+
         .variant-color {
             font-weight: 600;
             color: #e6edf3;
         }
+
         .variant-size {
             color: #8b949e;
             font-size: 0.82rem;
         }
+
         .variant-price {
             color: #6edb8f;
             font-size: 0.85rem;
@@ -1127,6 +1157,7 @@
         .fkey-modal {
             width: 560px;
         }
+
         .fkey-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1135,6 +1166,7 @@
             overflow-y: auto;
             max-height: 60vh;
         }
+
         .fkey-row {
             display: flex;
             align-items: center;
@@ -1144,6 +1176,7 @@
             background: #1c2128;
             border: 1px solid #2f3640;
         }
+
         .fkey-row .fkey-badge {
             min-width: 44px;
             text-align: center;
@@ -1156,10 +1189,12 @@
             font-family: monospace;
             letter-spacing: 0.03em;
         }
+
         .fkey-row .fkey-badge.unassigned {
             background: #2f3640;
             color: #888;
         }
+
         .fkey-row .fkey-desc {
             font-size: 0.85rem;
             color: #c9d1d9;
@@ -1632,12 +1667,30 @@
 
         /* ── Close Transaction Modal ───────────────────────────────────── */
         .close-trans-modal-box {
-            width: 500px;
+            width: 820px;
             max-width: 95vw;
-            max-height: 90vh;
+            max-height: 98vh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+        }
+
+        .modal-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .modal-body .col:first-child {
+            border-right: 1px solid #2f3640;
+        }
+
+        .modal-bottom {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            background: #22272e;
+            border-top: 1px solid #2f3640;
         }
 
         /* ── Summary wrapper ──────────────────────────────────────────── */
@@ -1694,6 +1747,113 @@
             color: #e6edf3;
         }
 
+        .ct-section-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #6e7681;
+            margin-bottom: 0.4rem;
+        }
+
+        .ct-stat-grid {
+            display: grid;
+            gap: 0.5rem 0.65rem;
+        }
+
+        .ct-stat-grid--2 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .ct-stat-grid--3 {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .ct-stat-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            background: #22272e;
+            border: 1px solid #2f3640;
+            border-radius: 7px;
+            padding: 0.55rem 0.75rem;
+        }
+
+        .ct-stat-label {
+            font-size: 11px;
+            color: #6e7681;
+        }
+
+        .ct-stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #e6edf3;
+        }
+
+        .ct-stat-sub {
+            font-size: 11px;
+            color: #6e7681;
+            margin-top: 1px;
+        }
+
+        /* ── Value modifiers ──────────────────────────────────────────── */
+        .ct-val--positive {
+            color: #6edb8f !important;
+        }
+
+        .ct-val--discount {
+            color: #f0a445 !important;
+        }
+
+        .ct-val--red {
+            color: #f85149 !important;
+        }
+
+        .ct-val--blue {
+            color: #60b8f0 !important;
+        }
+
+        /* ── Divider ──────────────────────────────────────────────────── */
+        .ct-divider {
+            border: none;
+            border-top: 1px solid #2f3640;
+            margin: 0.1rem 0;
+        }
+
+        /* ── Activity cells ───────────────────────────────────────────── */
+        .ct-activity-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .ct-activity-cell {
+            background: #22272e;
+            border: 1px solid #2f3640;
+            border-radius: 7px;
+            padding: 0.55rem 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .ct-activity-count {
+            font-size: 12px;
+            color: #6e7681;
+        }
+
+        .ct-activity-count span {
+            font-size: 16px;
+            font-weight: 700;
+            color: #e6edf3;
+            margin-right: 2px;
+        }
+
+        .ct-activity-amount {
+            font-size: 16px;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
         /* ── Value color modifiers ────────────────────────────────────── */
         .close-trans-val--positive {
             color: #6edb8f !important;
@@ -1745,7 +1905,44 @@
             font-weight: 700;
             color: #8b949e;
         }
+.ct-credit-section {
+    border-top: 1px solid #2f3640;
+    padding-top: 0.65rem;
+}
 
+.ct-credit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ct-credit-list div {
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+}
+
+.ct-credit-list span:first-child { color: #8b949e; }
+.ct-credit-list span:last-child  { color: #e6edf3; font-weight: 600; }
+
+.ct-credit-list .close-trans-credit-empty {
+    color: #6e7681;
+    font-style: italic;
+    font-size: 13px;
+}
+
+.ct-credit-total {
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 700;
+    border-top: 1px dashed #2f3640;
+    padding-top: 4px;
+    margin-top: 4px;
+    color: #e6edf3;
+}
+
+.ct-credit-total span:first-child { color: #8b949e; font-weight: 400; }
         .close-trans-cash-input {
             flex: 1;
             padding: 0.9rem 1rem;
@@ -2102,6 +2299,14 @@
             padding: 0.6rem 1.2rem;
         }
 
+        .close-trans-confirm-warn {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            padding: 0.6rem 1.25rem;
+            background: #2a1f1f;
+        }
+
         .close-trans-confirm-btn:hover {
             background: #b53f4b;
         }
@@ -2146,7 +2351,10 @@
         .close-trans-zread-final-btn:hover {
             background: #922b2b;
         }
-
+        .notes-wrap {
+    padding: 0.7rem 1.25rem;
+    border-right: 1px solid #2f3640;
+}
         @media (max-width: 600px) {
 
             .close-trans-modal-box {
@@ -2206,7 +2414,8 @@
                     </g>
                 </svg>
                 <!-- Cloud Check -->
-                <svg class="icon icon-success" xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24">
+                <svg class="icon icon-success" xmlns="http://www.w3.org/2000/svg" width="200" height="200"
+                    viewBox="0 0 24 24">
                     <path fill="currentColor" fill-rule="evenodd"
                         d="M12.476 3.75c-2.75 0-4.964 2.2-4.964 4.897c0 .462.065.909.185 1.331c.497.144.963.36 1.383.64a.75.75 0 1 1-.827 1.25a3.54 3.54 0 0 0-1.967-.589c-1.961 0-3.536 1.57-3.536 3.486c0 1.916 1.575 3.485 3.536 3.485a.75.75 0 0 1 0 1.5c-2.773 0-5.036-2.224-5.036-4.985c0-2.705 2.17-4.893 4.864-4.983a6.366 6.366 0 0 1-.102-1.135c0-3.541 2.902-6.397 6.464-6.397c3.158 0 5.796 2.244 6.355 5.221c2.3.977 3.919 3.238 3.919 5.882c0 3.074-2.188 5.631-5.093 6.253a.75.75 0 0 1-.314-1.467c2.24-.48 3.907-2.446 3.907-4.786c0-2.137-1.39-3.962-3.338-4.628a5.018 5.018 0 0 0-1.626-.27c-.583 0-1.14.1-1.658.28a.75.75 0 0 1-.494-1.416a6.517 6.517 0 0 1 3.024-.305a4.962 4.962 0 0 0-4.682-3.264Zm2.041 13.707c.3.286.312.76.026 1.06l-2.857 3a.75.75 0 0 1-1.086 0l-1.143-1.2a.75.75 0 1 1 1.086-1.034l.6.63l2.314-2.43a.75.75 0 0 1 1.06-.026Z"
                         clip-rule="evenodd" />
@@ -2219,7 +2428,8 @@
                         clip-rule="evenodd" />
                 </svg>
                 <!-- Cloud Refresh -->
-                <svg class="icon icon-loading" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+                <svg class="icon icon-loading" xmlns="http://www.w3.org/2000/svg" width="30" height="30"
+                    viewBox="0 0 24 24">
                     <g fill="currentColor">
                         <path
                             d="M12.079 3v-.75V3Zm-8.4 8.333h-.75h.75Zm0 1.667l-.527.532a.75.75 0 0 0 1.056 0L3.68 13Zm2.209-1.134A.75.75 0 1 0 4.83 10.8l1.057 1.065ZM2.528 10.8a.75.75 0 0 0-1.056 1.065L2.528 10.8Zm16.088-3.408a.75.75 0 1 0 1.277-.786l-1.277.786ZM12.079 2.25c-5.047 0-9.15 4.061-9.15 9.083h1.5c0-4.182 3.42-7.583 7.65-7.583v-1.5Zm-9.15 9.083V13h1.5v-1.667h-1.5Zm1.28 2.2l1.679-1.667L4.83 10.8l-1.68 1.667l1.057 1.064Zm0-1.065L2.528 10.8l-1.057 1.065l1.68 1.666l1.056-1.064Zm15.684-5.86A9.158 9.158 0 0 0 12.08 2.25v1.5a7.658 7.658 0 0 1 6.537 3.643l1.277-.786Z" />
@@ -2278,9 +2488,11 @@
                         <dt>Code:</dt>
                         <dd>{{ last_item.item_code }}</dd>
                         <dt>Size:</dt>
-                        <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—" }}</dd>
+                        <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—"
+                            }}</dd>
                         <dt>Color:</dt>
-                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as item_color_display %}{{ item_color_display|default:"—" }}</dd>
+                        <dd>{% color_display last_item.item_color_desc last_item.item_code_desc last_item.item_size as
+                            item_color_display %}{{ item_color_display|default:"—" }}</dd>
                         <dt>Price:</dt>
                         <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
                     </dl>
@@ -2404,12 +2616,13 @@
             <div class="disc-pct-row">
                 <label class="disc-pct-label" for="price-override-input">New Unit Price:</label>
                 <span class="disc-pct-sym" style="font-size:1.35rem;">₱</span>
-                <input type="number" id="price-override-input" class="disc-pct-num" value="0" min="0"
-                    step="0.01" autocomplete="off" style="width:170px;color:#f0c060;border-color:#755a1f;">
+                <input type="number" id="price-override-input" class="disc-pct-num" value="0" min="0" step="0.01"
+                    autocomplete="off" style="width:170px;color:#f0c060;border-color:#755a1f;">
             </div>
             <div class="disc-modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closePriceOverrideModal()">Cancel</button>
-                <button type="button" class="btn" style="background:#755a1f;color:white;" onclick="applyPriceOverride()">Apply Override</button>
+                <button type="button" class="btn" style="background:#755a1f;color:white;"
+                    onclick="applyPriceOverride()">Apply Override</button>
             </div>
         </div>
     </div>
@@ -2502,9 +2715,8 @@
             <div class="modal-header">
                 <h2>Close Transaction</h2>
                 <button class="btn btn-secondary" onclick="fetch('/pos/x-reading/', {
-                method: 'GET',
-                headers: {'X-CSRFToken': CSRF_TOKEN}
-            }).then(r => r.json()).then(d => alert(d.message || d.error))">
+            method: 'GET', headers: {'X-CSRFToken': CSRF_TOKEN}
+        }).then(r => r.json()).then(d => alert(d.message || d.error))">
                     Print X-Reading
                 </button>
                 <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
@@ -2520,70 +2732,105 @@
                 <input type="hidden" name="net_worth" id="hidden-net-worth" value="0">
                 <input type="hidden" name="gross_sales" id="hidden-gross-sales" value="0">
                 <input type="hidden" name="total_discounts" id="hidden-total-discounts" value="0">
+                <input type="hidden" name="net_sales" id="hidden-net-sales" value="0">
+                <input type="hidden" name="void_count" id="hidden-void-count" value="0">
+                <input type="hidden" name="void_amount" id="hidden-void-amount" value="0">
+                <input type="hidden" name="return_count" id="hidden-return-count" value="0">
+                <input type="hidden" name="return_amount" id="hidden-return-amount" value="0">
 
                 <div class="close-trans-summary">
-                    <div class="close-trans-summary-label">Session Summary</div>
 
-                    <div class="close-trans-summary-grid close-trans-summary-grid--3">
-                        <div class="close-trans-summary-row">
-                            <span>Change Fund</span>
-                            <span id="close-trans-opening-cash">₱0.00</span>
-                        </div>
-                        <div class="close-trans-summary-row">
-                            <span>Paid in Cash</span>
-                            <span id="close-trans-paid-in-cash">₱0.00</span>
-                        </div>
-                        <div class="close-trans-summary-row">
-                            <span>Net Worth</span>
-                            <span id="close-trans-net-worth" class="close-trans-val--positive">₱0.00</span>
+                    <div>
+                        <div class="ct-section-label">Cash Summary</div>
+                        <div class="ct-stat-grid ct-stat-grid--3">
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Change Fund</span>
+                                <span class="ct-stat-value" id="close-trans-opening-cash">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Paid in Cash</span>
+                                <span class="ct-stat-value" id="close-trans-paid-in-cash">₱0.00</span>
+                                <span class="ct-stat-sub" id="close-trans-cash-returned"></span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Expected Cash</span>
+                                <span class="ct-stat-value ct-val--blue" id="close-trans-expected-cash">₱0.00</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="close-trans-summary-grid close-trans-summary-grid--2">
-                        <div class="close-trans-summary-row">
-                            <span>Gross Sales</span>
-                            <span id="close-trans-gross-sales">₱0.00</span>
-                        </div>
-                        <div class="close-trans-summary-row">
-                            <span>Total Discounts</span>
-                            <span id="close-trans-total-discounts" class="close-trans-val--discount">₱0.00</span>
+                    <hr class="ct-divider">
+
+                    <div>
+                        <div class="ct-section-label">Sales Summary</div>
+                        <div class="ct-stat-grid ct-stat-grid--3">
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Gross Sales</span>
+                                <span class="ct-stat-value" id="close-trans-gross-sales">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Total Discounts</span>
+                                <span class="ct-stat-value ct-val--discount"
+                                    id="close-trans-total-discounts">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Net Sales</span>
+                                <span class="ct-stat-value ct-val--positive" id="close-trans-net-sales">₱0.00</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="close-trans-credit-section">
-                        <div class="close-trans-section-label">Credit / Debit Breakdown</div>
-                        <div id="close-trans-credit-debit-list" class="close-trans-credit-list"></div>
-                        <div class="close-trans-credit-total">
-                            <span>Total Credit/Debit</span>
+                    <hr class="ct-divider">
+
+                    <div class="ct-credit-section">
+                        <div class="ct-section-label">Credit / Debit Breakdown</div>
+                        <div id="close-trans-credit-debit-list" class="ct-credit-list"></div>
+                        <div class="ct-credit-total">
+                            <span>Total Credit / Debit</span>
                             <span id="close-trans-credit-debit-cash">₱0.00</span>
                         </div>
                     </div>
 
-                    <div
-                        class="close-trans-summary-grid close-trans-summary-grid--3 close-trans-summary-grid--top-border">
-                        <div class="close-trans-summary-row">
-                            <span>Expected Cash</span>
-                            <span id="close-trans-expected-cash">₱0.00</span>
-                        </div>
-                        <div class="close-trans-summary-row">
-                            <span>Actual Cash</span>
-                            <span id="close-trans-actual-cash">₱0.00</span>
-                        </div>
-                        <!-- <div class="close-trans-summary-row">
-                            <span>Variance</span>
-                            <span id="close-trans-variance" class="close-trans-variance-val">—</span>
-                        </div> -->
-                    </div>
-                </div>
+                    <hr class="ct-divider">
 
-                <!-- <div class="close-trans-input-section">
-                    <label class="close-trans-label">Closing Cash</label>
-                    <div class="close-trans-input-row">
-                        <span class="close-trans-currency">₱</span>
-                        <input type="number" id="closing-cash-input" name="closing_cash" class="close-trans-cash-input"
-                            placeholder="0.00" step="0.01" min="0">
+                    <div>
+                        <div class="ct-section-label">Activity</div>
+                        <div class="ct-activity-grid">
+                            <div class="ct-activity-cell ct-activity-cell--void">
+                                <span class="ct-stat-label">Voids</span>
+                                <span class="ct-activity-count">
+                                    <span id="close-trans-void-count">0</span> transactions
+                                </span>
+                                <span class="ct-activity-amount ct-val--red" id="close-trans-void-amount">₱0.00</span>
+                            </div>
+                            <div class="ct-activity-cell ct-activity-cell--return">
+                                <span class="ct-stat-label">Returns</span>
+                                <span class="ct-activity-count">
+                                    <span id="close-trans-return-count">0</span> transactions
+                                </span>
+                                <span class="ct-activity-amount ct-val--discount"
+                                    id="close-trans-return-amount">₱0.00</span>
+                            </div>
+                        </div>
                     </div>
-                </div> -->
+
+                    <hr class="ct-divider">
+
+                    <div>
+                        <div class="ct-section-label">Session Total</div>
+                        <div class="ct-stat-grid ct-stat-grid--2">
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Actual Cash</span>
+                                <span class="ct-stat-value" id="close-trans-actual-cash">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Net Worth</span>
+                                <span class="ct-stat-value ct-val--positive" id="close-trans-net-worth">₱0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
 
                 <div class="close-trans-notes-section">
                     <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
@@ -2594,12 +2841,9 @@
                 <div class="close-trans-footer" id="close-trans-footer-default">
                     <button type="button" class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
                     <button type="button" class="btn close-trans-confirm-btn" id="close-trans-confirm-btn"
-                        onclick="showZReadConfirm()">
-                        Process Z-Read
-                    </button>
+                        onclick="showZReadConfirm()">Process Z-Read</button>
                 </div>
 
-                <!-- Confirmation strip — hidden until Process Z-Read is clicked -->
                 <div class="close-trans-confirm-strip" id="close-trans-confirm-strip" style="display:none;">
                     <div class="close-trans-confirm-strip-warning">
                         <span class="close-trans-confirm-strip-title">Confirm Z-Read</span>
@@ -2614,6 +2858,7 @@
                         </button>
                     </div>
                 </div>
+
             </form>
         </div>
     </div>
@@ -2744,12 +2989,15 @@
                 <button class="modal-close" onclick="closeItemReturnModal()">&#10005;</button>
             </div>
             <div class="return-modal-body">
-                <div class="return-modal-line" id="item-return-line-label">Enter receipt number, load items, then select item(s) to return.</div>
+                <div class="return-modal-line" id="item-return-line-label">Enter receipt number, load items, then select
+                    item(s) to return.</div>
 
                 <label class="return-modal-label" for="item-return-source-trans">Original Transaction No.</label>
                 <div class="return-lookup-row">
-                    <input id="item-return-source-trans" class="return-modal-input" type="text" maxlength="8" placeholder="e.g. 00001234" required>
-                    <button type="button" class="btn btn-secondary" onclick="lookupPreviousReceiptForReturn()">Load</button>
+                    <input id="item-return-source-trans" class="return-modal-input" type="text" maxlength="8"
+                        placeholder="e.g. 00001234" required>
+                    <button type="button" class="btn btn-secondary"
+                        onclick="lookupPreviousReceiptForReturn()">Load</button>
                 </div>
 
                 <div id="item-return-source-date" class="return-modal-line" style="display:none;"></div>
@@ -2758,17 +3006,19 @@
                 </div>
 
                 <label class="return-modal-label" for="item-return-select-all">
-                    <input id="item-return-select-all" type="checkbox" onchange="toggleAllReturnItems(this.checked)"> Select all loaded items
+                    <input id="item-return-select-all" type="checkbox" onchange="toggleAllReturnItems(this.checked)">
+                    Select all loaded items
                 </label>
 
                 <label class="return-modal-label" for="item-return-admin-pin">Admin / Manager PIN</label>
-                <input id="item-return-admin-pin" class="return-modal-input" type="password" maxlength="64" placeholder="Required for return tagging" required>
+                <input id="item-return-admin-pin" class="return-modal-input" type="password" maxlength="64"
+                    placeholder="Required for return tagging" required>
 
                 <div class="return-modal-error" id="item-return-error"></div>
             </div>
             <div class="disc-modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeItemReturnModal()">Cancel</button>
-                <button type="button" class="btn btn-return-apply" onclick="importSelectedReturnItems()">Insert Selected Return Items</button>
+<!--                 <button type="button" class="btn btn-return-apply" onclick="importSelectedReturnItems()">Insert Selected Return Items</button>
             </div>
         </div>
     </div>
@@ -2799,8 +3049,10 @@
 
                 <div class="return-modal-error" id="suspend-error"></div>
             </div>
-            <div class="disc-modal-footer">
+            <div class="disc-modal-footer"> -->
                 <button type="button" class="btn btn-secondary" onclick="closeSuspendModal()">Close</button>
+                <button type="button" class="btn btn-return-apply" onclick="importSelectedReturnItems()">Insert Selected
+                    Return Items</button>
             </div>
         </div>
     </div>
@@ -2814,6 +3066,7 @@
             <span class="fn-key" id="key-paymnt">F10</span><span class="fn-label">💳 Pay</span>
         </button>
         
+
         <!-- Function Key Buttons - Grid Layout -->
         <div class="actions-fn-grid">
             <!-- Search & Inquiry -->
@@ -2821,6 +3074,7 @@
                 <span class="fn-key" id="key-search">F1</span><span class="fn-label">🔍 Search</span>
             </button>
             
+
             <!-- Discounts -->
             <button type="button" class="btn-fn btn-fn-green" onclick="openDiscountModal()"
                 title="Item discount — applies to next scan only">
@@ -2840,6 +3094,7 @@
                 <span class="fn-key" id="key-iret">F5</span><span class="fn-label">Item Return</span>
             </button>
             
+
             <!-- Void Operations -->
             <button type="button" class="btn-fn btn-fn-orange" onclick="window.triggerVoidItem()"
                 title="Void single line item">
@@ -2968,6 +3223,7 @@
                 'key-ivoida': 'iVoidA'
             };
             
+
             for (const [elemId, posKeyName] of Object.entries(keyMappings)) {
                 const elem = document.getElementById(elemId);
                 if (elem && POS_FKEYS[posKeyName]) {
@@ -2976,6 +3232,7 @@
             }
         })();
         
+
         // Initialise trans_disc state from server session (survives page reload)
         const INITIAL_TRANS_DISC = {
             pct: "{{ trans_disc.pct|default:0 }}",

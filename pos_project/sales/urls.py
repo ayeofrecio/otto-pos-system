@@ -18,9 +18,11 @@ urlpatterns = [
     path("cart/line-price-override/", views.cart_line_price_override, name="cart_line_price_override"),
     path("cart/trans-disc/", views.cart_trans_disc, name="cart_trans_disc"),
     path("cart/new/", views.cart_new, name="cart_new"),
+  
     path("cart/suspend/", views.cart_suspend, name="cart_suspend"),
     path("cart/suspended-list/", views.cart_suspended_list, name="cart_suspended_list"),
     path("cart/suspended-retrieve/", views.cart_suspended_retrieve, name="cart_suspended_retrieve"),
+  
     path("cart/item-return-toggle/", views.cart_item_return_toggle, name="cart_item_return_toggle"),
     path("cart/return-lookup/", views.cart_return_lookup, name="cart_return_lookup"),
     path("cart/return-import/", views.cart_return_import, name="cart_return_import"),

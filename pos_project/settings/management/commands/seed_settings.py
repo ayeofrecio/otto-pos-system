@@ -13,8 +13,10 @@ from sales.models import (
     TerminalPort,
     TerminalReceiptFooter,
     TerminalReceiptHeader,
-    TerminalSetup,
+#     TerminalSetup,
 )
+)
+from settings.models import TerminalSetup
 
 
 class Command(BaseCommand):

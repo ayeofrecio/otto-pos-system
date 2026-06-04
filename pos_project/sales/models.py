@@ -39,6 +39,13 @@ class TransactionHeader(models.Model):
     amount_tendered   = models.DecimalField(max_digits=15, decimal_places=4, default=0)
     change_amount     = models.DecimalField(max_digits=15, decimal_places=4, default=0)
 
+    # VAT breakdown snapshot — computed at payment time
+    vat_rate          = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.12"))
+    vatable_amount    = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # net of VAT
+    vat_amount        = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # VAT portion
+    vat_exempt_amount = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    zero_rated_amount = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+
     return_code        = models.CharField(max_length=1,  blank=True)   # RCODE
     item_ref           = models.CharField(max_length=8,  blank=True)   # TRREF1
 
@@ -72,13 +79,14 @@ class TransactionItem(models.Model):
     item_code          = models.CharField(max_length=15, blank=True)   # ITEMCODE
     item_description   = models.CharField(max_length=25, blank=True)   # IDESC
     item_qty           = models.DecimalField(max_digits=15, decimal_places=4, default=0)
-    item_uom           = models.CharField(max_length=6,  blank=True)
-    item_supplier      = models.CharField(max_length=6,  blank=True)
-    item_department    = models.CharField(max_length=4,  blank=True)
-    item_class         = models.CharField(max_length=4,  blank=True)
+    item_uom           = models.CharField(max_length=6,  blank=True) # To be removed
+    item_supplier      = models.CharField(max_length=6,  blank=True) # To be removed
+    item_department    = models.CharField(max_length=4,  blank=True) # To be removed
+    item_class         = models.CharField(max_length=4,  blank=True) # To be removed
     item_size          = models.CharField(max_length=3,  blank=True)
     item_color         = models.CharField(max_length=3,  blank=True)
-    item_type          = models.CharField(max_length=1,  blank=True)
+    item_color_desc    = models.CharField(max_length=15, blank=True)
+    item_type          = models.CharField(max_length=1,  blank=True) # To be removed
 
     item_cost          = models.DecimalField(max_digits=15, decimal_places=4, default=0)
     item_price         = models.DecimalField(max_digits=15, decimal_places=4, default=0)
@@ -321,6 +329,7 @@ class TempTransaction(models.Model):
     item_class         = models.CharField(max_length=4, blank=True)    # ICLASS
     item_size          = models.CharField(max_length=3, blank=True)    # ISIZE
     item_color         = models.CharField(max_length=3, blank=True)    # ICOLOR
+    item_color_desc    = models.CharField(max_length=15, blank=True)   # ICOLOR2
     item_type          = models.CharField(max_length=1, blank=True)    # ITYPE
     item_tax_code      = models.CharField(max_length=1, blank=True)    # ITAXC
     table_id           = models.CharField(max_length=3, blank=True)    # TABLEID
@@ -692,7 +701,7 @@ class Item(models.Model):
     size        = models.CharField(max_length=3, blank=True)           # ISIZE
     item_type   = models.CharField(max_length=1, blank=True)           # ITYPE
     price_type  = models.CharField(max_length=1, blank=True)           # IPTYPE
-    tax_code    = models.CharField(max_length=1, blank=True)           # ITAXC
+    tax_code    = models.CharField(max_length=1, blank=True, default="V")           # ITAXC
     bar_type    = models.CharField(max_length=1, blank=True)           # IBARTYPE
 
     # --- Pricing ---
@@ -795,6 +804,7 @@ class ItemDetail(models.Model):
 
     icode    = models.CharField(max_length=15)                         # ICODE  (FK to Item)
     color    = models.CharField(max_length=3, blank=True)              # COLOR
+    color_desc = models.CharField(max_length=15, blank=True)         # COLOR2
     size     = models.CharField(max_length=3, blank=True)              # SIZE
     stocks1  = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # ISTOCKS1
     stocks2  = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # ISTOCKS2
@@ -856,6 +866,11 @@ class Payment(models.Model):
     Payment lines. One transaction can have multiple tender types
     (e.g. partial cash + card split). Linked to TransactionHeader,
     not to individual items.
+
+    amount         = net amount applied toward the bill (what gets totalized)
+    tendered_amount = gross amount handed over by customer (cash only; equals
+                      amount for non-cash since they can't overpay)
+    change_amount  = tendered_amount - amount (cash only, else 0)
     """
     header = models.ForeignKey(
         TransactionHeader,
@@ -865,9 +880,12 @@ class Payment(models.Model):
 
     pcode             = models.CharField(max_length=3)
     amount            = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    tendered_amount   = models.DecimalField(max_digits=15, decimal_places=4, default=0,
+                            help_text="Gross amount handed over. Equals amount for non-cash.")
+    change_amount     = models.DecimalField(max_digits=15, decimal_places=4, default=0,
+                            help_text="Change returned for this tender line. Non-zero for cash only.")
     tender_desc       = models.CharField(max_length=15, blank=True)
-    # holder            = models.CharField(max_length=50, null=True)
-    payment_reference = models.CharField(max_length=20, null=True)
+    payment_reference = models.CharField(max_length=20, blank=True, null=True)
 
     class Meta:
         db_table = 'payment'
@@ -877,8 +895,6 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'{self.header.transaction_no} – {self.pcode} {self.amount}'
-    
-
 # Note: Transaction Payment / Tender counts for Z-reading continuity tracking.  Updated on each transaction close.
 class TransactionTenderCount(models.Model):
     """
@@ -911,9 +927,9 @@ class TerminalConfiguration(models.Model):
         ("USB","USB"),
         ("NETWORK","Network"),
     ]
-    
     store_id = models.CharField(max_length=3)
     terminal_id = models.CharField(max_length=3)
+    store_name = models.CharField(max_length=50, blank=True)
     branch_name = models.CharField(max_length=20, blank=True)
     vat = models.DecimalField(max_digits=8, decimal_places=4, default=0)
     print_in = models.CharField(max_length=10, choices=CONNECTION_TYPES, default="SERIAL")
@@ -1024,3 +1040,4 @@ class TerminalDisplayCode(models.Model):
 
     class Meta:
         db_table = "terminal_display_codes"
+

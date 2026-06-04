@@ -311,6 +311,21 @@
       return;
     }
 
+    // Block browser defaults for ALL keys that are mapped to POS functions
+    if (typeof POS_FKEYS !== 'undefined') {
+      const mappedKeys = Object.values(POS_FKEYS);
+      if (mappedKeys.includes(evt.key)) {
+        evt.preventDefault();
+      }
+    }
+
+    // F9 toggles browser fullscreen for kiosk-like POS mode.
+    if (evt.key === 'F9') {
+      evt.preventDefault();
+      toggleFullscreenMode();
+      return;
+    }
+
     if (evt.key === 'F1') {
       evt.preventDefault();
       window.openSearchModal();
@@ -359,6 +374,7 @@
     }
 
     if (POS_FKEYS.menu && POS_FKEYS.menu !== suspendHotkey && evt.key === POS_FKEYS.menu) {
+//     if (evt.key === POS_FKEYS.menu) {
       evt.preventDefault();
       window.openFkeyHelpModal();
       return;
@@ -1216,7 +1232,7 @@
 
     const rows = results.map(function (item) {
       const sizeLabel = item.size_display || item.size || '';
-      const colorLabel = item.color_display || item.color || '';
+      const colorLabel = item.color_display || item.color_desc || '';
       const variant = [sizeLabel, colorLabel].filter(Boolean).join('/');
       const variantHtml = variant ? '<span class="search-result-variant">(' + variant + ')</span>' : '';
       return '<div class="search-result" onclick="selectSearchResult(\'' +
@@ -1343,6 +1359,7 @@
 
   var loadedReturnReceiptNo = '';
   var loadedReturnItems = [];
+
   window.openSuspendModal = function () {
     var modal = document.getElementById('suspend-modal');
     var errorEl = document.getElementById('suspend-error');
@@ -1890,224 +1907,319 @@
     return document.getElementById("close-trans-modal");
   }
 
-  // ---------------------------------------------------------------------------
-  // Close Transaction Modal — open / close
-  // ---------------------------------------------------------------------------
-function renderCreditDebitBreakdown(list) {
-    const container = document.getElementById("close-trans-credit-debit-list");
-    if (!container) return;
-    container.innerHTML = "";
-
-    if (list.length === 0) {
-        const empty = document.createElement("div");
-        empty.innerHTML = '<span class="close-trans-credit-empty">No credit/debit transactions</span>';
-        container.appendChild(empty);
-        return;
-    }
-
-    list.forEach(item => {
-        const row = document.createElement("div");
-        const label = document.createElement("span");
-        label.textContent = item.tender_desc;
-        const value = document.createElement("span");
-        value.textContent = `₱${item.total.toLocaleString(undefined, {
-            minimumFractionDigits: 2, maximumFractionDigits: 2
-        })}`;
-        row.appendChild(label);
-        row.appendChild(value);
-        container.appendChild(row);
-    });
-}
-
-window.openCloseTransModal = function () {
-    const modal = getModal();
-    if (!modal) return;
-
-    const cashInput  = document.getElementById("closing-cash-input");
-    const notesInput = document.getElementById("close-trans-notes");
-    const confirmBtn = document.getElementById("close-trans-confirm-btn");
-
-    if (cashInput)  cashInput.value = "";
-    if (notesInput) notesInput.value = "";
-    if (confirmBtn) confirmBtn.disabled = false;
-
-    // Reset all display values
-    const resetEl = (id, val = "₱0.00") => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val;
-    };
-    resetEl("close-trans-opening-cash");
-    resetEl("close-trans-paid-in-cash");
-    resetEl("close-trans-net-worth");
-    resetEl("close-trans-gross-sales");
-    resetEl("close-trans-total-discounts");
-    resetEl("close-trans-credit-debit-cash");
-    resetEl("close-trans-expected-cash");
-    resetEl("close-trans-actual-cash");
-    resetEl("close-trans-variance", "—");
-
-    const varianceEl = document.getElementById("close-trans-variance");
-    if (varianceEl) varianceEl.className = "close-trans-variance-val";
-
-    renderCreditDebitBreakdown([]);
-    resetDenomModal();
-
-    fetch("/pos/to-close-session-details/", {
-        method: "GET",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
-    })
-    .then(r => r.json())
-    .then(data => {
-        const openingCash     = parseFloat(data.opening_cash)      || 0;
-        const paidInCash      = parseFloat(data.paid_in_cash)      || 0;
-        const creditDebitCash = parseFloat(data.credit_debit_cash) || 0;
-        const grossSales      = parseFloat(data.gross_sales)       || 0;
-        const totalDiscounts  = parseFloat(data.total_discounts)   || 0;
-        const netWorth        = parseFloat(data.net_worth)         || 0;
-        const expected        = openingCash + paidInCash;
-
-        modal._openingCash     = openingCash;
-        modal._paidInCash      = paidInCash;
-        modal._creditDebitCash = creditDebitCash;
-
-        resetEl("close-trans-opening-cash",    formatPeso(openingCash));
-        resetEl("close-trans-paid-in-cash",    formatPeso(paidInCash));
-        resetEl("close-trans-net-worth",       formatPeso(netWorth));
-        resetEl("close-trans-gross-sales",     formatPeso(grossSales));
-        resetEl("close-trans-total-discounts", formatPeso(totalDiscounts));
-        resetEl("close-trans-credit-debit-cash", formatPeso(creditDebitCash));
-        resetEl("close-trans-expected-cash",   formatPeso(expected));
-
-        document.getElementById("hidden-opening-cash").value     = openingCash.toFixed(2);
-        document.getElementById("hidden-paid-in-cash").value      = paidInCash.toFixed(2);
-        document.getElementById("hidden-credit-debit-cash").value = creditDebitCash.toFixed(2);
-        document.getElementById("hidden-expected-cash").value     = expected.toFixed(2);
-        document.getElementById("hidden-net-worth").value         = netWorth.toFixed(2);
-        document.getElementById("hidden-gross-sales").value       = grossSales.toFixed(2);
-        document.getElementById("hidden-total-discounts").value   = totalDiscounts.toFixed(2);
-
-        renderCreditDebitBreakdown(data.credit_debit_cash_list || []);
-    })
-    .catch(err => console.error("Failed to load session details:", err));
-
-    modal.classList.add("open");
-    setTimeout(() => cashInput && cashInput.focus(), 80);
-};
 // ---------------------------------------------------------------------------
-// Z-Reading Guard — triggered by middleware
+// Close Transaction Modal
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+  function getModal() {
+      return document.getElementById("close-trans-modal");
+  }
 
-// HTMX path: middleware returns HX-Trigger: openCloseTransModal
-document.addEventListener('DOMContentLoaded', function () {
-    if (typeof Z_READING_REQUIRED !== 'undefined' && Z_READING_REQUIRED) {
-        window.openCloseTransModal();
-    }
-});
+  function formatPeso(val) {
+      return "₱" + parseFloat(val || 0).toLocaleString("en-PH", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+      });
+  }
 
-// HTMX path: middleware returns HX-Trigger: openCloseTransModal
-document.addEventListener('openCloseTransModal', function () {
-    const modal = getModal();
-    if (modal && modal.classList.contains('open')) return; // already open
-    window.openCloseTransModal();
-});
+  function setText(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+  }
 
+  // ---------------------------------------------------------------------------
+  // Credit / Debit breakdown renderer
+  // ---------------------------------------------------------------------------
+  function renderCreditDebitBreakdown(list) {
+      const container = document.getElementById("close-trans-credit-debit-list");
+      if (!container) return;
+      container.innerHTML = "";
+
+      if (!list || list.length === 0) {
+          const empty = document.createElement("div");
+          empty.innerHTML = '<span class="close-trans-credit-empty">No credit/debit transactions</span>';
+          container.appendChild(empty);
+          return;
+      }
+
+      list.forEach(item => {
+          const row   = document.createElement("div");
+          const label = document.createElement("span");
+          label.textContent = item.tender_desc;
+          const value = document.createElement("span");
+          value.textContent = formatPeso(item.total);
+          row.appendChild(label);
+          row.appendChild(value);
+          container.appendChild(row);
+      });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Open modal — fetch fresh data each time
+  // ---------------------------------------------------------------------------
+  window.openCloseTransModal = function () {
+      const modal     = document.getElementById("close-trans-modal");
+      const cashInput  = document.getElementById("closing-cash-input");
+      const notesInput = document.getElementById("close-trans-notes");
+      const confirmBtn = document.getElementById("close-trans-confirm-btn");
+
+      if (!modal) return;
+
+      // Reset inputs
+      if (cashInput)  cashInput.value  = "";
+      if (notesInput) notesInput.value = "";
+      if (confirmBtn) confirmBtn.disabled = false;
+
+      // Reset all display values
+      const resetEl = (id, val = "₱0.00") => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+      };
+
+      resetEl("close-trans-opening-cash");
+      resetEl("close-trans-paid-in-cash");
+      resetEl("close-trans-net-worth");
+      resetEl("close-trans-gross-sales");
+      resetEl("close-trans-total-discounts");
+      resetEl("close-trans-net-sales");
+      resetEl("close-trans-credit-debit-cash");
+      resetEl("close-trans-expected-cash");
+      resetEl("close-trans-actual-cash");
+      resetEl("close-trans-void-count",   "0");
+      resetEl("close-trans-void-amount");
+      resetEl("close-trans-return-count", "0");
+      resetEl("close-trans-return-amount");
+
+      const cashReturnedEl = document.getElementById("close-trans-cash-returned");
+      if (cashReturnedEl) cashReturnedEl.textContent = "";
+
+      const varianceEl = document.getElementById("close-trans-variance");
+      if (varianceEl) {
+          varianceEl.textContent = "—";
+          varianceEl.className   = "close-trans-variance-val";
+      }
+
+      renderCreditDebitBreakdown([]);
+
+      if (typeof resetDenomModal === "function") resetDenomModal();
+
+      // Fetch session details
+      fetch("/pos/to-close-session-details/", {
+          method: "GET",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
+      })
+      .then(r => r.json())
+      .then(data => {
+          const openingCash     = parseFloat(data.opening_cash)     || 0;
+          const paidInCash      = parseFloat(data.paid_in_cash)     || 0;
+          const cashReturned    = parseFloat(data.cash_returned)    || 0;
+          const creditDebitCash = parseFloat(data.credit_debit_cash)|| 0;
+          const expectedCash    = parseFloat(data.expected_cash)    || 0;
+          const grossSales      = parseFloat(data.gross_sales)      || 0;
+          const totalDiscounts  = parseFloat(data.total_discounts)  || 0;
+          const netSales        = parseFloat(data.net_sales)        || 0;
+          const netWorth        = parseFloat(data.net_worth)        || 0;
+          const voidCount       = parseInt(data.void_count)         || 0;
+          const voidAmount      = parseFloat(data.void_amount)      || 0;
+          const returnCount     = parseInt(data.return_count)       || 0;
+          const returnAmount    = parseFloat(data.return_amount)    || 0;
+
+          // Store on modal for form submit and variance recalc
+          modal._openingCash     = openingCash;
+          modal._paidInCash      = paidInCash;
+          modal._cashReturned    = cashReturned;
+          modal._creditDebitCash = creditDebitCash;
+          modal._expectedCash    = expectedCash;
+          modal._netWorth        = netWorth;
+          modal._grossSales      = grossSales;
+          modal._totalDiscounts  = totalDiscounts;
+          modal._netSales        = netSales;
+          modal._voidCount       = voidCount;
+          modal._voidAmount      = voidAmount;
+          modal._returnCount     = returnCount;
+          modal._returnAmount    = returnAmount;
+
+          // Update display
+          resetEl("close-trans-opening-cash",     formatPeso(openingCash));
+          resetEl("close-trans-paid-in-cash",     formatPeso(paidInCash));
+          resetEl("close-trans-expected-cash",    formatPeso(expectedCash));
+          resetEl("close-trans-actual-cash",      formatPeso(expectedCash)); // until closing cash input re-enabled
+          resetEl("close-trans-net-worth",        formatPeso(netWorth));
+          resetEl("close-trans-gross-sales",      formatPeso(grossSales));
+          resetEl("close-trans-total-discounts",  formatPeso(totalDiscounts));
+          resetEl("close-trans-net-sales",        formatPeso(netSales));
+          resetEl("close-trans-credit-debit-cash", formatPeso(creditDebitCash));
+          resetEl("close-trans-void-count",       voidCount);
+          resetEl("close-trans-void-amount",      formatPeso(voidAmount));
+          resetEl("close-trans-return-count",     returnCount);
+          resetEl("close-trans-return-amount",    formatPeso(returnAmount));
+
+          // Cash returned sub-label
+          if (cashReturnedEl && cashReturned > 0) {
+              cashReturnedEl.textContent = `−${formatPeso(cashReturned)} returned`;
+          }
+
+          // Sync hidden inputs
+          _syncHiddenFields(modal);
+
+          renderCreditDebitBreakdown(data.credit_debit_cash_list || []);
+      })
+      .catch(err => console.error("Failed to load session details:", err));
+
+      modal.classList.add("open");
+      setTimeout(() => cashInput && cashInput.focus(), 80);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Sync hidden form fields from modal state
+  // ---------------------------------------------------------------------------
+  function _syncHiddenFields(modal) {
+      const setVal = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.value = parseFloat(val || 0).toFixed(2);
+      };
+      const setInt = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.value = parseInt(val || 0);
+      };
+
+      setVal("hidden-opening-cash",      modal._openingCash);
+      setVal("hidden-paid-in-cash",      modal._paidInCash);
+      setVal("hidden-credit-debit-cash", modal._creditDebitCash);
+      setVal("hidden-expected-cash",     modal._expectedCash);
+      setVal("hidden-net-worth",         modal._netWorth);
+      setVal("hidden-gross-sales",       modal._grossSales);
+      setVal("hidden-total-discounts",   modal._totalDiscounts);
+      setVal("hidden-net-sales",         modal._netSales);
+      setVal("hidden-void-amount",       modal._voidAmount);
+      setVal("hidden-return-amount",     modal._returnAmount);
+      setInt("hidden-void-count",        modal._voidCount);
+      setInt("hidden-return-count",      modal._returnCount);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Close modal
+  // ---------------------------------------------------------------------------
   window.closeCloseTransModal = function () {
-    const modal = getModal();
-    if (modal) modal.classList.remove("open");
-    document.getElementById("barcode-input")?.focus();
+      const modal = getModal();
+      if (modal) modal.classList.remove("open");
+      document.getElementById("barcode-input")?.focus();
   };
 
   window.closeCloseTransModalOutside = function (evt) {
-    if (evt.target === getModal()) window.closeCloseTransModal();
+      if (evt.target === getModal()) window.closeCloseTransModal();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Z-Read confirm strip toggle
+  // ---------------------------------------------------------------------------
+  window.showZReadConfirm = function () {
+      const strip  = document.getElementById("close-trans-confirm-strip");
+      const footer = document.getElementById("close-trans-footer-default");
+      if (strip)  strip.style.display  = "block";
+      if (footer) footer.style.display = "none";
+  };
+
+  window.hideZReadConfirm = function () {
+      const strip  = document.getElementById("close-trans-confirm-strip");
+      const footer = document.getElementById("close-trans-footer-default");
+      if (strip)  strip.style.display  = "none";
+      if (footer) footer.style.display = "flex";
   };
 
   // ---------------------------------------------------------------------------
   // Variance — recalculate whenever the closing cash input changes
   // ---------------------------------------------------------------------------
   function recalcVariance() {
-    const modal = getModal();
-    const cashInput = document.getElementById("closing-cash-input");
-    const varianceEl = document.getElementById("close-trans-variance");
-    const confirmBtn = document.getElementById("close-trans-confirm-btn");
+      const modal      = getModal();
+      const cashInput  = document.getElementById("closing-cash-input");
+      const varianceEl = document.getElementById("close-trans-variance");
+      const confirmBtn = document.getElementById("close-trans-confirm-btn");
 
-    if (!cashInput || !varianceEl || !modal) return;
+      if (!cashInput || !varianceEl || !modal) return;
 
-    const expected = (modal._openingCash || 0)
-      + (modal._paidInCash || 0);
-    //  + (modal._creditDebitCash || 0);
+      const expected = (modal._openingCash || 0) + (modal._paidInCash || 0);
+      const raw      = cashInput.value;
+      const actual   = parseFloat(raw) || 0;
 
-    const raw = cashInput.value;
-    const actual = parseFloat(raw) || 0;
+      if (!raw) {
+          varianceEl.textContent = "—";
+          varianceEl.className   = "close-trans-variance-val";
+          if (confirmBtn) confirmBtn.disabled = true;
+          return;
+      }
 
-    if (!raw) {
-      varianceEl.textContent = "—";
-      varianceEl.className = "close-trans-variance-val";
-      if (confirmBtn) confirmBtn.disabled = true;
-      return;
-    }
+      const variance = actual - expected;
 
-    const variance = actual - expected;
+      if (variance > 0) {
+          varianceEl.textContent = "+" + formatPeso(variance) + " over";
+          varianceEl.className   = "close-trans-variance-val over";
+      } else if (variance < 0) {
+          varianceEl.textContent = formatPeso(Math.abs(variance)) + " short";
+          varianceEl.className   = "close-trans-variance-val short";
+      } else {
+          varianceEl.textContent = "Exact";
+          varianceEl.className   = "close-trans-variance-val exact";
+      }
 
-    if (variance > 0) {
-      varianceEl.textContent = "+" + formatPeso(variance) + " over";
-      varianceEl.className = "close-trans-variance-val over";
-    } else if (variance < 0) {
-      varianceEl.textContent = formatPeso(Math.abs(variance)) + " short";
-      varianceEl.className = "close-trans-variance-val short";
-    } else {
-      varianceEl.textContent = "Exact";
-      varianceEl.className = "close-trans-variance-val exact";
-    }
-
-    if (confirmBtn) confirmBtn.disabled = actual < 0;
+      if (confirmBtn) confirmBtn.disabled = actual < 0;
   }
 
   const closingCashInput = document.getElementById("closing-cash-input");
   if (closingCashInput) {
-    closingCashInput.addEventListener("input", recalcVariance);
-    closingCashInput.addEventListener("keydown", function (evt) {
-      if (evt.key === "Enter") {
-        evt.preventDefault();
-        // Trigger submit only if button is enabled
-        const confirmBtn = document.getElementById("close-trans-confirm-btn");
-        if (confirmBtn && !confirmBtn.disabled) {
-          document.getElementById("close-trans-form").requestSubmit();
-        }
-      }
-    });
+      closingCashInput.addEventListener("input", recalcVariance);
+      closingCashInput.addEventListener("keydown", function (evt) {
+          if (evt.key === "Enter") {
+              evt.preventDefault();
+              const confirmBtn = document.getElementById("close-trans-confirm-btn");
+              if (confirmBtn && !confirmBtn.disabled) {
+                  document.getElementById("close-trans-form").requestSubmit();
+              }
+          }
+      });
   }
 
   // ---------------------------------------------------------------------------
-  // Confirm close — populate hidden fields then submit the form
+  // Z-Reading Guard — triggered by middleware
   // ---------------------------------------------------------------------------
-  // The confirm button is type="submit" inside the form, so the browser calls
-  // form's submit event. We intercept it here to populate hidden fields first.
+  document.addEventListener("DOMContentLoaded", function () {
+      if (typeof Z_READING_REQUIRED !== "undefined" && Z_READING_REQUIRED) {
+          window.openCloseTransModal();
+      }
+  });
+
+  document.addEventListener("openCloseTransModal", function () {
+      const modal = getModal();
+      if (modal && modal.classList.contains("open")) return;
+      window.openCloseTransModal();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Form submit — sync hidden fields then POST
+  // ---------------------------------------------------------------------------
   const closeTransForm = document.getElementById("close-trans-form");
   if (closeTransForm) {
-    closeTransForm.addEventListener("submit", function (evt) {
-      evt.preventDefault();
+      closeTransForm.addEventListener("submit", function (evt) {
+          evt.preventDefault();
 
-      const modal = getModal();
-      const cashInput = document.getElementById("closing-cash-input");
+          const modal       = getModal();
+          const cashInput   = document.getElementById("closing-cash-input");
+          const closingCash = parseFloat(cashInput?.value) || 0;
+          const expected    = (modal?._expectedCash)    || 0;
+          const variance    = closingCash - expected;
 
-      const closingCash = parseFloat(cashInput?.value) || 0;
-      const openingCash = modal?._openingCash || 0;
-      const paidInCash = modal?._paidInCash || 0;
-      const creditDebitCash = modal?._creditDebitCash || 0;
-      const expected = openingCash + paidInCash + creditDebitCash;
-      const variance = closingCash - expected;
+          // Sync all hidden fields
+          _syncHiddenFields(modal);
 
-      document.getElementById("hidden-opening-cash").value = openingCash.toFixed(2);
-      document.getElementById("hidden-paid-in-cash").value = paidInCash.toFixed(2);
-      document.getElementById("hidden-credit-debit-cash").value = creditDebitCash.toFixed(2);
-      document.getElementById("hidden-expected-cash").value = expected.toFixed(2);
-      document.getElementById("hidden-cash-variance").value = variance.toFixed(2);
+          // Variance is the only value that depends on closing cash input
+          const varianceEl = document.getElementById("hidden-cash-variance");
+          if (varianceEl) varianceEl.value = variance.toFixed(2);
 
-      // Standard form POST — Django handles the redirect
-      closeTransForm.submit();
-    });
+          closeTransForm.submit();
+      });
   }
-
   // ---------------------------------------------------------------------------
   // Denomination Modal
   // ---------------------------------------------------------------------------
