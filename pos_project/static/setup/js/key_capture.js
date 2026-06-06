@@ -1,110 +1,188 @@
-document.addEventListener('DOMContentLoaded', function () {
+const KEY_OPTIONS = [
+    { value: String.fromCharCode(0xDC), label: 'F1' },
+    { value: String.fromCharCode(0xD8), label: 'F2' },
+    { value: String.fromCharCode(0xE9), label: 'F3' },
+    { value: String.fromCharCode(0xF7), label: 'F4' },
+    { value: String.fromCharCode(0xF8), label: 'F5' },
+    { value: String.fromCharCode(0xF9), label: 'F6' },
+    { value: String.fromCharCode(0xFA), label: 'F7' },
+    { value: String.fromCharCode(0xFB), label: 'F8' },
+    { value: String.fromCharCode(0xFC), label: 'F9' },
+    { value: String.fromCharCode(0xFD), label: 'F10' },
+    { value: String.fromCharCode(0xFE), label: 'F11' },
+    { value: String.fromCharCode(0xFF), label: 'F12' },
+    { value: 'CR', label: 'Enter' },
+    { value: 'EC', label: 'Esc' },
+    { value: 'TB', label: 'Tab' },
+    { value: 'BK', label: 'Bksp' },
+    { value: 'HM', label: 'Home' },
+    { value: 'ND', label: 'End' },
+    { value: 'PU', label: 'PgUp' },
+    { value: 'PD', label: 'PgDn' },
+    { value: 'AU', label: '↑' },
+    { value: 'AD', label: '↓' },
+    { value: 'AL', label: '←' },
+    { value: 'AR', label: '→' },
+    { value: 'IC', label: 'Ins' },
+    { value: 'DL', label: 'Del' },
+];
 
-    // Maps JS key name → Clipper chr() equivalent (single raw character)
-    // These match exactly what is stored in your DBF/MySQL functions table
-    const KEY_LABELS = {
-        'F1' : String.fromCharCode(0xDC),   // chr(220)
-        'F2' : String.fromCharCode(0xD8),   // chr(216) - pPaymntKey
-        'F3' : String.fromCharCode(0xE9),   // chr(233) - pODeptKey
-        'F4' : String.fromCharCode(0xF7),   // chr(247) - pSubTotKey
-        'F5' : String.fromCharCode(0xF8),   // chr(248) - pISusRtKey
-        'F6' : String.fromCharCode(0xF9),   // chr(249) - pVoidTrKey
-        'F7' : String.fromCharCode(0xFA),   // chr(250) - pIVoidAKey
-        'F8' : String.fromCharCode(0xFB),   // chr(251) - pIVoidKey
-        'F9' : String.fromCharCode(0xFC),   // chr(252) - pIRetKey
-        'F10': String.fromCharCode(0xFD),   // chr(253) - pPrOverKey
-        'F11': String.fromCharCode(0xFE),   // chr(254) - pSTDiscKey
-        'F12': String.fromCharCode(0xFF),   // chr(255) - pIDiscKey
-    };
+for (let code = 0x30; code <= 0x39; code += 1) {
+    KEY_OPTIONS.push({ value: String.fromCharCode(code), label: String.fromCharCode(code) });
+}
 
-    // Display-friendly label shown in the badge (does not affect saved value)
-    const KEY_DISPLAY = {
-        'F1' :'F1',  'F2' :'F2',  'F3' :'F3',  'F4' :'F4',
-        'F5' :'F5',  'F6' :'F6',  'F7' :'F7',  'F8' :'F8',
-        'F9' :'F9',  'F10':'F10', 'F11':'F11', 'F12':'F12',
-        'Enter'    :'Enter', 'Escape'  :'Esc',
-        'Insert'   :'Ins',   'Delete'  :'Del',
-        'Home'     :'Home',  'End'     :'End',
-        'PageUp'   :'PgUp',  'PageDown':'PgDn',
-        'ArrowUp'  :'↑',     'ArrowDown' :'↓',
-        'ArrowLeft':'←',     'ArrowRight':'→',
-        'Backspace':'Bksp',  'Tab'     :'Tab',
-    };
+for (let code = 0x41; code <= 0x5A; code += 1) {
+    KEY_OPTIONS.push({ value: String.fromCharCode(code), label: String.fromCharCode(code) });
+}
 
-    document.querySelectorAll('.key-capture-input').forEach(function (input) {
+const KEY_SECTIONS = [
+    { title: 'Function Keys', options: KEY_OPTIONS.slice(0, 12) },
+    { title: 'Navigation / Editing', options: KEY_OPTIONS.slice(12, 26) },
+    { title: 'Digits / Letters', options: KEY_OPTIONS.slice(26) },
+];
 
-        if (input.value) {
-            updateBadge(input, input.value);
-        }
+const VALUE_TO_LABEL = KEY_OPTIONS.reduce(function (lookup, option) {
+    lookup[option.value] = option.label;
+    return lookup;
+}, {});
 
-        input.addEventListener('focus', function () {
-            input.classList.add('listening');
-            input.placeholder = '🎯 Press a key now...';
+function storedValueToLabel(value) {
+    if (!value) {
+        return '';
+    }
+
+    if (VALUE_TO_LABEL[value]) {
+        return VALUE_TO_LABEL[value];
+    }
+
+    if (value.length === 1) {
+        return value.toUpperCase();
+    }
+
+    return value;
+}
+
+function getStoredValue(input) {
+    return input.dataset.storedValue || input.value || '';
+}
+
+function setStoredValue(input, value) {
+    input.dataset.storedValue = value || '';
+    input.value = storedValueToLabel(value);
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function refreshVisibleValue(input) {
+    const storedValue = getStoredValue(input);
+    input.value = storedValue ? storedValueToLabel(storedValue) : '';
+    input.placeholder = storedValue ? '' : 'No key selected';
+}
+
+function buildPickerPanel(input) {
+    const picker = document.createElement('div');
+    picker.className = 'key-picker-panel key-picker-panel-inline';
+    picker.setAttribute('role', 'group');
+    picker.setAttribute('aria-label', 'Pick a key');
+
+    const header = document.createElement('div');
+    header.className = 'key-picker-header';
+    header.textContent = 'Pick a key';
+    picker.appendChild(header);
+
+    const sections = document.createElement('div');
+    sections.className = 'key-picker-sections';
+
+    KEY_SECTIONS.forEach(function (section) {
+        const sectionWrap = document.createElement('div');
+        sectionWrap.className = 'key-picker-section';
+
+        const sectionTitle = document.createElement('div');
+        sectionTitle.className = 'key-picker-section-title';
+        sectionTitle.textContent = section.title;
+        sectionWrap.appendChild(sectionTitle);
+
+        const grid = document.createElement('div');
+        grid.className = 'key-picker-grid';
+
+        section.options.forEach(function (option) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'key-picker-option';
+            button.textContent = option.label;
+            button.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                setStoredValue(input, option.value);
+                refreshVisibleValue(input);
+            });
+            grid.appendChild(button);
         });
 
-        input.addEventListener('blur', function () {
-            input.classList.remove('listening');
-            input.placeholder = 'Click here, then press a key...';
-        });
-
-        input.addEventListener('keydown', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const key = e.key;
-            if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return;
-
-            let keycode = '';
-            let displayName = '';
-
-            if (KEY_LABELS[key] !== undefined) {
-                // Function key — store raw Clipper chr() character
-                keycode = KEY_LABELS[key];
-                displayName = KEY_DISPLAY[key] || key;
-            } else if (KEY_DISPLAY[key] !== undefined) {
-                // Special key with no Clipper mapping — store as-is
-                keycode = key.substring(0, 2);
-                displayName = KEY_DISPLAY[key];
-            } else if (key.length === 1) {
-                // Regular printable character — store uppercase (matches Clipper upper(chr(ckey)))
-                keycode = key.toUpperCase();
-                displayName = keycode;
-            } else {
-                return; // unknown key, ignore
-            }
-
-            input.value = keycode;
-            updateBadge(input, displayName);
-            input.classList.add('key-captured');
-            setTimeout(() => input.classList.remove('key-captured'), 600);
-        });
+        sectionWrap.appendChild(grid);
+        sections.appendChild(sectionWrap);
     });
 
-    function updateBadge(input, label) {
-        const existing = input.parentNode.querySelector('.key-badge');
-        if (existing) existing.remove();
+    picker.appendChild(sections);
 
-        const badge = document.createElement('span');
-        badge.className = 'key-badge';
+    const footer = document.createElement('div');
+    footer.className = 'key-picker-footer';
 
-        // Show human-readable label in badge instead of raw char
-        const DISPLAY_MAP = {
-            [String.fromCharCode(0xFF)]: 'F12',
-            [String.fromCharCode(0xFE)]: 'F11',
-            [String.fromCharCode(0xFD)]: 'F10',
-            [String.fromCharCode(0xFC)]: 'F9',
-            [String.fromCharCode(0xFB)]: 'F8',
-            [String.fromCharCode(0xFA)]: 'F7',
-            [String.fromCharCode(0xF9)]: 'F6',
-            [String.fromCharCode(0xF8)]: 'F5',
-            [String.fromCharCode(0xF7)]: 'F4',
-            [String.fromCharCode(0xE9)]: 'F3',
-            [String.fromCharCode(0xD8)]: 'F2',
-            [String.fromCharCode(0xDC)]: 'F1',
-        };
+    const clearButton = document.createElement('button');
+    clearButton.type = 'button';
+    clearButton.className = 'key-picker-clear';
+    clearButton.textContent = 'Clear';
+    clearButton.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        setStoredValue(input, '');
+        refreshVisibleValue(input);
+    });
 
-        badge.textContent = DISPLAY_MAP[label] || label;
-        input.parentNode.style.position = 'relative';
-        input.parentNode.appendChild(badge);
+    footer.appendChild(clearButton);
+    picker.appendChild(footer);
+
+    return picker;
+}
+
+function buildPickerWidget(input) {
+    if (input.dataset.keyPickerReady === '1') {
+        return;
     }
-});
+
+    input.dataset.keyPickerReady = '1';
+    input.dataset.storedValue = input.value || '';
+    input.readOnly = true;
+    input.tabIndex = -1;
+
+    const shell = document.createElement('span');
+    shell.className = 'key-picker-shell';
+
+    const parent = input.parentNode;
+    parent.insertBefore(shell, input);
+    shell.appendChild(input);
+    shell.appendChild(buildPickerPanel(input));
+
+    refreshVisibleValue(input);
+
+    const form = input.form;
+    if (form && !form.dataset.keyPickerBound) {
+        form.dataset.keyPickerBound = '1';
+        form.addEventListener('submit', function () {
+            form.querySelectorAll('.key-capture-input').forEach(function (field) {
+                field.value = getStoredValue(field);
+            });
+        });
+    }
+}
+
+function initKeyCaptureWidgets() {
+    document.querySelectorAll('.key-capture-input').forEach(function (input) {
+        buildPickerWidget(input);
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initKeyCaptureWidgets);
+} else {
+    initKeyCaptureWidgets();
+}

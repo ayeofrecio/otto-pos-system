@@ -295,6 +295,7 @@
     const barcodeInput = document.getElementById('barcode-input');
     const qtyInput = document.getElementById('qty-input');
     const suspendHotkey = (typeof POS_FKEYS !== 'undefined' && POS_FKEYS.iSusRt) ? POS_FKEYS.iSusRt : 'F3';
+    const qtyHotkey = (typeof POS_FKEYS !== 'undefined' && POS_FKEYS.iQty) ? POS_FKEYS.iQty : 'F2';
 
     // Block browser defaults for ALL keys that are mapped to POS functions
     if (typeof POS_FKEYS !== 'undefined') {
@@ -317,7 +318,7 @@
       return;
     }
 
-    if (evt.key === 'F2') {
+    if (evt.key === qtyHotkey) {
       evt.preventDefault();
       if (qtyInput) { qtyInput.focus(); qtyInput.select(); }
       return;
@@ -355,6 +356,14 @@
     if (evt.key === POS_FKEYS.paymnt) {
       evt.preventDefault();
       window.openPayModal();
+      return;
+    }
+
+    if (evt.key === POS_FKEYS.sOff) {
+      evt.preventDefault();
+      if (typeof POS_LOGOUT_URL !== 'undefined' && POS_LOGOUT_URL) {
+        window.location.href = POS_LOGOUT_URL;
+      }
       return;
     }
 
@@ -1106,10 +1115,10 @@
     const grid = document.getElementById('fkey-grid-body');
     if (grid && typeof POS_FKEYS !== 'undefined' && typeof POS_KEY_LABELS !== 'undefined') {
       grid.innerHTML = '';
-      // Static non-POS-KEYS entries first (F1, F2)
+      // Static non-POS-KEYS entries first (F1, qty key)
       const staticEntries = [
         { key: 'F1', desc: 'Item Search' },
-        { key: 'F2', desc: 'Quantity Input' },
+        { key: POS_FKEYS.iQty || 'F2', desc: 'Quantity Input' },
       ];
       staticEntries.forEach(function (e) {
         grid.insertAdjacentHTML('beforeend', buildFkeyRow(e.key, e.desc));

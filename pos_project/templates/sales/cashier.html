@@ -2882,6 +2882,7 @@
         const CART_ITEM_RETURN_TOGGLE_URL = "{% url 'sales:cart_item_return_toggle' %}";
         const CART_RETURN_LOOKUP_URL = "{% url 'sales:cart_return_lookup' %}";
         const CART_RETURN_IMPORT_URL = "{% url 'sales:cart_return_import' %}";
+        const POS_LOGOUT_URL = "{% url 'pos_logout' %}";
         const CSRF_TOKEN = "{{ csrf_token }}";
         const POS_KEYS = {
             iDisc: "{{ pos_keys.pIDiscKey|escapejs }}",
@@ -2922,10 +2923,22 @@
             [String.fromCharCode(0xFE)]: 'F11',
             [String.fromCharCode(0xFF)]: 'F12',
         };
+        // Reverse map: unique 2-char storage codes → JS e.key name
+        const SPECIAL_KEY_MAP = {
+            'CR': 'Enter',     'EC': 'Escape',
+            'IC': 'Insert',    'DL': 'Delete',
+            'HM': 'Home',      'ND': 'End',
+            'PU': 'PageUp',    'PD': 'PageDown',
+            'AU': 'ArrowUp',   'AD': 'ArrowDown',
+            'AL': 'ArrowLeft', 'AR': 'ArrowRight',
+            'BK': 'Backspace', 'TB': 'Tab',
+        };
         // Translate all POS_KEYS values to their physical key names for keydown comparisons
+        // Handles: Clipper chr() → F1-F12, special 2-char codes → named keys, single char → direct
         const POS_FKEYS = {};
         for (const fn in POS_KEYS) {
-            const physKey = CHAR_TO_FKEY[POS_KEYS[fn]];
+            const rawVal = POS_KEYS[fn];
+            const physKey = CHAR_TO_FKEY[rawVal] || SPECIAL_KEY_MAP[rawVal] || (rawVal.length === 1 ? rawVal : null);
             if (physKey) POS_FKEYS[fn] = physKey;
         }
 

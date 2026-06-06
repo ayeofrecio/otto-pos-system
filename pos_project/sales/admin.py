@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.utils.html import format_html
+
+from setup.forms import PosFunctionForm
 
 from .models import (
     AccountingSummary,
@@ -173,8 +176,40 @@ class OpenTerminalAdmin(admin.ModelAdmin):
 
 @admin.register(POSFunction)
 class POSFunctionAdmin(admin.ModelAdmin):
-    list_display = ('code', 'desc', 'key_code')
+    form = PosFunctionForm
+    list_display = ('code', 'desc', 'assigned_key', 'edit_link')
+    list_display_links = ('code',)
     search_fields = ('code', 'desc')
+
+    def assigned_key(self, obj):
+        raw_value = (obj.key_code or '').strip()
+        if not raw_value:
+            return '—'
+        if len(raw_value) == 1 and 'A' <= raw_value.upper() <= 'Z':
+            return raw_value.upper()
+        if len(raw_value) == 1 and raw_value.isdigit():
+            return raw_value
+
+        char_to_fkey = {
+            chr(0xDC): 'F1', chr(0xD8): 'F2', chr(0xE9): 'F3', chr(0xF7): 'F4',
+            chr(0xF8): 'F5', chr(0xF9): 'F6', chr(0xFA): 'F7', chr(0xFB): 'F8',
+            chr(0xFC): 'F9', chr(0xFD): 'F10', chr(0xFE): 'F11', chr(0xFF): 'F12',
+        }
+        special_map = {
+            'CR': 'Enter', 'EC': 'Esc', 'IC': 'Ins', 'DL': 'Del',
+            'HM': 'Home', 'ND': 'End', 'PU': 'PgUp', 'PD': 'PgDn',
+            'AU': 'Arrow Up', 'AD': 'Arrow Down', 'AL': 'Arrow Left', 'AR': 'Arrow Right',
+            'BK': 'Bksp', 'TB': 'Tab',
+        }
+
+        return char_to_fkey.get(raw_value) or special_map.get(raw_value) or raw_value
+
+    assigned_key.short_description = 'Assigned Key'
+
+    def edit_link(self, obj):
+        return format_html('<a class="button" href="{}">Edit</a>', f'{obj.pk}/change/')
+
+    edit_link.short_description = 'Action'
 
 
 @admin.register(Color)

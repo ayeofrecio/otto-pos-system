@@ -3,41 +3,106 @@
     font-size: 14px;
     font-weight: bold;
     letter-spacing: 2px;
-    cursor: pointer;
+    cursor: default;
     background-color: #f8f9fa;
     border: 2px solid #ced4da;
     border-radius: 4px;
-    padding: 6px 50px 6px 10px;
+    padding: 6px 12px;
     transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
-    width: 220px;
+    width: 180px;
     color: #495057;
 }
 
-.key-capture-input.listening {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 3px rgba(13,110,253,0.2);
-    background-color: #fff;
-    outline: none;
+.key-picker-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    position: relative;
+    vertical-align: middle;
+    width: 100%;
+    max-width: 760px;
 }
 
-.key-capture-input.key-captured {
-    border-color: #198754;
-    box-shadow: 0 0 0 3px rgba(25,135,84,0.25);
-    background-color: #f0fff4;
+.key-picker-panel {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    min-width: 0;
+    background: #ffffff;
+    color: #1f2937;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+    padding: 0.75rem;
 }
 
-.key-badge {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: #0d6efd;
-    color: #fff;
-    font-family: 'Courier New', monospace;
-    font-size: 11px;
+.key-picker-header {
+    font-size: 13px;
     font-weight: 700;
-    padding: 2px 7px;
-    border-radius: 3px;
-    pointer-events: none;
-    letter-spacing: 1px;
+    color: #0f172a;
+    margin-bottom: 0.6rem;
+}
+
+.key-picker-sections {
+    display: flex;
+    flex-direction: column;
+}
+
+.key-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+    gap: 0.45rem;
+}
+
+.key-picker-section + .key-picker-section {
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.key-picker-section-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.45rem;
+}
+
+.key-picker-option {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #0f172a;
+    border-radius: 6px;
+    padding: 0.55rem 0.25rem;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.key-picker-option:hover {
+    border-color: #0d6efd;
+    background: #eaf2ff;
+}
+
+.key-picker-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
+}
+
+.key-picker-clear {
+    border: 1px solid #94a3b8;
+    background: #ffffff;
+    color: #334155;
+    border-radius: 6px;
+    padding: 0.45rem 0.8rem;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.key-picker-clear:hover {
+    border-color: #0d6efd;
+    color: #0d6efd;
 }
