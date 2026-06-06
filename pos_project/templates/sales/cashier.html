@@ -1165,6 +1165,220 @@
             color: #c9d1d9;
         }
 
+        /* Journal drawer */
+        .journal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 2200;
+        }
+
+        .journal-backdrop.open {
+            display: block;
+        }
+
+        .journal-drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            height: 100vh;
+            width: min(560px, 95vw);
+            background: #252b33;
+            border-left: 1px solid #2f3640;
+            box-shadow: -14px 0 28px rgba(0, 0, 0, 0.35);
+            transform: translateX(100%);
+            transition: transform 0.2s ease-out;
+            z-index: 2201;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .journal-drawer.open {
+            transform: translateX(0);
+        }
+
+        .journal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid #2f3640;
+        }
+
+        .journal-title {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #e6edf3;
+        }
+
+        .journal-close {
+            background: none;
+            border: none;
+            color: #8b949e;
+            font-size: 1.2rem;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .journal-close:hover {
+            color: #e6edf3;
+        }
+
+        .journal-filters {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 0.5rem;
+            align-items: end;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #2f3640;
+            background: #21272e;
+        }
+
+        .journal-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .journal-field label {
+            font-size: 0.72rem;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .journal-field input {
+            border: 1px solid #2f3640;
+            border-radius: 6px;
+            background: #2d343e;
+            color: #e6edf3;
+            padding: 0.45rem 0.6rem;
+        }
+
+        .journal-refresh {
+            border: 1px solid #2f3640;
+            border-radius: 6px;
+            background: #1e2328;
+            color: #e6edf3;
+            padding: 0.5rem 0.8rem;
+            cursor: pointer;
+            font-weight: 600;
+            height: 34px;
+        }
+
+        .journal-refresh:hover {
+            border-color: #6edb8f;
+            color: #6edb8f;
+        }
+
+        .journal-status {
+            min-height: 1.2rem;
+            padding: 0.45rem 1rem 0;
+            font-size: 0.78rem;
+            color: #8b949e;
+        }
+
+        .journal-status.error {
+            color: #f85149;
+        }
+
+        .journal-list {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 0.65rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+        }
+
+        .journal-empty {
+            color: #8b949e;
+            text-align: center;
+            padding: 1.25rem 0.5rem;
+            border: 1px dashed #2f3640;
+            border-radius: 6px;
+        }
+
+        .journal-card {
+            border: 1px solid #2f3640;
+            border-radius: 6px;
+            background: #1f252c;
+            overflow: hidden;
+        }
+
+        .journal-card-summary {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.4rem;
+            border: none;
+            background: transparent;
+            color: inherit;
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            cursor: pointer;
+        }
+
+        .journal-card-summary:hover {
+            background: #29323b;
+        }
+
+        .journal-main-meta {
+            display: flex;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            font-size: 0.78rem;
+            color: #8b949e;
+        }
+
+        .journal-trans-no {
+            font-weight: 700;
+            color: #e6edf3;
+            font-size: 0.9rem;
+        }
+
+        .journal-total {
+            font-weight: 700;
+            color: #6edb8f;
+            align-self: center;
+        }
+
+        .journal-details {
+            display: none;
+            border-top: 1px solid #2f3640;
+            padding: 0.55rem 0.75rem 0.75rem;
+            font-family: "Courier New", monospace;
+            font-size: 0.77rem;
+            color: #dbe2ea;
+            background: #242b33;
+        }
+
+        .journal-details.open {
+            display: block;
+        }
+
+        .journal-receipt-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.6rem;
+            padding: 0.1rem 0;
+        }
+
+        .journal-section-title {
+            margin-top: 0.45rem;
+            color: #8b949e;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+        }
+
+        .journal-sep {
+            border: none;
+            border-top: 1px dashed #4e5864;
+            margin: 0.4rem 0;
+        }
+
         .modal-overlay {
             display: none;
             position: fixed;
@@ -1627,6 +1841,14 @@
 
             .pay-layout {
                 grid-template-columns: 1fr;
+            }
+
+            .journal-filters {
+                grid-template-columns: 1fr;
+            }
+
+            .journal-refresh {
+                width: 100%;
             }
         }
 
@@ -2805,6 +3027,29 @@
         </div>
     </div>
 
+    <div id="journal-drawer-backdrop" class="journal-backdrop" onclick="closeJournalDrawer()"></div>
+    <aside id="journal-drawer" class="journal-drawer" aria-hidden="true">
+        <div class="journal-header">
+            <h2 class="journal-title">Transaction Journal</h2>
+            <button type="button" class="journal-close" onclick="closeJournalDrawer()" aria-label="Close journal">&#10005;</button>
+        </div>
+        <div class="journal-filters">
+            <div class="journal-field">
+                <label for="journal-from-date">From</label>
+                <input id="journal-from-date" type="date" value="{{ journal_default_date }}">
+            </div>
+            <div class="journal-field">
+                <label for="journal-to-date">To</label>
+                <input id="journal-to-date" type="date" value="{{ journal_default_date }}">
+            </div>
+            <button type="button" class="journal-refresh" id="journal-refresh-btn">Refresh</button>
+        </div>
+        <div id="journal-status" class="journal-status"></div>
+        <div id="journal-list" class="journal-list">
+            <div class="journal-empty">Open the journal to load transactions.</div>
+        </div>
+    </aside>
+
 
     <footer class="actions">
         <!-- Primary Actions -->
@@ -2858,6 +3103,11 @@
                 title="Suspend or retrieve transaction">
                 <span class="fn-key" id="key-susrt">F3</span><span class="fn-label">Suspend/Retrieve <span id="suspended-count-badge" class="suspend-badge{% if suspended_count|default:0 == 0 %} is-zero{% endif %}">{{ suspended_count|default:0 }}</span></span>
             </button>
+
+            <button type="button" class="btn-fn btn-fn-blue" id="journal-trigger-btn" onclick="openJournalDrawer()"
+                title="Open transaction journal">
+                <span class="fn-key" id="key-jrep">F5</span><span class="fn-label">Journal</span>
+            </button>
             
             <!-- Admin -->
             <button type="button" class="btn-fn btn-fn-red" onclick="openCloseTransModal()"
@@ -2882,6 +3132,7 @@
         const CART_ITEM_RETURN_TOGGLE_URL = "{% url 'sales:cart_item_return_toggle' %}";
         const CART_RETURN_LOOKUP_URL = "{% url 'sales:cart_return_lookup' %}";
         const CART_RETURN_IMPORT_URL = "{% url 'sales:cart_return_import' %}";
+        const JOURNAL_API_URL = "{% url 'sales:transaction_journal' %}";
         const POS_LOGOUT_URL = "{% url 'pos_logout' %}";
         const CSRF_TOKEN = "{{ csrf_token }}";
         const POS_KEYS = {
@@ -2978,7 +3229,8 @@
                 'key-susrt': 'iSusRt',
                 'key-ivoid': 'iVoid',
                 'key-voidtr': 'voidTr',
-                'key-ivoida': 'iVoidA'
+                'key-ivoida': 'iVoidA',
+                'key-jrep': 'jRep'
             };
             
             for (const [elemId, posKeyName] of Object.entries(keyMappings)) {

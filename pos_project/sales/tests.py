@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -15,6 +15,7 @@ from .models import (
     Tender,
     TempTransaction,
     TransactionHeader,
+    TransactionItem,
 )
 
 
@@ -257,7 +258,6 @@ class SuspendRetrieveFlowTests(TestCase):
         self.assertEqual(cashier_page.status_code, 200)
         self.assertContains(cashier_page, 'id="suspended-count-badge"')
         self.assertContains(cashier_page, '>1<')
-
     def test_retrieve_from_another_cashier_same_terminal(self):
         self._login(self.cashier1)
         self._add_item(self.item.icode)
@@ -460,3 +460,127 @@ class SuspendRetrieveFlowTests(TestCase):
         )
         self.assertEqual(void_prev.status_code, 200)
         self.assertTrue(void_prev.json().get("ok"))
+
+
+class TransactionJournalApiTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            username="journal_cashier",
+            password="testpass123",
+            role="cashier",
+            is_active=True,
+        )
+        self.client.force_login(self.user)
+
+        self.session = POSSession.objects.create(
+            cashier=self.user,
+            terminal_id="001",
+            store_id="001",
+            business_date=date.today(),
+            opening_cash=Decimal("500.00"),
+            status=POSSession.STATUS_OPEN,
+        )
+
+        self.today_header = TransactionHeader.objects.create(
+            session=self.session,
+            user_id=self.user.username[:10],
+            terminal_id="001",
+            store_id="001",
+            transaction_no="00000011",
+            transaction_date=date.today(),
+            transaction_time="10:15",
+            transaction_type="S",
+            subtotal=Decimal("100.00"),
+            amount_total=Decimal("90.00"),
+            amount_tendered=Decimal("100.00"),
+            change_amount=Decimal("10.00"),
+            trans_disc_label="Promo",
+            trans_disc_pct=Decimal("10.00"),
+            trans_disc_amount=Decimal("10.00"),
+        )
+        TransactionItem.objects.create(
+            header=self.today_header,
+            item_code="SKU-A",
+            item_description="Item A",
+            item_qty=Decimal("1"),
+            item_price=Decimal("100.00"),
+            item_price_ext=Decimal("100.00"),
+        )
+        Payment.objects.create(
+            header=self.today_header,
+            pcode="P01",
+            tender_desc="Cash",
+            amount=Decimal("100.00"),
+        )
+
+        self.prev_header = TransactionHeader.objects.create(
+            session=self.session,
+            user_id=self.user.username[:10],
+            terminal_id="001",
+            store_id="001",
+            transaction_no="00000010",
+            transaction_date=date.today() - timedelta(days=1),
+            transaction_time="09:00",
+            transaction_type="S",
+            subtotal=Decimal("50.00"),
+            amount_total=Decimal("50.00"),
+            amount_tendered=Decimal("50.00"),
+            change_amount=Decimal("0.00"),
+        )
+        TransactionItem.objects.create(
+            header=self.prev_header,
+            item_code="SKU-B",
+            item_description="Item B",
+            item_qty=Decimal("1"),
+            item_price=Decimal("50.00"),
+            item_price_ext=Decimal("50.00"),
+        )
+        Payment.objects.create(
+            header=self.prev_header,
+            pcode="P01",
+            tender_desc="Cash",
+            amount=Decimal("50.00"),
+        )
+
+    def test_transaction_journal_invalid_date_returns_400(self):
+        response = self.client.get(reverse("sales:transaction_journal"), {"from_date": "2026-99-99"})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json().get("ok", True))
+
+    def test_transaction_journal_pagination_and_nested_data(self):
+        response = self.client.get(
+            reverse("sales:transaction_journal"),
+            {
+                "from_date": (date.today() - timedelta(days=1)).isoformat(),
+                "to_date": date.today().isoformat(),
+                "page_size": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload.get("ok"))
+        self.assertEqual(len(payload.get("transactions", [])), 1)
+        self.assertTrue(payload.get("has_more"))
+        self.assertIsNotNone(payload.get("next_cursor"))
+
+        first = payload["transactions"][0]
+        self.assertIn("items", first)
+        self.assertIn("payments", first)
+        self.assertGreaterEqual(len(first["items"]), 1)
+        self.assertGreaterEqual(len(first["payments"]), 1)
+
+        response_page_2 = self.client.get(
+            reverse("sales:transaction_journal"),
+            {
+                "from_date": (date.today() - timedelta(days=1)).isoformat(),
+                "to_date": date.today().isoformat(),
+                "page_size": 1,
+                "cursor": payload["next_cursor"],
+            },
+        )
+        self.assertEqual(response_page_2.status_code, 200)
+        payload_page_2 = response_page_2.json()
+        self.assertTrue(payload_page_2.get("ok"))
+        self.assertEqual(len(payload_page_2.get("transactions", [])), 1)

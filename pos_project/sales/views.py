@@ -15,6 +15,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.management import call_command, CommandError
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from users.models import POSSession
@@ -485,6 +486,7 @@ def cashier_view(request):
         "store_name": _get_store_name(),
         "date": biz_date.strftime("%A %b %d %Y"),
         "time": now.strftime("%I:%M:%S %p"),
+        "journal_default_date": biz_date.strftime("%Y-%m-%d"),
         "cashier": request.user.get_full_name() or request.user.username,
         "receipt_no": trans_no or _peek_next_transaction_no(),
         "cart_lines": cart_lines,
@@ -2059,6 +2061,144 @@ def item_search(request):
             })
 
     return JsonResponse({"results": results})
+
+
+def _parse_journal_date(value, field_name):
+    """Parse yyyy-mm-dd date values for journal filters."""
+    raw = (value or "").strip()
+    if not raw:
+        return None, None
+
+    parsed = parse_date(raw)
+    if parsed is None:
+        return None, f"Invalid {field_name}. Use YYYY-MM-DD."
+    return parsed, None
+
+
+def _serialize_journal_header(header):
+    """Serialize one TransactionHeader and prefetched details for journal UI."""
+    items = []
+    for line in sorted(header.items.all(), key=lambda obj: obj.id):
+        items.append({
+            "id": line.id,
+            "description": line.item_description or line.item_code or "",
+            "item_code": line.item_code or "",
+            "qty": str(line.item_qty or Decimal("0")),
+            "price": str(line.item_price or Decimal("0")),
+            "discount": str(line.item_discount or Decimal("0")),
+            "ext": str(line.item_price_ext or Decimal("0")),
+            "size": line.item_size or "",
+            "color": line.item_color or "",
+            "discount_code": line.discount_code or "",
+        })
+
+    payments = []
+    for payment in sorted(header.payments.all(), key=lambda obj: obj.id):
+        payments.append({
+            "id": payment.id,
+            "pcode": payment.pcode or "",
+            "desc": payment.tender_desc or payment.pcode or "",
+            "amount": str(payment.amount or Decimal("0")),
+            "reference": payment.payment_reference or "",
+        })
+
+    return {
+        "id": header.id,
+        "transaction_no": header.transaction_no,
+        "date": header.transaction_date.isoformat() if header.transaction_date else "",
+        "time": header.transaction_time or "",
+        "user_id": header.user_id or "",
+        "transaction_type": header.transaction_type or "",
+        "return_code": header.return_code or "",
+        "subtotal": str(header.subtotal or Decimal("0")),
+        "trans_disc_label": header.trans_disc_label or "",
+        "trans_disc_pct": str(header.trans_disc_pct or Decimal("0")),
+        "trans_disc_amount": str(header.trans_disc_amount or Decimal("0")),
+        "total": str(header.amount_total or Decimal("0")),
+        "amount_tendered": str(header.amount_tendered or Decimal("0")),
+        "change_amount": str(header.change_amount or Decimal("0")),
+        "item_count": len(items),
+        "payment_count": len(payments),
+        "items": items,
+        "payments": payments,
+    }
+
+
+@login_required
+@require_open_session
+@require_http_methods(["GET"])
+def transaction_journal(request):
+    """Return paginated transaction journal rows for the cashier drawer."""
+    session = get_current_session(request)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open session found."}, status=400)
+
+    default_date = session.business_date or datetime.date.today()
+
+    from_date, from_error = _parse_journal_date(request.GET.get("from_date"), "from_date")
+    if from_error:
+        return JsonResponse({"ok": False, "error": from_error}, status=400)
+
+    to_date, to_error = _parse_journal_date(request.GET.get("to_date"), "to_date")
+    if to_error:
+        return JsonResponse({"ok": False, "error": to_error}, status=400)
+
+    if from_date is None:
+        from_date = default_date
+    if to_date is None:
+        to_date = from_date
+
+    if from_date > to_date:
+        return JsonResponse({"ok": False, "error": "from_date must be earlier than or equal to to_date."}, status=400)
+
+    try:
+        page_size = int(request.GET.get("page_size") or 20)
+    except (TypeError, ValueError):
+        page_size = 20
+    page_size = max(5, min(page_size, 50))
+
+    cursor_raw = (request.GET.get("cursor") or "").strip()
+    cursor = None
+    if cursor_raw:
+        try:
+            cursor = int(cursor_raw)
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "error": "Invalid cursor."}, status=400)
+        if cursor <= 0:
+            return JsonResponse({"ok": False, "error": "Invalid cursor."}, status=400)
+
+    qs = (
+        TransactionHeader.objects.filter(
+            store_id=session.store_id,
+            terminal_id=session.terminal_id,
+            transaction_date__range=(from_date, to_date),
+        )
+        .order_by("-id")
+        .prefetch_related("items", "payments")
+    )
+
+    if cursor:
+        qs = qs.filter(id__lt=cursor)
+
+    rows = list(qs[: page_size + 1])
+    has_more = len(rows) > page_size
+    if has_more:
+        rows = rows[:page_size]
+
+    payload = [_serialize_journal_header(row) for row in rows]
+    next_cursor = payload[-1]["id"] if has_more and payload else None
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "from_date": from_date.isoformat(),
+            "to_date": to_date.isoformat(),
+            "page_size": page_size,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+            "transactions": payload,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ urlpatterns = [
     path("pay/", views.pay_view, name="pay"),
     path("pay/complete/", views.payment_complete, name="payment_complete"),
     path("receipt/", views.receipt_view, name="receipt"),
+    path("journal/", views.transaction_journal, name="transaction_journal"),
     path("item-search/", views.item_search, name="item_search"),
     path("open-session/", views.open_session, name="open_session"),
     path("close-session/", views.close_session, name="close_session"),

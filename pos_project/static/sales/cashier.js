@@ -359,6 +359,12 @@
       return;
     }
 
+    if (POS_FKEYS.jRep && evt.key === POS_FKEYS.jRep) {
+      evt.preventDefault();
+      window.openJournalDrawer();
+      return;
+    }
+
     if (evt.key === POS_FKEYS.sOff) {
       evt.preventDefault();
       if (typeof POS_LOGOUT_URL !== 'undefined' && POS_LOGOUT_URL) {
@@ -406,12 +412,14 @@
       const fkeyModal = document.getElementById('fkey-help-modal');
       const itemReturnModal = document.getElementById('item-return-modal');
       const suspendModal = document.getElementById('suspend-modal');
+      const journalDrawer = document.getElementById('journal-drawer');
       if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
       else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
       else if (poModal && poModal.classList.contains('open')) { window.closePriceOverrideModal(); }
       else if (itemReturnModal && itemReturnModal.classList.contains('open')) { window.closeItemReturnModal(); }
       else if (suspendModal && suspendModal.classList.contains('open')) { window.closeSuspendModal(); }
+      else if (journalDrawer && journalDrawer.classList.contains('open')) { window.closeJournalDrawer(); }
       else if (fkeyModal && fkeyModal.classList.contains('open')) { window.closeFkeyHelpModal(); }
       else if (closeTransModal && closeTransModal.classList.contains('open')) { window.closeCloseTransModal(); }
     }
@@ -1104,6 +1112,219 @@
     const btn = document.getElementById('pay-trigger-btn');
     if (btn) { btn.click(); }
   };
+
+  // ---------------------------------------------------------------------------
+  // Journal Drawer
+  // ---------------------------------------------------------------------------
+  const journalState = {
+    loading: false,
+    hasMore: false,
+    nextCursor: null,
+    loadedOnce: false,
+    expanded: {},
+  };
+
+  function setJournalStatus(message, isError) {
+    const status = document.getElementById('journal-status');
+    if (!status) { return; }
+    status.textContent = message || '';
+    status.classList.toggle('error', !!isError);
+  }
+
+  function getJournalFilters() {
+    const fromInput = document.getElementById('journal-from-date');
+    const toInput = document.getElementById('journal-to-date');
+    return {
+      fromDate: fromInput ? fromInput.value : '',
+      toDate: toInput ? toInput.value : '',
+    };
+  }
+
+  function journalEscape(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function renderJournalList(rows, appendMode) {
+    const listEl = document.getElementById('journal-list');
+    if (!listEl) { return; }
+
+    if (!appendMode) {
+      listEl.innerHTML = '';
+    }
+
+    if (!rows.length && !appendMode) {
+      listEl.innerHTML = '<div class="journal-empty">No transactions found for the selected range.</div>';
+      return;
+    }
+
+    rows.forEach(function (row) {
+      const txId = String(row.id || '');
+      const isOpen = !!journalState.expanded[txId];
+      const metaBits = [
+        row.date || '',
+        row.time || '',
+        row.user_id || '',
+        'Items: ' + String(row.item_count || 0),
+      ].filter(Boolean);
+
+      const discountBlock = ((row.trans_disc_amount && row.trans_disc_amount !== '0' && row.trans_disc_amount !== '0.0000')
+        ? '<div class="journal-receipt-row"><span>Subtotal</span><span>' + journalEscape(row.subtotal || '0') + '</span></div>' +
+          '<div class="journal-receipt-row"><span>' + journalEscape(row.trans_disc_label || 'Discount') + ' (' + journalEscape(row.trans_disc_pct || '0') + '%)</span><span>-' + journalEscape(row.trans_disc_amount || '0') + '</span></div>'
+        : '');
+
+      const itemsHtml = (row.items || []).map(function (item) {
+        return '<div>' +
+          '<div>' + journalEscape(item.description || '') + '</div>' +
+          '<div class="journal-receipt-row"><span>' + journalEscape(item.qty || '0') + ' x ' + journalEscape(item.price || '0') + '</span><span>' + journalEscape(item.ext || '0') + '</span></div>' +
+          '</div>';
+      }).join('');
+
+      const paymentsHtml = (row.payments || []).map(function (pay) {
+        const ref = pay.reference ? (' [' + journalEscape(pay.reference) + ']') : '';
+        return '<div class="journal-receipt-row"><span>' + journalEscape(pay.desc || pay.pcode || '') + ref + '</span><span>' + journalEscape(pay.amount || '0') + '</span></div>';
+      }).join('');
+
+      const cardHtml =
+        '<article class="journal-card" data-journal-id="' + journalEscape(txId) + '">' +
+          '<button type="button" class="journal-card-summary" data-journal-toggle="' + journalEscape(txId) + '">' +
+            '<div>' +
+              '<div class="journal-trans-no">SI #' + journalEscape(row.transaction_no || '') + '</div>' +
+              '<div class="journal-main-meta">' + metaBits.map(journalEscape).join(' · ') + '</div>' +
+            '</div>' +
+            '<div class="journal-total">' + journalEscape(row.total || '0') + '</div>' +
+          '</button>' +
+          '<div class="journal-details' + (isOpen ? ' open' : '') + '" data-journal-details="' + journalEscape(txId) + '">' +
+            '<div class="journal-section-title">Header</div>' +
+            '<div class="journal-receipt-row"><span>Type</span><span>' + journalEscape(row.transaction_type || 'S') + '</span></div>' +
+            '<div class="journal-receipt-row"><span>Tendered</span><span>' + journalEscape(row.amount_tendered || '0') + '</span></div>' +
+            '<div class="journal-receipt-row"><span>Change</span><span>' + journalEscape(row.change_amount || '0') + '</span></div>' +
+            '<hr class="journal-sep">' +
+            '<div class="journal-section-title">Items</div>' +
+            itemsHtml +
+            '<hr class="journal-sep">' +
+            discountBlock +
+            '<div class="journal-receipt-row"><strong>Total</strong><strong>' + journalEscape(row.total || '0') + '</strong></div>' +
+            '<hr class="journal-sep">' +
+            '<div class="journal-section-title">Payments</div>' +
+            paymentsHtml +
+          '</div>' +
+        '</article>';
+
+      listEl.insertAdjacentHTML('beforeend', cardHtml);
+    });
+  }
+
+  function loadJournal(options) {
+    const opts = options || {};
+    const appendMode = !!opts.append;
+    if (journalState.loading) { return; }
+
+    const filters = getJournalFilters();
+    if (!filters.fromDate || !filters.toDate) {
+      setJournalStatus('Select both dates before refreshing.', true);
+      return;
+    }
+
+    journalState.loading = true;
+    setJournalStatus(appendMode ? 'Loading more transactions...' : 'Loading transactions...', false);
+
+    const params = new URLSearchParams();
+    params.set('from_date', filters.fromDate);
+    params.set('to_date', filters.toDate);
+    params.set('page_size', '20');
+    if (appendMode && journalState.nextCursor) {
+      params.set('cursor', String(journalState.nextCursor));
+    }
+
+    fetch(JOURNAL_API_URL + '?' + params.toString(), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          return { ok: r.ok, data: data || {} };
+        }).catch(function () {
+          return { ok: r.ok, data: {} };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          const msg = res.data.error || 'Failed to load journal transactions.';
+          setJournalStatus(msg, true);
+          return;
+        }
+
+        const rows = Array.isArray(res.data.transactions) ? res.data.transactions : [];
+        renderJournalList(rows, appendMode);
+        journalState.nextCursor = res.data.next_cursor || null;
+        journalState.hasMore = !!res.data.has_more;
+        journalState.loadedOnce = true;
+        setJournalStatus(journalState.hasMore ? 'Scroll down to load more.' : 'Up to date.', false);
+      })
+      .catch(function () {
+        setJournalStatus('Failed to load journal transactions.', true);
+      })
+      .finally(function () {
+        journalState.loading = false;
+      });
+  }
+
+  window.openJournalDrawer = function () {
+    const drawer = document.getElementById('journal-drawer');
+    const backdrop = document.getElementById('journal-drawer-backdrop');
+    if (!drawer || !backdrop) { return; }
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    backdrop.classList.add('open');
+    loadJournal({ append: false });
+  };
+
+  window.closeJournalDrawer = function () {
+    const drawer = document.getElementById('journal-drawer');
+    const backdrop = document.getElementById('journal-drawer-backdrop');
+    if (drawer) {
+      drawer.classList.remove('open');
+      drawer.setAttribute('aria-hidden', 'true');
+    }
+    if (backdrop) {
+      backdrop.classList.remove('open');
+    }
+    const barcodeInput = document.getElementById('barcode-input');
+    if (barcodeInput) { barcodeInput.focus(); }
+  };
+
+  const journalRefreshBtn = document.getElementById('journal-refresh-btn');
+  if (journalRefreshBtn) {
+    journalRefreshBtn.addEventListener('click', function () {
+      loadJournal({ append: false });
+    });
+  }
+
+  const journalList = document.getElementById('journal-list');
+  if (journalList) {
+    journalList.addEventListener('scroll', function () {
+      if (!journalState.hasMore || journalState.loading) { return; }
+      const remaining = journalList.scrollHeight - journalList.scrollTop - journalList.clientHeight;
+      if (remaining < 120) {
+        loadJournal({ append: true });
+      }
+    });
+
+    journalList.addEventListener('click', function (evt) {
+      const trigger = evt.target.closest('[data-journal-toggle]');
+      if (!trigger) { return; }
+      const txId = trigger.getAttribute('data-journal-toggle');
+      const details = journalList.querySelector('[data-journal-details="' + txId + '"]');
+      if (!details) { return; }
+      const nowOpen = !details.classList.contains('open');
+      details.classList.toggle('open', nowOpen);
+      journalState.expanded[txId] = nowOpen;
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // Function Key Help Modal
