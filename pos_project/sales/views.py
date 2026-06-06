@@ -38,6 +38,7 @@ from .pos_constants import (
     TRTYPE_VOID_TRANS_LEGACY,
     VOID_TRANSACTION_TYPES_ALL,
 )
+from .accounting_service import save_accounting_summary
 from .services import get_business_date
 from .transaction_services.transaction_service import TransactionService, RecordCode
 
@@ -1947,6 +1948,9 @@ def payment_complete(request):
         )
         for t in tender_entries
     ])
+
+    # Persist ACCT row increments for this completed transaction.
+    save_accounting_summary(header)
 
     # --- Clipper-style flat transaction log (TransactionLog / TLOG) ---
     try:
