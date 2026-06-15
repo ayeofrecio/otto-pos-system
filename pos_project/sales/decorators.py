@@ -15,10 +15,10 @@ def require_open_session(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
 
-#         is_ajax = (
-#             request.headers.get("X-Requested-With") == "XMLHttpRequest"
-#             or bool(request.headers.get("HX-Request"))
-#         )
+        is_ajax = (
+            request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or bool(request.headers.get("HX-Request"))
+        )
 
         user = request.user
 

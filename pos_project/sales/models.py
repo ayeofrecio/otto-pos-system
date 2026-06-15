@@ -468,6 +468,7 @@ class SuspendedTransaction(models.Model):
     item_class         = models.CharField(max_length=4, blank=True)    # ICLASS
     item_size          = models.CharField(max_length=3, blank=True)    # ISIZE
     item_color         = models.CharField(max_length=3, blank=True)    # ICOLOR
+    item_color_desc    = models.CharField(max_length=15, blank=True)    # ICOLOR
     item_type          = models.CharField(max_length=1, blank=True)    # ITYPE
     item_tax_code      = models.CharField(max_length=1, blank=True)    # ITAXC
     table_id           = models.CharField(max_length=3, blank=True)    # TABLEID
@@ -954,7 +955,7 @@ class TerminalReceiptHeader(models.Model):
     line_number = models.PositiveSmallIntegerField()
     header_text = models.CharField(max_length=40)
     is_capitalized = models.BooleanField(default=False)
-
+    # for_report = models.BooleanField(default=False)
     class Meta:
         db_table = "terminal_receipt_headers"
         ordering = ["line_number"]

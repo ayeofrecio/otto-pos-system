@@ -3056,7 +3056,37 @@
             </div>
         </div>
     </div>
+    <div class="modal-overlay" id="suspend-modal" onclick="closeSuspendModalOutside(event)">
+        <div class="modal return-modal">
+            <div class="modal-header">
+                <h2>Transaction Suspend / Retrieve</h2>
+                <button class="modal-close" onclick="closeSuspendModal()">&#10005;</button>
+            </div>
+            <div class="return-modal-body">
+                <div class="return-modal-line">Suspend current unpaid cart or retrieve a parked transaction for this terminal.</div>
 
+                <div class="return-lookup-row" style="margin-bottom:10px;">
+                    <button type="button" class="btn btn-secondary" onclick="suspendCurrentTransaction()">Suspend Current</button>
+                    <button type="button" class="btn btn-secondary" onclick="loadSuspendedTransactions()">Refresh List</button>
+                </div>
+
+                <label class="return-modal-label" for="suspend-search-input">Find Transaction No.</label>
+                <div class="return-lookup-row">
+                    <input id="suspend-search-input" class="return-modal-input" type="text" maxlength="8" placeholder="e.g. 00001234">
+                    <button type="button" class="btn btn-secondary" onclick="loadSuspendedTransactions()">Search</button>
+                </div>
+
+                <div class="return-receipt-results" id="suspended-results">
+                    <div class="return-receipt-empty">No suspended transactions loaded yet.</div>
+                </div>
+
+                <div class="return-modal-error" id="suspend-error"></div>
+            </div>
+            <div class="disc-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSuspendModal()">Close</button>
+            </div>
+        </div>
+    </div>
 
     <footer class="actions">
         <!-- Primary Actions -->

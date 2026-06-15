@@ -25,7 +25,7 @@ from users.models import POSSession, POSSessionUsers
 from .color_lookup import get_color_description
 from .size_lookup import get_size_description
 from .decorators import require_open_session
-from .models import Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem, SuspendedTransaction
+from .models import POSTransCounter, Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem, SuspendedTransaction
 from .pos_constants import (
     RCODE_ITEM_VOID,
     TAG_ITEM_RETURN,
@@ -1081,7 +1081,7 @@ def cart_new(request):
             terminal_id=TERMINAL_ID,
             store_id=STORE_ID,
             transaction_no=trans_no,
-        ).delete() # This needs to be configured to suspend instead of delete in case we want to support suspended transactions in the future
+        ).delete() # TODO: This needs to be configured to suspend instead of delete in case we want to support suspended transactions in the future
         _save_current_transaction_no(trans_no)
 
     new_trans = _get_next_transaction_no()
@@ -3818,3 +3818,12 @@ def update_from_csv(request):
         return JsonResponse({"status": "error", "message": f"CSV file not found: {e}"}, status=400)
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+
+@login_required
+@require_open_session
+def backend_series_report(request):
+    
+    return True
+
