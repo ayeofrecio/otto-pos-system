@@ -15,8 +15,7 @@ from sales.models import (
     TerminalReceiptHeader,
 #     TerminalSetup,
 )
-)
-from settings.models import TerminalSetup
+from sales.models import TerminalSetup
 
 
 class Command(BaseCommand):

@@ -83,7 +83,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME':     os.environ.get('DB_NAME', 'posdb'),
+        'NAME':     os.environ.get('DB_NAME', 'pos_prod'),
         'USER':     os.environ.get('DB_USER', 'root'),
         # 'PASSWORD': os.environ.get('DB_PASSWORD', 'drewbrinas'),
         'PASSWORD': os.environ.get('DB_PASSWORD', 'andrew'), # pc

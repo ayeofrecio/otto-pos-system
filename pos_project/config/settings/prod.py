@@ -6,8 +6,18 @@ Co-dev never touches prod.py.
 
 from .base import *  # noqa: F401, F403
 import os
+import environ
 
-DEBUG = False
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+env = environ.Env(
+    DEBUG=(bool, False)  # Defaults to False for production safety!
+)
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+DEBUG = env('DEBUG')
+
+# ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
 

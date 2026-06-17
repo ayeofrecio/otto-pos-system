@@ -83,7 +83,7 @@ class Command(BaseCommand):
                     icode=row["STOCKNO"].strip(),
                     barcode=row["BARCODE"].strip(),
                     color=row.get("COLOR_CODE", "").strip(),
-                    size=row.get("SIZE_CODE", "").strip(),
+                    size=row.get("SIZE_DESC", "").strip(),
 
                     stocks1=Decimal("0"),
                     stocks2=Decimal("0"),

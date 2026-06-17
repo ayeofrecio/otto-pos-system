@@ -435,9 +435,9 @@ def admin_posnbr_init(request):
 
 
 # Constants
-terminal_config = _get_terminal_config()
-VAT_RATE = terminal_config.vat if terminal_config and terminal_config.vat else Decimal("0.12")
-# VAT_RATE = Decimal("0.12")
+# terminal_config = _get_terminal_config()
+# VAT_RATE = terminal_config.vat if terminal_config and terminal_config.vat else Decimal("0.12")
+VAT_RATE = Decimal("0.12")
 
 # ---------------------------------------------------------------------------
 # Open session view

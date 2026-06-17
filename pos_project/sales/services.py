@@ -291,7 +291,7 @@ def _load_item_details(filepath):
                 barcode=row["BARCODE"].strip(),
                 color=row.get("COLOR_CODE", "").strip(),
                 color_desc=row.get("COLOR_DESC", "").strip(),
-                size=row.get("SIZE_CODE", "").strip(),
+                size=row.get("SIZE_DESC", "").strip(),
                 stocks1=Decimal("0"),
                 stocks2=Decimal("0"),
                 cost=Decimal("0"),
