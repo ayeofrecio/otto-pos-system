@@ -1233,13 +1233,29 @@
     const rows = results.map(function (item) {
       const sizeLabel = item.size_display || item.size || '';
       const colorLabel = item.color_display || item.color_desc || '';
-      const variant = [sizeLabel, colorLabel].filter(Boolean).join('/');
+      // const variant = [sizeLabel, colorLabel].filter(Boolean).join('/');
+      const variant = [colorLabel, sizeLabel].filter(Boolean).join('/');
       const variantHtml = variant ? '<span class="search-result-variant">(' + variant + ')</span>' : '';
       return '<div class="search-result" onclick="selectSearchResult(\'' +
         escHtml(item.barcode) + '\')" title="Click to add to cart">' +
-        '<span class="search-result-desc">' + escHtml(item.description) +
-        ' ' + variantHtml + '</span>' +
-        '<span class="search-result-code">' + escHtml(item.code) + '</span>' +
+        // '<span class="search-result-desc">' + escHtml(item.description) +
+        // ' ' + variantHtml + '</span>' 
+        '<div class="flex flex-col gap-1">' + 
+          
+          // Row 1: Description
+          '<div class="flex flex-row">' +
+            '<span class="search-result-desc">' + escHtml(item.description) + '</span>' +
+          '</div>' +
+          
+          // Row 2: Variant (Only renders if variantHtml is not empty)
+          (variantHtml ? 
+            '<div class="flex flex-row">' +
+              '<span>' + variantHtml + '</span>' +
+            '</div>' : ''
+          ) +
+
+        '</div>' 
+        + '<span class="search-result-code">' + escHtml(item.code) + '</span>' +
         '<span class="search-result-variant">' + escHtml(item.barcode) + '</span>' +
         '<span class="search-result-price">₱' + parseFloat(item.price).toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '</span>' +
         '</div>';

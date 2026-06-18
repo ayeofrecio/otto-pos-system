@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Series Report — {{ business_date }}</title>
+<style>
+  /* ------------------------------------------------------------------ */
+  /* PAGE SIZE — controlled by ?paper= query param                       */
+  /* ------------------------------------------------------------------ */
+  /* {% if paper == "long" %}
+  @page {
+    size: 13in 8.5in landscape;
+    margin: 0.5in 0.5in 0.6in 0.5in;
+  }
+  {% elif paper == "letter" %}
+  @page {
+    size: letter landscape;
+    margin: 0.5in 0.5in 0.6in 0.5in;
+  }
+  {% else %}{# default: a4 #}
+  @page {
+    size: A4 landscape;
+    margin: 12mm 12mm 14mm 12mm;
+  }
+  {% endif %} */
+
+  /* Page number footer */
+  @page {
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #555;
+    }
+    @bottom-left {
+      content: "Printed: {{ now|date:'Y-m-d H:i' }}";
+      font-size: 8pt;
+      color: #555;
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* BASE RESET                                                          */
+  /* ------------------------------------------------------------------ */
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8.5pt;
+    color: #000;
+    background: #fff;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* TERMINAL HEADER                                                     */
+  /* ------------------------------------------------------------------ */
+  .report-header {
+    text-align: center;
+    margin-bottom: 6pt;
+    border-bottom: 1.5pt solid #000;
+    padding-bottom: 5pt;
+  }
+
+  .report-header .header-line {
+    font-size: 9pt;
+    line-height: 1.35;
+  }
+
+  .report-header .header-line:first-child {
+    font-size: 12pt;
+    font-weight: bold;
+  }
+
+  .report-title {
+    margin-top: 5pt;
+    font-size: 11pt;
+    font-weight: bold;
+    letter-spacing: 0.5pt;
+    text-transform: uppercase;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* REPORT META (session info, SI range)                                */
+  /* ------------------------------------------------------------------ */
+  .report-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5pt;
+    font-size: 8pt;
+  }
+
+  .report-meta .meta-block {
+    line-height: 1.6;
+  }
+
+  .report-meta .meta-block span {
+    font-weight: bold;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* DETAIL TABLE                                                        */
+  /* ------------------------------------------------------------------ */
+  table.detail {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8pt;
+    table-layout: fixed;
+  }
+
+  table.detail thead tr {
+    background-color: #1a1a2e;
+    color: #fff;
+  }
+
+  table.detail thead th {
+    padding: 4pt 3pt;
+    text-align: center;
+    font-size: 7.5pt;
+    font-weight: bold;
+    border: 0.5pt solid #333;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  table.detail tbody tr:nth-child(even) {
+    background-color: #f5f5f5;
+  }
+
+  table.detail tbody tr:hover {
+    background-color: #eaf0fb;
+  }
+
+  table.detail tbody td {
+    padding: 3pt 3pt;
+    border: 0.5pt solid #ccc;
+    vertical-align: middle;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* Column widths */
+  .col-si       { width: 7%; }
+  .col-date     { width: 7%; }
+  .col-itemno   { width: 10%; }
+  .col-itemname { width: 18%; white-space: normal !important; }
+  .col-color    { width: 8%; }
+  .col-size     { width: 5%; }
+  .col-qty      { width: 6%; }
+  .col-amount   { width: 9%; }
+  .col-vat      { width: 8%; }
+  .col-payment  { width: 14%; white-space: normal !important; }
+
+  /* Alignment */
+  .text-right  { text-align: right; }
+  .text-center { text-align: center; }
+  .text-left   { text-align: left; }
+
+  /* ------------------------------------------------------------------ */
+  /* TOTALS ROW                                                          */
+  /* ------------------------------------------------------------------ */
+  table.detail tfoot tr {
+    background-color: #e8e8e8;
+    font-weight: bold;
+  }
+
+  table.detail tfoot td {
+    padding: 4pt 3pt;
+    border: 0.8pt solid #333;
+    font-size: 8.5pt;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* SUMMARY BLOCK (below table)                                         */
+  /* ------------------------------------------------------------------ */
+  .report-summary {
+    margin-top: 8pt;
+    font-size: 8pt;
+    border-top: 1pt solid #999;
+    padding-top: 5pt;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .summary-table {
+    border-collapse: collapse;
+    min-width: 260pt;
+  }
+
+  .summary-table td {
+    padding: 2pt 6pt;
+    border: 0.5pt solid #ccc;
+  }
+
+  .summary-table .lbl {
+    font-weight: bold;
+    background: #f0f0f0;
+    text-align: right;
+  }
+
+  .summary-table .val {
+    text-align: right;
+    min-width: 80pt;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* SIGNATURE BLOCK                                                     */
+  /* ------------------------------------------------------------------ */
+  .signature-block {
+    margin-top: 18pt;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8pt;
+  }
+
+  .sig-line {
+    text-align: center;
+    min-width: 140pt;
+  }
+
+  .sig-line .line {
+    border-top: 0.8pt solid #000;
+    margin-bottom: 3pt;
+  }
+
+  .sig-line .label {
+    font-size: 7.5pt;
+    color: #333;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* NO DATA                                                             */
+  /* ------------------------------------------------------------------ */
+  .no-data {
+    text-align: center;
+    padding: 20pt;
+    color: #888;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ================================================================ -->
+  <!-- TERMINAL HEADER                                                   -->
+  <!-- ================================================================ -->
+  <div class="report-header">
+    {% for line in header_lines %}
+      <div class="header-line">{{ line }}</div>
+    {% empty %}
+      <div class="header-line">{{ store_id }} — Terminal {{ terminal_id }}</div>
+    {% endfor %}
+    <div class="report-title">Series Sales Report</div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- REPORT META                                                       -->
+  <!-- ================================================================ -->
+  <div class="report-meta">
+    <div class="meta-block">
+      <div>Business Date:&nbsp;<span>{{ business_date|date:"F d, Y" }}</span></div>
+      <div>Store ID:&nbsp;<span>{{ store_id }}</span>&nbsp;&nbsp;
+           Terminal:&nbsp;<span>{{ terminal_id }}</span></div>
+      <div>Session:&nbsp;<span>#{{ session.id }}</span>&nbsp;&nbsp;
+           Status:&nbsp;<span>{{ session.get_status_display }}</span></div>
+      <div>Opened by:&nbsp;<span>{{ opened_by }}</span>
+           {% if session.closed_by %}&nbsp;/ Closed by:&nbsp;<span>{{ closed_by }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="meta-block" style="text-align:right;">
+      <div>Beg. SI No.:&nbsp;<span>{{ beg_si }}</span></div>
+      <div>End. SI No.:&nbsp;<span>{{ end_si }}</span></div>
+      <div>Total Transactions:&nbsp;<span>{{ transaction_count }}</span></div>
+      <div>VAT Rate:&nbsp;<span>{{ vat_rate|floatformat:0 }}%</span></div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- DETAIL TABLE                                                      -->
+  <!-- ================================================================ -->
+  {% if rows %}
+  <table class="detail">
+    <thead>
+      <tr>
+        <th class="col-si text-center">SI No.</th>
+        <th class="col-date text-center">Date</th>
+        <th class="col-itemno text-center">Item No.</th>
+        <th class="col-itemname text-center">Item Name</th>
+        <th class="col-color text-center">Color</th>
+        <th class="col-size text-center">Size</th>
+        <th class="col-qty text-right">Qty Sold</th>
+        <th class="col-amount text-right">Amount</th>
+        <th class="col-vat text-right">VAT</th>
+        <th class="col-payment text-center">Mode of Payment</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="col-si text-center">{{ row.si_no }}</td>
+        <td class="col-date text-center">{{ row.date|date:"m/d/Y" }}</td>
+        <td class="col-itemno text-left">{{ row.item_no }}</td>
+        <td class="col-itemname text-left">{{ row.item_name }}</td>
+        <td class="col-color text-center">{{ row.color }}</td>
+        <td class="col-size text-center">{{ row.size }}</td>
+        <td class="col-qty text-right">{{ row.qty|floatformat:0 }}</td>
+        <td class="col-amount text-right">{{ row.amount|floatformat:2 }}</td>
+        <td class="col-vat text-right">{{ row.vat|floatformat:2 }}</td>
+        <td class="col-payment text-center">{{ row.payment_mode }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="6" class="text-right">TOTALS:</td>
+        <td class="text-right">{{ total_qty|floatformat:0 }}</td>
+        <td class="text-right">{{ total_amount|floatformat:2 }}</td>
+        <td class="text-right">{{ total_vat|floatformat:2 }}</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- ================================================================ -->
+  <!-- SUMMARY BLOCK                                                     -->
+  <!-- ================================================================ -->
+  <div class="report-summary">
+    <table class="summary-table">
+      <tr>
+        <td class="lbl">Gross Sales</td>
+        <td class="val">{{ total_amount|floatformat:2 }}</td>
+      </tr>
+      <tr>
+        <td class="lbl">Total VAT</td>
+        <td class="val">{{ total_vat|floatformat:2 }}</td>
+      </tr>
+      <tr>
+        <td class="lbl">Net of VAT</td>
+        <td class="val">{{ total_amount|floatformat:2 }}</td>
+      </tr>
+      <tr>
+        <td class="lbl">Total Qty Sold</td>
+        <td class="val">{{ total_qty|floatformat:0 }}</td>
+      </tr>
+    </table>
+  </div>
+
+  {% else %}
+  <div class="no-data">No transactions found for this session.</div>
+  {% endif %}
+
+  <!-- ================================================================ -->
+  <!-- SIGNATURE BLOCK                                                   -->
+  <!-- ================================================================ -->
+  <div class="signature-block">
+    <div class="sig-line">
+      <div class="line"></div>
+      <div class="label">Prepared by</div>
+    </div>
+    <div class="sig-line">
+      <div class="line"></div>
+      <div class="label">Checked by</div>
+    </div>
+    <div class="sig-line">
+      <div class="line"></div>
+      <div class="label">Approved by</div>
+    </div>
+  </div>
+
+</body>
+</html>
