@@ -64,7 +64,7 @@ PAPER_MAP = {
     "letter": landscape(LETTER),
     "long":   landscape(LEGAL),   # "long" bond / legal
 }
-DEFAULT_PAPER = "a4"
+DEFAULT_PAPER = "letter"
 
 # Margins
 MARGIN_TOP    = 5 * mm
@@ -76,26 +76,30 @@ MARGIN_RIGHT  = 12 * mm
 # ---------------------------------------------------------------------------
 # Column widths (pt) — tuned for landscape A4 usable width ≈ 267mm = 757pt
 #
-#   SI No.    55
-#   Date      55
-#   Item No.  72
-#   Item Name 130   ← wraps
-#   Color      55
-#   Size       35
-#   Qty        42   ← right-aligned
-#   Amount     65   ← right-aligned
-#   VAT        55   ← right-aligned
-#   Payment    90   ← wraps
+#   SI No.    70    col 0
+#   Item No.  75    col 1
+#   Item Name 160   col 2  ← wraps
+#   Color      65   col 3
+#   Size       40   col 4
+#   Qty        45   col 5  ← right-aligned
+#   Amount     75   col 6  ← right-aligned
+#   VAT        65   col 7  ← right-aligned
+#   Payment    95   col 8  ← wraps
 #   ─────────────
-#   Total     654pt   comfortable fit
+#   Total     690pt   comfortable fit on A4 landscape
 # ---------------------------------------------------------------------------
-# COL_WIDTHS = [55, 55, 72, 130, 55, 35, 42, 65, 55, 90]
-COL_WIDTHS = [55, 72, 130, 55, 35, 42, 65, 55, 90]
+COL_WIDTHS = [90, 90, 197, 65, 40, 45, 75, 65, 95]
 
 # Column indices (0-based)
-COL_QTY    = 6
-COL_AMOUNT = 7
-COL_VAT    = 8
+COL_SI      = 0
+COL_ITEM_NO = 1
+COL_NAME    = 2
+COL_COLOR   = 3
+COL_SIZE    = 4
+COL_QTY     = 5
+COL_AMOUNT  = 6
+COL_VAT     = 7
+COL_PAYMENT = 8
 
 
 # ---------------------------------------------------------------------------
@@ -130,21 +134,21 @@ def _make_styles():
         "meta_label": ParagraphStyle(
             "meta_label",
             fontName="Helvetica",
-            fontSize=8,
+            fontSize=9.2,
             leading=11,
             alignment=TA_LEFT,
         ),
         "meta_label_right": ParagraphStyle(
             "meta_label_right",
             fontName="Helvetica",
-            fontSize=8,
+            fontSize=9.2,
             leading=11,
             alignment=TA_RIGHT,
         ),
         "table_header": ParagraphStyle(
             "table_header",
             fontName="Helvetica-Bold",
-            fontSize=7,
+            fontSize=9.1,
             leading=9,
             alignment=TA_CENTER,
             textColor=colors.white,
@@ -152,28 +156,28 @@ def _make_styles():
         "cell_center": ParagraphStyle(
             "cell_center",
             fontName="Helvetica",
-            fontSize=7,
+            fontSize=9.1,
             leading=9,
             alignment=TA_CENTER,
         ),
         "cell_left": ParagraphStyle(
             "cell_left",
             fontName="Helvetica",
-            fontSize=7,
+            fontSize=9.1,
             leading=9,
             alignment=TA_LEFT,
         ),
         "cell_right": ParagraphStyle(
             "cell_right",
             fontName="Helvetica",
-            fontSize=7,
+            fontSize=9.1,
             leading=9,
             alignment=TA_RIGHT,
         ),
         "cell_wrap": ParagraphStyle(
             "cell_wrap",
             fontName="Helvetica",
-            fontSize=7,
+            fontSize=9.1,
             leading=9,
             alignment=TA_LEFT,
             wordWrap="LTR",
@@ -195,14 +199,14 @@ def _make_styles():
         "summary_label": ParagraphStyle(
             "summary_label",
             fontName="Helvetica-Bold",
-            fontSize=8,
+            fontSize=9.2,
             leading=11,
             alignment=TA_RIGHT,
         ),
         "summary_value": ParagraphStyle(
             "summary_value",
             fontName="Helvetica",
-            fontSize=8,
+            fontSize=9.2,
             leading=11,
             alignment=TA_RIGHT,
         ),
@@ -211,6 +215,27 @@ def _make_styles():
             fontName="Helvetica",
             fontSize=7.5,
             leading=10,
+            alignment=TA_CENTER,
+        ),
+        "inv_summary_label": ParagraphStyle(
+            "inv_summary_label",
+            fontName="Helvetica-Bold",
+            fontSize=9.1,
+            leading=9,
+            alignment=TA_RIGHT,
+        ),
+        "inv_summary_value": ParagraphStyle(
+            "inv_summary_value",
+            fontName="Helvetica-Bold",
+            fontSize=9.1,
+            leading=9,
+            alignment=TA_RIGHT,
+        ),
+        "inv_si_no": ParagraphStyle(
+            "inv_si_no",
+            fontName="Helvetica-Bold",
+            fontSize=9.1,
+            leading=9,
             alignment=TA_CENTER,
         ),
     }
@@ -293,7 +318,7 @@ def _build_header_block(ctx: dict, styles: dict) -> list:
         )
 
     flowables.append(Spacer(1, 4))
-    flowables.append(Paragraph("SERIES SALES REPORT", styles["report_title"]))
+    flowables.append(Paragraph("BACK-END SERIES SALES REPORT", styles["report_title"]))
     flowables.append(
         HRFlowable(width="100%", thickness=1.5, color=COLOR_RULE, spaceAfter=4)
     )
@@ -310,7 +335,8 @@ def _build_meta_block(ctx: dict, styles: dict, page_width: float) -> list:
     date_str  = biz_date.strftime("%B %d, %Y") if hasattr(biz_date, "strftime") else str(biz_date)
 
     session   = ctx["session"]
-    vat_pct   = int(ctx["vat_rate"] * 100)
+    vat_pct   = int(ctx["vat_rate"])
+    # vat_pct   = int(ctx["vat_rate"] * 100)
 
     left_lines = [
         f"<b>Business Date:</b> {date_str}",
@@ -349,100 +375,170 @@ def _build_meta_block(ctx: dict, styles: dict, page_width: float) -> list:
 def _build_detail_table(ctx: dict, styles: dict) -> list:
     """
     Returns the main detail table as a list containing one Table flowable.
-    The table header (row 0) repeats on every page via repeatRows=1.
+    The table header row repeats on every page via repeatRows=1.
+
+    Row structure per invoice:
+      Row A — Invoice summary row:
+                col 0        : SI No. (bold, centered)
+                col 1–2 SPAN : "Total Invoice" label (right-aligned, bold)
+                col 3        : blank (Color col — no value on summary row)
+                col 4        : blank (Size col)
+                col 5        : total qty (bold, right)
+                col 6        : total amount (bold, right)
+                col 7        : total vat (bold, right)  ← from header snapshot
+                col 8        : payment mode (bold)
+
+      Rows B… — Item detail rows (one per TransactionItem):
+                col 0        : blank (SI No. not repeated)
+                col 1        : item_no
+                col 2        : item_name (wraps)
+                col 3        : color (centered)
+                col 4        : size (centered)
+                col 5        : qty (right)
+                col 6        : amount (right)
+                col 7        : blank  ← VAT only on summary row
+                col 8        : blank  ← payment only on summary row
+
+      Row C — Blank separator row (thin, for visual clarity between invoices)
+
+    Final row — Grand total row spanning appropriate columns.
     """
 
-    # -- Header row --
+    COLOR_INV_SUMMARY = colors.HexColor("#dce8f5")  # light blue tint for invoice summary
+
+    # -- Column header row --
     col_labels = [
         "SI No.", "Item No.", "Item Name",
-        # "SI No.", "Date", "Item No.", "Item Name",
         "Color", "Size", "Qty\nSold", "Amount", "VAT", "Mode of\nPayment",
     ]
     header_row = [
         Paragraph(label, styles["table_header"]) for label in col_labels
     ]
 
-    # -- Data rows --
-    rows = ctx.get("rows", [])
-    table_data = [header_row]
+    # -- Build data rows + track which rows are which type --
+    table_data   = [header_row]
+    style_cmds   = []           # accumulated per-row style commands
+    summary_rows = []           # row indices that are invoice summary rows
+    blank_rows   = []           # row indices that are blank separator rows
 
-    for row in rows:
-        # date_str = (
-        #     row["date"].strftime("%m/%d/%Y")
-        #     if hasattr(row["date"], "strftime")
-        #     else str(row["date"])
-        # )
+    invoices = ctx.get("invoices", [])
+
+    for inv in invoices:
+        # ── Invoice summary row ──────────────────────────────────────────
+        inv_row_idx = len(table_data)
+        summary_rows.append(inv_row_idx)
+
         table_data.append([
-            Paragraph(row["si_no"],        styles["cell_center"]),
-            # Paragraph(date_str,            styles["cell_center"]),
-            Paragraph(row["item_no"],      styles["cell_left"]),
-            Paragraph(row["item_name"],    styles["cell_wrap"]),      # wraps
-            Paragraph(row["color"],        styles["cell_center"]),
-            Paragraph(row["size"],         styles["cell_center"]),
-            Paragraph(_fmt_decimal(row["qty"], 0),    styles["cell_right"]),
-            Paragraph(_fmt_decimal(row["amount"]),    styles["cell_right"]),
-            Paragraph(_fmt_decimal(row["vat"]),       styles["cell_right"]),
-            Paragraph(row["payment_mode"], styles["cell_wrap"]),      # wraps
+            Paragraph(inv["si_no"],                              styles["inv_si_no"]),
+            Paragraph("",                                        styles["inv_summary_label"]),  # spanned
+            Paragraph("Total Invoice",                           styles["inv_summary_label"]),  # spanned col 1–2
+            Paragraph("",                                        styles["cell_center"]),         # color — blank
+            Paragraph("",                                        styles["cell_center"]),         # size  — blank
+            Paragraph(_fmt_decimal(inv["total_qty"], 0),        styles["inv_summary_value"]),
+            Paragraph(_fmt_decimal(inv["total_amount"]),         styles["inv_summary_value"]),
+            Paragraph(_fmt_decimal(inv["total_vat"]),            styles["inv_summary_value"]),
+            Paragraph(inv["payment_mode"],                       styles["inv_summary_value"]),
         ])
 
-    # -- Totals row --
+        # ── Item detail rows ─────────────────────────────────────────────
+        for item in inv["items"]:
+            table_data.append([
+                Paragraph("",                                    styles["cell_center"]),  # SI blank
+                Paragraph(item["item_no"],                       styles["cell_left"]),
+                Paragraph(item["item_name"],                     styles["cell_wrap"]),
+                Paragraph(item["color"],                         styles["cell_center"]),
+                Paragraph(item["size"],                          styles["cell_center"]),
+                Paragraph(_fmt_decimal(item["qty"], 0),          styles["cell_right"]),
+                Paragraph(_fmt_decimal(item["amount"]),          styles["cell_right"]),
+                Paragraph("",                                    styles["cell_right"]),   # VAT blank
+                Paragraph("",                                    styles["cell_center"]),  # payment blank
+            ])
+
+        # ── Blank separator row ──────────────────────────────────────────
+        blank_row_idx = len(table_data)
+        blank_rows.append(blank_row_idx)
+        table_data.append(["", "", "", "", "", "", "", "", ""])
+
+    # -- Grand total row --
+    grand_row_idx = len(table_data)
     table_data.append([
-        Paragraph("TOTALS", styles["total_label"]),  # col 0
-        "", "", "", "", "",                           # cols 1-5 (merged via span)
-        Paragraph(_fmt_decimal(ctx["total_qty"], 0),    styles["total_value"]),
-        Paragraph(_fmt_decimal(ctx["total_amount"]),    styles["total_value"]),
-        Paragraph(_fmt_decimal(ctx["total_vat"]),       styles["total_value"]),
-        "",                                           # payment col
+        Paragraph("GRAND TOTAL", styles["total_label"]),  # col 0 — spanned 0–4
+        "", "", "", "",                                    # cols 1–4 (spanned)
+        Paragraph(_fmt_decimal(ctx["grand_qty"], 0),    styles["total_value"]),
+        Paragraph(_fmt_decimal(ctx["grand_amount"]),    styles["total_value"]),
+        Paragraph(_fmt_decimal(ctx["grand_vat"]),       styles["total_value"]),
+        "",                                               # payment col
     ])
 
-    total_row_idx = len(table_data) - 1
+    # -- Build TableStyle --
+    ts_cmds = [
+        # ── Global defaults ──────────────────────────────────────────────
+        ("FONTNAME",      (0, 0),  (-1, -1),  "Helvetica"),
+        ("FONTSIZE",      (0, 0),  (-1, -1),  7),
+        ("LEFTPADDING",   (0, 0),  (-1, -1),  3),
+        ("RIGHTPADDING",  (0, 0),  (-1, -1),  3),
+        ("TOPPADDING",    (0, 0),  (-1, -1),  2),
+        ("BOTTOMPADDING", (0, 0),  (-1, -1),  2),
+        ("VALIGN",        (0, 0),  (-1, -1),  "MIDDLE"),
+        ("GRID",          (0, 0),  (-1, -1),  0.5, COLOR_GRID),
 
-    # -- Table style --
-    style = TableStyle([
-        # Header row — dark navy background
-        ("BACKGROUND",    (0, 0),  (-1, 0),               COLOR_HEADER_BG),
-        ("TEXTCOLOR",     (0, 0),  (-1, 0),               COLOR_HEADER_TEXT),
-        ("FONTNAME",      (0, 0),  (-1, 0),               "Helvetica-Bold"),
-        ("FONTSIZE",      (0, 0),  (-1, 0),               7),
-        ("ALIGN",         (0, 0),  (-1, 0),               "CENTER"),
-        ("VALIGN",        (0, 0),  (-1, 0),               "MIDDLE"),
-        ("MINROWHEIGHT",  (0, 0),  (-1, 0),               14),
+        # ── Column header row ────────────────────────────────────────────
+        ("BACKGROUND",   (0, 0),  (-1, 0),   COLOR_HEADER_BG),
+        ("TEXTCOLOR",    (0, 0),  (-1, 0),   COLOR_HEADER_TEXT),
+        ("FONTNAME",     (0, 0),  (-1, 0),   "Helvetica-Bold"),
+        ("ALIGN",        (0, 0),  (-1, 0),   "CENTER"),
+        ("MINROWHEIGHT", (0, 0),  (-1, 0),   16),
 
-        # Data rows
-        ("FONTNAME",      (0, 1),  (-1, total_row_idx - 1), "Helvetica"),
-        ("FONTSIZE",      (0, 1),  (-1, total_row_idx - 1), 7),
-        ("VALIGN",        (0, 1),  (-1, -1),              "TOP"),
-        ("TOPPADDING",    (0, 1),  (-1, -1),              2),
-        ("BOTTOMPADDING", (0, 1),  (-1, -1),              2),
-        ("LEFTPADDING",   (0, 0),  (-1, -1),              3),
-        ("RIGHTPADDING",  (0, 0),  (-1, -1),              3),
+        # ── Grand total row ──────────────────────────────────────────────
+        ("BACKGROUND",   (0, grand_row_idx), (-1, grand_row_idx), COLOR_TOTAL_BG),
+        ("FONTNAME",     (0, grand_row_idx), (-1, grand_row_idx), "Helvetica-Bold"),
+        ("FONTSIZE",     (0, grand_row_idx), (-1, grand_row_idx), 7.5),
+        ("LINEABOVE",    (0, grand_row_idx), (-1, grand_row_idx), 1.5, COLOR_RULE),
+        ("SPAN",         (0, grand_row_idx), (4, grand_row_idx)),
+        ("ALIGN",        (0, grand_row_idx), (4, grand_row_idx),  "RIGHT"),
+        ("ALIGN",        (5, grand_row_idx), (7, grand_row_idx),  "RIGHT"),
+    ]
 
-        # Alternating row background
-        ("ROWBACKGROUNDS", (0, 1), (-1, total_row_idx - 1),
-         [colors.white, COLOR_ROW_ALT]),
+    # ── Per-invoice summary rows ─────────────────────────────────────────
+    for r in summary_rows:
+        ts_cmds += [
+            ("BACKGROUND",  (0, r), (-1, r),  COLOR_INV_SUMMARY),
+            ("FONTNAME",    (0, r), (-1, r),  "Helvetica-Bold"),
+            ("LINEABOVE",   (0, r), (-1, r),  0.8, colors.HexColor("#7aafd4")),
+            # Span col 1–2 for "Total Invoice" label
+            ("SPAN",        (1, r), (2, r)),
+            ("ALIGN",       (1, r), (2, r),   "RIGHT"),
+            ("ALIGN",       (0, r), (0, r),   "CENTER"),
+            ("ALIGN",       (5, r), (7, r),   "RIGHT"),
+        ]
 
-        # Grid
-        ("GRID",          (0, 0),  (-1, -1),              0.5, COLOR_GRID),
+    # ── Blank separator rows — minimal height, no grid ───────────────────
+    for r in blank_rows:
+        ts_cmds += [
+            ("MINROWHEIGHT", (0, r), (-1, r), 5),
+            ("LINEBELOW",    (0, r), (-1, r), 0, colors.white),  # hide bottom grid
+            ("BACKGROUND",   (0, r), (-1, r), colors.white),
+        ]
 
-        # Totals row
-        ("BACKGROUND",    (0, total_row_idx), (-1, total_row_idx), COLOR_TOTAL_BG),
-        ("FONTNAME",      (0, total_row_idx), (-1, total_row_idx), "Helvetica-Bold"),
-        ("FONTSIZE",      (0, total_row_idx), (-1, total_row_idx), 7.5),
-        ("LINEABOVE",     (0, total_row_idx), (-1, total_row_idx), 1, COLOR_RULE),
+    # ── Item rows — alternating tint (applied globally, overridden by others) ─
+    # We do this by painting white/light-gray in a checkerboard across ALL rows
+    # then let the summary/blank/total overrides win (applied after).
+    # ReportLab applies styles in order, last writer wins per cell.
+    for i, row in enumerate(table_data[1:], start=1):
+        if i not in summary_rows and i not in blank_rows and i != grand_row_idx:
+            bg = colors.white if i % 2 == 0 else COLOR_ROW_ALT
+            ts_cmds.append(("BACKGROUND", (0, i), (-1, i), bg))
 
-        # Span "TOTALS" label across cols 0-5
-        ("SPAN",          (0, total_row_idx), (5, total_row_idx)),
-        ("ALIGN",         (0, total_row_idx), (5, total_row_idx), "RIGHT"),
-    ])
+    # Item rows: VAT and payment cols are blank — no grid lines to distract
+    # (they already show blank Paragraphs; grid is still drawn but that's fine)
 
     table = Table(
         table_data,
         colWidths=COL_WIDTHS,
-        repeatRows=1,          # repeat header on every page
+        repeatRows=1,
         hAlign="LEFT",
     )
-    table.setStyle(style)
-
+    table.setStyle(TableStyle(ts_cmds))
     return [table]
 
 
@@ -450,17 +546,15 @@ def _build_summary_block(ctx: dict, styles: dict, page_width: float) -> list:
     """
     Right-aligned summary table: Gross Sales / VAT / Net of VAT / Total Qty.
     """
-    # Net of VAT = total_amount - total_vat
-    net_of_vat = ctx["total_amount"] - ctx["total_vat"]
+    net_of_vat = ctx["grand_amount"] - ctx["grand_vat"]
 
     summary_data = [
-        ["Gross Sales",  _fmt_decimal(ctx["total_amount"])],
-        ["Total VAT",    _fmt_decimal(ctx["total_vat"])],
-        ["Net of VAT",   _fmt_decimal(net_of_vat)],
-        ["Total Qty Sold", _fmt_decimal(ctx["total_qty"], 0)],
+        ["Gross Sales",    _fmt_decimal(ctx["grand_amount"])],
+        ["Total VAT",      _fmt_decimal(ctx["grand_vat"])],
+        ["Net of VAT",     _fmt_decimal(net_of_vat)],
+        ["Total Qty Sold", _fmt_decimal(ctx["grand_qty"], 0)],
     ]
 
-    # Build as Paragraph pairs for consistent font control
     summary_rows = [
         [
             Paragraph(lbl, styles["summary_label"]),
@@ -475,13 +569,13 @@ def _build_summary_block(ctx: dict, styles: dict, page_width: float) -> list:
         hAlign="RIGHT",
     )
     summary_table.setStyle(TableStyle([
-        ("BACKGROUND",  (0, 0), (0, -1), COLOR_SUMMARY_BG),
-        ("GRID",        (0, 0), (-1, -1), 0.5, COLOR_GRID),
-        ("TOPPADDING",  (0, 0), (-1, -1), 2),
+        ("BACKGROUND",    (0, 0), (0, -1), COLOR_SUMMARY_BG),
+        ("GRID",          (0, 0), (-1, -1), 0.5, COLOR_GRID),
+        ("TOPPADDING",    (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("LINEABOVE",   (0, 0), (-1, 0), 1.5, COLOR_RULE),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+        ("LINEABOVE",     (0, 0), (-1, 0),  1.5, COLOR_RULE),
     ]))
 
     return [Spacer(1, 8), summary_table]
@@ -578,7 +672,7 @@ def build_series_pdf(ctx: dict, paper: str = DEFAULT_PAPER) -> bytes:
     story += _build_header_block(ctx, styles)
     story += _build_meta_block(ctx, styles, page_width)
 
-    if ctx.get("rows"):
+    if ctx.get("invoices"):
         story += _build_detail_table(ctx, styles)
         story += _build_summary_block(ctx, styles, page_width)
     else:
