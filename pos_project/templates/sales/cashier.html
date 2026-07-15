@@ -95,7 +95,7 @@
             min-height: 0;
             overflow: hidden;
             display: grid;
-            grid-template-columns: 1fr 380px;
+            grid-template-columns: 1fr;
             grid-template-rows: 1fr;
             gap: 1rem;
             padding: 1rem;
@@ -132,7 +132,7 @@
 
         .detail-and-items-row {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 300px 1fr;
             gap: 1rem;
             flex: 1;
             min-height: 0;
@@ -285,6 +285,11 @@
             margin-left: 0.35rem;
         }
 
+        .scanned-item-qty {
+            font-size: 0.8rem;
+            color: #8b949e;
+        }
+
         .scanned-item-disc {
             font-size: 0.8rem;
             color: #6edb8f;
@@ -301,17 +306,17 @@
         }
 
         #cart-summary {
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            flex: 1;
+            background: #252b33;
+            border-radius: 6px;
+            border: 1px solid #2f3640;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .cart-total {
-            padding: 1rem;
+            padding: 0.5rem 1rem;
             background: #2d343e;
-            font-size: 2.5rem;
+            font-size: 1.8rem;
             font-weight: 700;
             text-align: right;
         }
@@ -323,10 +328,7 @@
         }
 
         .cart-list {
-            flex: 1;
-            overflow-y: auto;
-            min-height: 0;
-            padding: 0.5rem;
+            display: none;
         }
 
         .cart-line {
@@ -2481,6 +2483,9 @@
                         title="Remove discount">&#10005;</button>
                 </div>
             </div>
+            <div id="cart-summary">
+                {% include "sales/partials/_cart_body.html" %}
+            </div>
             <div class="detail-and-items-row">
                 <div class="item-detail" id="item-detail">
                     <h3>Item Detail</h3>
@@ -2494,7 +2499,7 @@
                         <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—"
                             }}</dd>
                         <dt>Color:</dt>
-                        <dd>{% color_display last_item.item_color_desc last_item.item_code_desc last_item.item_size as
+                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as
                             item_color_display %}{{ item_color_display|default:"—" }}</dd>
                         <dt>Price:</dt>
                         <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
@@ -2506,11 +2511,6 @@
                 <div class="scanned-items-panel" id="scanned-items-panel">
                     {% include "sales/partials/_scanned_items_list.html" %}
                 </div>
-            </div>
-        </div>
-        <div class="cart-panel">
-            <div id="cart-summary">
-                {% include "sales/partials/_cart_body.html" %}
             </div>
         </div>
     </main>
@@ -3096,7 +3096,7 @@
         <button type="button" class="btn-fn btn-fn-pay" id="pay-trigger-btn" hx-get="{% url 'sales:pay' %}"
             hx-target="#pay-modal-content" hx-swap="innerHTML" hx-trigger="click"
             onclick="document.getElementById('pay-modal').classList.add('open')">
-            <span class="fn-key" id="key-paymnt">F10</span><span class="fn-label">💳 Pay</span>
+            <span class="fn-key" id="key-paymnt">p</span><span class="fn-label">💳 Pay</span>
         </button>
         
 
@@ -3213,7 +3213,9 @@
         // Translate all POS_KEYS values to their physical key names for keydown comparisons
         const POS_FKEYS = {};
         for (const fn in POS_KEYS) {
-            const physKey = CHAR_TO_FKEY[POS_KEYS[fn]];
+            const raw = POS_KEYS[fn];
+            const physKey = CHAR_TO_FKEY[raw] ||
+                (raw && raw.length === 1 && raw.charCodeAt(0) >= 0x20 && raw.charCodeAt(0) < 0x7F ? raw : null);
             if (physKey) POS_FKEYS[fn] = physKey;
         }
 

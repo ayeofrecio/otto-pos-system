@@ -1,8 +1,9 @@
+{% load humanize %}
 {% if trans_disc_amt %}
-<div class="cart-subtotal-row"><span>Subtotal</span><span>&#8369;{{ subtotal|floatformat:2 }}</span></div>
-<div class="cart-trans-disc-row"><span>{{ trans_disc.label }} ({{ trans_disc.pct|floatformat:0 }}%)</span><span>-&#8369;{{ trans_disc_amt|floatformat:2 }}</span></div>
+<div class="cart-subtotal-row"><span>Subtotal</span><span>&#8369;{{ subtotal|floatformat:2|intcomma }}</span></div>
+<div class="cart-trans-disc-row"><span>{{ trans_disc.label }} ({{ trans_disc.pct|floatformat:0 }}%)</span><span>-&#8369;{{ trans_disc_amt|floatformat:2|intcomma }}</span></div>
 {% endif %}
-<div class="cart-total">TOTAL: &#8369;{{ total|floatformat:2 }}</div>
+<div class="cart-total">TOTAL: &#8369;{{ total|floatformat:2|intcomma }}</div>
 <div class="cart-count">{{ item_count }} item{{ item_count|pluralize }}</div>
 <div class="cart-list">
     {% for line in cart_lines %}
