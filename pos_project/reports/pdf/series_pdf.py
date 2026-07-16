@@ -88,7 +88,7 @@ MARGIN_RIGHT  = 12 * mm
 #   ─────────────
 #   Total     690pt   comfortable fit on A4 landscape
 # ---------------------------------------------------------------------------
-COL_WIDTHS = [90, 90, 197, 65, 40, 45, 75, 65, 95]
+COL_WIDTHS = [85, 85, 197, 75, 40, 45, 75, 65, 95]
 
 # Column indices (0-based)
 COL_SI      = 0
@@ -185,14 +185,14 @@ def _make_styles():
         "total_label": ParagraphStyle(
             "total_label",
             fontName="Helvetica-Bold",
-            fontSize=7.5,
+            fontSize=9.1,
             leading=10,
             alignment=TA_RIGHT,
         ),
         "total_value": ParagraphStyle(
             "total_value",
             fontName="Helvetica-Bold",
-            fontSize=7.5,
+            fontSize=9.1,
             leading=10,
             alignment=TA_RIGHT,
         ),
@@ -335,8 +335,8 @@ def _build_meta_block(ctx: dict, styles: dict, page_width: float) -> list:
     date_str  = biz_date.strftime("%B %d, %Y") if hasattr(biz_date, "strftime") else str(biz_date)
 
     session   = ctx["session"]
-    vat_pct   = int(ctx["vat_rate"])
-    # vat_pct   = int(ctx["vat_rate"] * 100)
+    # vat_pct   = int(ctx["vat_rate"])
+    vat_pct   = int(ctx["vat_rate"] * 100)
 
     left_lines = [
         f"<b>Business Date:</b> {date_str}",
@@ -549,10 +549,10 @@ def _build_summary_block(ctx: dict, styles: dict, page_width: float) -> list:
     net_of_vat = ctx["grand_amount"] - ctx["grand_vat"]
 
     summary_data = [
-        ["Gross Sales",    _fmt_decimal(ctx["grand_amount"])],
-        ["Total VAT",      _fmt_decimal(ctx["grand_vat"])],
+        # ["Gross Sales",    _fmt_decimal(ctx["grand_amount"])],
+        # ["Total VAT",      _fmt_decimal(ctx["grand_vat"])],
         ["Net of VAT",     _fmt_decimal(net_of_vat)],
-        ["Total Qty Sold", _fmt_decimal(ctx["grand_qty"], 0)],
+        # ["Total Qty Sold", _fmt_decimal(ctx["grand_qty"], 0)],
     ]
 
     summary_rows = [

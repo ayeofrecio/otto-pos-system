@@ -246,7 +246,20 @@
 </div>
 
 <div class="actions">
-    <a href="{% url 'sales:pos_cashier' %}" class="btn">New Sale</a>
+    <a href="{% url 'sales:pos_cashier' %}" class="btn new-sale-btn">New Sale</a>
 </div>
+
+<script>
+    // This fires automatically as soon as the entire page finishes loading
+    window.addEventListener('load', function() {
+        // Dynamically grab the URL from the Django template tag
+        const targetUrl = "{% url 'sales:pos_cashier' %}"; 
+        
+        // Wait 5000 milliseconds (5 seconds), then redirect
+        setTimeout(function() {
+            window.location.href = targetUrl;
+        }, 5000); 
+    });
+</script>
 </body>
 </html>

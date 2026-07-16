@@ -78,7 +78,23 @@ import serial
 # ---------------------------------------------------------------------------
 # Session keys and defaults
 # ---------------------------------------------------------------------------
+def _get_store():
+    """
+    Fetch TerminalConfiguration with all relations prefetched.
+    Footers are fetched unfiltered — callers filter in Python to avoid
+    the fragile to_attr list vs queryset confusion.
+    Returns None if not found.
+    """
+    return (
+        TerminalConfiguration.objects
+        # .prefetch_related("headers", "footers", "ports", "display_codes")
+        .first()
+    )
+ 
 
+# store_details = _get_store()
+# STORE_ID = store_details.store_name if store_details and store_details.store_name else "001"
+# TERMINAL_ID = store_details.terminal_id if store_details and store_details.terminal_id else "001"
 STORE_ID = "001"
 TERMINAL_ID = "001"
 
@@ -272,21 +288,22 @@ def get_session_by_id(request, session_id):
 # Store and terminal info helpers
 # ---------------------------------------------------------------------------
 def _get_store_name():
-    """Return store name from TerminalSetup, or default."""
+    """Return store name from TerminalConfiguration, or default."""
     try:
-        setup = TerminalSetup.objects.get(store_id=STORE_ID, terminal_id=TERMINAL_ID)
-        return setup.header01 or "POS Store"
-    except TerminalSetup.DoesNotExist:
+        store=_get_store()
+        setup = TerminalConfiguration.objects.get(store_id=store.store_id, terminal_id=store.terminal_id)
+        return setup.store_name or "POS Store"
+    except TerminalConfiguration.DoesNotExist:
         return "POS Store"
 
 def _get_store_details():
-    """Return store details from TerminalSetup, or defaults."""
+    """Return store details from TerminalConfiguration, or defaults."""
     try:
-        return TerminalSetup.objects.filter(
+        return TerminalConfiguration.objects.filter(
             store_id=STORE_ID,
             terminal_id=TERMINAL_ID
         ).first()
-    except TerminalSetup.DoesNotExist:
+    except TerminalConfiguration.DoesNotExist:
         return None
 
 
@@ -435,9 +452,9 @@ def admin_posnbr_init(request):
 
 
 # Constants
-# terminal_config = _get_terminal_config()
-# VAT_RATE = terminal_config.vat if terminal_config and terminal_config.vat else Decimal("0.12")
-VAT_RATE = Decimal("0.12")
+terminal_config = _get_terminal_config()
+VAT_RATE = terminal_config.vat if terminal_config and terminal_config.vat else Decimal("0.12")
+# VAT_RATE = Decimal("0.12")
 
 # ---------------------------------------------------------------------------
 # Open session view
@@ -974,6 +991,110 @@ def cart_void_transaction(request):
 @require_open_session
 @require_http_methods(["POST"])
 def cart_void_previous(request):
+    """Void a previous completed transaction (F6) — in-place stamp approach."""
+
+    # Step 1 — Validate manager PIN
+    manager_pin = request.POST.get("manager_pin", "")
+    manager_user = _verify_manager_pin(manager_pin)
+    if not manager_user:
+        return JsonResponse({"ok": False, "error": "Manager PIN is invalid"}, status=403)
+
+    # Step 2 — Validate receipt number
+    receipt_no = request.POST.get("receipt_no", "").strip()
+    if not receipt_no:
+        return JsonResponse({"ok": False, "error": "Receipt number is required"}, status=400)
+
+    # Step 3 — Confirm open session
+    session = get_current_session(request)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open POS session"}, status=400)
+
+    # Step 4 — Fetch the target transaction
+    # .exclude covers: already voided headers (transaction_status='voided')
+    # The schema uses transaction_status enum, not transaction_type like the old code.
+    target = (
+        TransactionHeader.objects
+        .filter(
+            store_id=STORE_ID,
+            terminal_id=TERMINAL_ID,
+            transaction_no=receipt_no,
+            transaction_date=session.business_date,
+        )
+        .exclude(transaction_type__in=VOID_TRANSACTION_TYPES_ALL)
+        .select_related()
+        .first()
+    )
+    if not target:
+        return JsonResponse({
+            "ok": False,
+            "error": "Receipt not found for this business day, or already voided",
+        }, status=404)
+
+    # Step 5 — Guard: do not void if already locked to a Z-reading
+    # if target.is_z_reading_locked:
+    #     return JsonResponse({
+    #         "ok": False,
+    #         "error": "Transaction is locked to a Z-reading and cannot be voided",
+    #     }, status=409)
+
+    now = datetime.datetime.now()
+    cashier_user_id = request.user.pk  # or however you resolve the cashier FK
+
+    with transaction.atomic():
+
+        # Step 6a — Stamp the header
+        target.return_code = "V"
+        target.transaction_type = "V"
+        # target.voided_at = now
+        target.user_id2 = manager_user.id   # FK field; adjust to your model attr name
+        target.save(update_fields=[
+            "return_code",
+            "transaction_type",
+            # "voided_at",
+            "user_id2",
+        ])
+
+        # Step 6b — Stamp all line items
+        target.items.all().update(
+            # is_voided=True,
+            tag1="V",
+            # voided_by_id=manager_user.pk,
+            # voided_at=now,
+        )
+
+        # Step 6c — Stamp all tenders (the part you flagged)
+        # target.payments.all().update(
+        #     # payment_status="refunded",
+        # )
+
+        # Step 6d — Insert audit row
+        # VoidTransactionAudit.objects.create(
+        #     transaction_id=target.pk,
+        #     transaction_number=target.record_transaction_number,
+        #     void_type="full_transaction",
+        #     transaction_detail_id=None,       # full void, not single-item
+        #     original_amount=target.amount_total,
+        #     voided_amount=target.amount_total,
+        #     void_reason=request.POST.get("void_reason", ""),
+        #     requested_by_id=cashier_user_id,
+        #     authorized_by_id=manager_user.pk,
+        #     voided_at=now,
+        #     authorized_at=now,
+        #     store_id=STORE_ID,
+        # )
+
+    return JsonResponse({
+        "ok": True,
+        "void_kind": "full_transaction",
+        "receipt_no": receipt_no,
+        # "voided_amount": str(target.amount_total),
+        "transaction_type": TRTYPE_VOID_PREVIOUS,
+    })
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cart_void_previous2(request):
     """Void a previous completed transaction (F6) by receipt number, same business day."""
     manager_pin = request.POST.get("manager_pin", "")
     manager_user = _verify_manager_pin(manager_pin)
@@ -2592,7 +2713,8 @@ def item_search(request):
 @require_open_session
 @require_http_methods(["GET"])
 def to_close_session_details(request):
-    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
+    store = _get_store()
+    session = _get_terminal_session(store.store_id, store.terminal_id)
     if not session:
         return JsonResponse({"error": "No open session found."}, status=400)
 
@@ -3574,7 +3696,7 @@ def _do_print_x_reading(session, current_operator):
         for h in db_headers:
             write_line(h.header_text)
         if not db_headers:
-            write_line(setup_details.header01 or "OTTO Store")
+            write_line(setup_details.store_name or "OTTO Store")
 
         write_line(center("\n***** X-Reading Report *****\n"))
 
