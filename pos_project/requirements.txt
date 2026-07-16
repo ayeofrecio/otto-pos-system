@@ -1,0 +1,11 @@
+asgiref==3.12.1
+charset-normalizer==3.4.9
+Django==6.0.7
+mysqlclient==2.2.8
+pillow==12.3.0
+PyMySQL==1.2.0
+python-dotenv==1.2.2
+pywin32==312
+reportlab==5.0.0
+sqlparse==0.5.5
+tzdata==2026.3
