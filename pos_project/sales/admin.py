@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     AccountingSummary,
+    CashInOut,
     Color,
     Item,
     ItemDetail,
@@ -75,6 +76,18 @@ class PaymentAdmin(admin.ModelAdmin):
     readonly_fields = [f.name for f in Payment._meta.get_fields()
                        if not f.is_relation]
     raw_id_fields = ('header',)
+
+
+@admin.register(CashInOut)
+class CashInOutAdmin(admin.ModelAdmin):
+    list_display = (
+        'session', 'movement_type', 'amount', 'reason',
+        'performed_by', 'approved_by', 'created_at',
+    )
+    list_filter = ('movement_type', 'created_at', 'session__business_date')
+    search_fields = ('reason', 'approved_by', 'performed_by__username')
+    ordering = ('-created_at',)
+    raw_id_fields = ('session', 'performed_by')
 
 
 @admin.register(AccountingSummary)

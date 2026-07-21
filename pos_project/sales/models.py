@@ -896,6 +896,46 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'{self.header.transaction_no} – {self.pcode} {self.amount}'
+
+
+class CashInOut(models.Model):
+    """Non-sales cash drawer movements recorded during an open POS session."""
+
+    TYPE_IN = "IN"
+    TYPE_OUT = "OUT"
+    TYPE_CHOICES = [
+        (TYPE_IN, "Cash In"),
+        (TYPE_OUT, "Cash Out"),
+    ]
+
+    session = models.ForeignKey(
+        "users.POSSession",
+        on_delete=models.CASCADE,
+        related_name="cash_movements",
+    )
+    movement_type = models.CharField(max_length=3, choices=TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.CharField(max_length=120)
+    performed_by = models.ForeignKey(
+        "users.Users",
+        on_delete=models.PROTECT,
+        related_name="cash_movements",
+    )
+    approved_by = models.CharField(max_length=60, blank=True)
+    notes = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "cash_inout"
+        indexes = [
+            models.Index(fields=["session", "movement_type"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.session_id} {self.movement_type} {self.amount}"
+
+
 # Note: Transaction Payment / Tender counts for Z-reading continuity tracking.  Updated on each transaction close.
 class TransactionTenderCount(models.Model):
     """

@@ -25,7 +25,7 @@ from users.models import POSSession, POSSessionUsers
 from .color_lookup import get_color_description
 from .size_lookup import get_size_description
 from .decorators import require_open_session
-from .models import POSTransCounter, Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem, SuspendedTransaction
+from .models import POSTransCounter, Item, ItemDetail, TempTransaction, TerminalConfiguration, TerminalReceiptFooter, TransactionHeader, POSTransNumber, Tender, TerminalSetup, Color, Size, Payment, TransactionItem, SuspendedTransaction, CashInOut
 from .pos_constants import (
     RCODE_ITEM_VOID,
     TAG_ITEM_RETURN,
@@ -90,15 +90,21 @@ TERMINAL_ID = "001"
 
 def _get_trans_disc(request):
     """Read transaction discount from session. Returns dict with pct, type, label."""
-    try:
-        pct = Decimal(str(float(request.session.get("pos_trans_disc_pct", "0") or "0")))
-    except (ValueError, TypeError):
-        pct = Decimal("0")
+    pct = Decimal(str(_coerce_discount_pct(request.session.get("pos_trans_disc_pct", "0"))))
     return {
         "pct": pct,
         "type": request.session.get("pos_trans_disc_type", ""),
         "label": request.session.get("pos_trans_disc_label", ""),
     }
+
+
+def _coerce_discount_pct(value):
+    """Clamp discount percent to an integer between 0 and 100."""
+    try:
+        pct = float(value or 0)
+    except (ValueError, TypeError):
+        return 0
+    return max(0, min(100, int(pct)))
 
 
 def _compute_totals(cart_lines, trans_disc):
@@ -479,6 +485,75 @@ def open_session(request):
 
     return render(request, "sales/open_session.html")
 
+
+@login_required
+@require_open_session
+@require_http_methods(["POST"])
+def cash_inout(request):
+    """Record a non-sales cash movement (cash in/out) for the open drawer session."""
+    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open session found."}, status=400)
+
+    movement_type = (request.POST.get("movement_type") or "").strip().upper()
+    if movement_type not in (CashInOut.TYPE_IN, CashInOut.TYPE_OUT):
+        return JsonResponse({"ok": False, "error": "Invalid movement type."}, status=400)
+
+    amount = _parse_decimal(request.POST.get("amount"))
+    if amount <= 0:
+        return JsonResponse({"ok": False, "error": "Amount must be greater than zero."}, status=400)
+
+    reason = (request.POST.get("reason") or "").strip()
+    if not reason:
+        return JsonResponse({"ok": False, "error": "Reason is required."}, status=400)
+
+    approved_by = (request.POST.get("approved_by") or "").strip()
+    notes = (request.POST.get("notes") or "").strip()
+
+    entry = CashInOut.objects.create(
+        session=session,
+        movement_type=movement_type,
+        amount=amount,
+        reason=reason,
+        performed_by=request.user,
+        approved_by=approved_by,
+        notes=notes,
+    )
+
+    return JsonResponse({
+        "ok": True,
+        "id": entry.id,
+        "movement_type": entry.movement_type,
+        "amount": float(entry.amount),
+        "reason": entry.reason,
+    })
+
+
+@login_required
+@require_open_session
+@require_http_methods(["GET"])
+def cash_movements_history(request):
+    """Fetch all cash movements for current session (for display in close-session modal)."""
+    session = _get_terminal_session(STORE_ID, TERMINAL_ID)
+    if not session:
+        return JsonResponse({"ok": False, "error": "No open session found."}, status=400)
+
+    movements = CashInOut.objects.filter(session=session).order_by("created_at")
+    data = [
+        {
+            "id": m.id,
+            "type": m.movement_type,
+            "amount": float(m.amount),
+            "reason": m.reason,
+            "performed_by": m.performed_by.get_full_name() or m.performed_by.username,
+            "approved_by": m.approved_by,
+            "created_at": m.created_at.strftime("%I:%M %p"),
+        }
+        for m in movements
+    ]
+
+    return JsonResponse({"ok": True, "movements": data})
+
 # ---------------------------------------------------------------------------
 # Cashier main view
 # ---------------------------------------------------------------------------
@@ -676,10 +751,7 @@ def cart_add(request):
     except (ValueError, TypeError):
         qty = Decimal("1")
 
-    try:
-        disc_pct = Decimal(str(max(0, min(100, float(request.POST.get("disc_pct", "0") or "0")))))
-    except (ValueError, TypeError):
-        disc_pct = Decimal("0")
+    disc_pct = Decimal(str(_coerce_discount_pct(request.POST.get("disc_pct", "0"))))
     disc_type = (request.POST.get("disc_type") or "").strip()[:3]
 
     item_discount = (price * disc_pct / 100).quantize(Decimal("0.0001"))
@@ -1239,10 +1311,7 @@ def cart_suspended_retrieve(request):
 @require_http_methods(["POST"])
 def cart_trans_disc(request):
     """Set or clear transaction-level discount. Returns updated cart-summary HTML."""
-    try:
-        pct = max(0, min(100, float(request.POST.get("trans_disc_pct", "0") or "0")))
-    except (ValueError, TypeError):
-        pct = 0
+    pct = _coerce_discount_pct(request.POST.get("trans_disc_pct", "0"))
     disc_type = (request.POST.get("trans_disc_type") or "").strip()[:3]
     disc_label = (request.POST.get("trans_disc_label") or "").strip()[:30]
 
@@ -1283,10 +1352,7 @@ def cart_line_disc(request):
     except (TypeError, ValueError):
         return JsonResponse({"ok": False, "error": "Invalid rec_ctr"}, status=400)
 
-    try:
-        disc_pct = Decimal(str(max(0, min(100, float(request.POST.get("disc_pct", "0") or "0")))))
-    except (ValueError, TypeError):
-        disc_pct = Decimal("0")
+    disc_pct = Decimal(str(_coerce_discount_pct(request.POST.get("disc_pct", "0"))))
     disc_type = (request.POST.get("disc_type") or "").strip()[:3]
 
     user_id = _get_user_id(request)
@@ -2688,9 +2754,24 @@ def to_close_session_details(request):
     final_gross_sale = gross_sales + (return_amount*return_count)
     print(gross_sales)
     print(return_amount)
+    total_mid_cash_in = (
+        CashInOut.objects.filter(session=session, movement_type=CashInOut.TYPE_IN)
+        .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    )
+    total_mid_cash_out = (
+        CashInOut.objects.filter(session=session, movement_type=CashInOut.TYPE_OUT)
+        .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    )
     # --- Cash totals ---
     # expected = change fund + cash sales - cash returned
-    expected_cash = session.opening_cash + paid_in_cash - cash_returned - total_change
+    expected_cash = (
+        session.opening_cash
+        + total_mid_cash_in
+        + paid_in_cash
+        - total_mid_cash_out
+        - cash_returned
+        - total_change
+    )
     net_worth     = expected_cash + credit_debit_total
 
     net_sales = final_gross_sale - total_discounts
@@ -2698,6 +2779,8 @@ def to_close_session_details(request):
     return JsonResponse({
         "opening_cash":          float(session.opening_cash),
         "paid_in_cash":          float(cash),
+        "total_mid_cash_in":     float(total_mid_cash_in),
+        "total_mid_cash_out":    float(total_mid_cash_out),
         "cash_returned":         float(cash_returned),
         "expected_cash":         float(expected_cash),
         "credit_debit_cash":     float(credit_debit_total),

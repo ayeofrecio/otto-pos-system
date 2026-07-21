@@ -432,6 +432,12 @@
       return;
     }
 
+    if (POS_FKEYS.cWithD && evt.key === POS_FKEYS.cWithD) {
+      evt.preventDefault();
+      window.openCashInOutModal('OUT');
+      return;
+    }
+
     if (evt.key === '*' && qtyInput && document.activeElement === barcodeInput && !barcodeInput.value) {
       evt.preventDefault();
       qtyInput.focus();
@@ -447,12 +453,14 @@
       const fkeyModal = document.getElementById('fkey-help-modal');
       const itemReturnModal = document.getElementById('item-return-modal');
       const suspendModal = document.getElementById('suspend-modal');
+      const cashInOutModal = document.getElementById('cash-inout-modal');
       if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
       else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
       else if (poModal && poModal.classList.contains('open')) { window.closePriceOverrideModal(); }
       else if (itemReturnModal && itemReturnModal.classList.contains('open')) { window.closeItemReturnModal(); }
       else if (suspendModal && suspendModal.classList.contains('open')) { window.closeSuspendModal(); }
+      else if (cashInOutModal && cashInOutModal.classList.contains('open')) { window.closeCashInOutModal(); }
       else if (fkeyModal && fkeyModal.classList.contains('open')) { window.closeFkeyHelpModal(); }
       else if (closeTransModal && closeTransModal.classList.contains('open')) { window.closeCloseTransModal(); }
     }
@@ -582,7 +590,10 @@
     if (!modal) { return; }
     modal.classList.add('open');
     // Pre-fill with current pending discount
-    if (input) { input.value = pendingDisc.pct || 0; }
+    if (input) {
+      input.value = pendingDisc.pct || 0;
+      pendingDisc.pct = normalizeDiscountPctInput(input);
+    }
     refreshDiscTypeBtns(pendingDisc.type);
     setTimeout(function () {
       if (pendingDisc.type === 'REG' || !pendingDisc.type) {
@@ -611,6 +622,7 @@
     const input = document.getElementById('disc-pct-modal-input');
     if (input) {
       if (defaultPct > 0) { input.value = defaultPct; }
+      pendingDisc.pct = normalizeDiscountPctInput(input);
       input.focus();
       input.select();
     }
@@ -624,7 +636,7 @@
 
   window.applyDiscount = function () {
     const input = document.getElementById('disc-pct-modal-input');
-    const pct = parseFloat(input ? input.value : 0) || 0;
+    const pct = normalizeDiscountPctInput(input);
     if (pct <= 0) {
       window.removeDiscountAndClose();
       return;
@@ -670,6 +682,11 @@
   // Allow Enter in the discount % field to immediately apply
   const discPctInput = document.getElementById('disc-pct-modal-input');
   if (discPctInput) {
+    ['input', 'change', 'blur'].forEach(function (evtName) {
+      discPctInput.addEventListener(evtName, function () {
+        pendingDisc.pct = normalizeDiscountPctInput(discPctInput);
+      });
+    });
     discPctInput.addEventListener('keydown', function (evt) {
       if (evt.key === 'Enter') { evt.preventDefault(); window.applyDiscount(); }
     });
@@ -678,6 +695,19 @@
   // ---------------------------------------------------------------------------
   // Line Discount Modal (click row in Items Entered)
   // ---------------------------------------------------------------------------
+  function normalizeDiscountPctInput(inputEl) {
+    if (!inputEl) { return 0; }
+    const raw = parseFloat(inputEl.value);
+    if (!Number.isFinite(raw)) {
+      inputEl.value = '0';
+      return 0;
+    }
+    const clamped = Math.max(0, Math.min(100, raw));
+    const normalized = Math.trunc(clamped);
+    inputEl.value = String(normalized);
+    return normalized;
+  }
+
   var lineDiscRecCtr = null;
   var lineDiscType = '';
 
@@ -692,6 +722,7 @@
     recInput.value = lineDiscRecCtr;
     typeInput.value = 'REG';
     pctInput.value = 0;
+    normalizeDiscountPctInput(pctInput);
     setSelectedScannedRow(lineDiscRecCtr);
     refreshLineDiscTypeBtns('REG');
     modal.classList.add('open');
@@ -733,7 +764,7 @@
 
   window.applyLineDisc = function () {
     const pctInput = document.getElementById('line-disc-pct-input');
-    const pct = parseFloat(pctInput ? pctInput.value : 0) || 0;
+    const pct = normalizeDiscountPctInput(pctInput);
     if (pct <= 0) {
       window.removeLineDiscAndClose();
       return;
@@ -762,6 +793,11 @@
 
   const lineDiscPctInput = document.getElementById('line-disc-pct-input');
   if (lineDiscPctInput) {
+    ['input', 'change', 'blur'].forEach(function (evtName) {
+      lineDiscPctInput.addEventListener(evtName, function () {
+        normalizeDiscountPctInput(lineDiscPctInput);
+      });
+    });
     lineDiscPctInput.addEventListener('keydown', function (evt) {
       if (evt.key === 'Enter') { evt.preventDefault(); window.applyLineDisc(); }
     });
@@ -924,7 +960,10 @@
     const input = document.getElementById('trans-disc-pct-input');
     if (!modal) { return; }
     modal.classList.add('open');
-    if (input) { input.value = pendingTransDisc.pct || 0; }
+    if (input) {
+      input.value = pendingTransDisc.pct || 0;
+      pendingTransDisc.pct = normalizeDiscountPctInput(input);
+    }
     refreshTransDiscBtns(pendingTransDisc.type);
     setTimeout(function () { if (input) { input.focus(); input.select(); } }, 80);
   };
@@ -961,7 +1000,7 @@
 
   window.applyTransDisc = function () {
     const input = document.getElementById('trans-disc-pct-input');
-    const pct = parseFloat(input ? input.value : 0) || 0;
+    const pct = normalizeDiscountPctInput(input);
     if (pct <= 0) { window.removeTransDiscAndClose(); return; }
     pendingTransDisc.pct = pct;
     if (!pendingTransDisc.type) { pendingTransDisc.type = 'REG'; pendingTransDisc.label = 'Regular'; }
@@ -987,6 +1026,11 @@
   // Enter in trans-disc % input applies immediately
   const tdPctInput = document.getElementById('trans-disc-pct-input');
   if (tdPctInput) {
+    ['input', 'change', 'blur'].forEach(function (evtName) {
+      tdPctInput.addEventListener(evtName, function () {
+        pendingTransDisc.pct = normalizeDiscountPctInput(tdPctInput);
+      });
+    });
     tdPctInput.addEventListener('keydown', function (evt) {
       if (evt.key === 'Enter') { evt.preventDefault(); window.applyTransDisc(); }
     });
@@ -1913,6 +1957,51 @@
       });
   }
 
+  function renderCashMovementsHistory(list) {
+      const container = document.getElementById("close-trans-movements-list");
+      if (!container) return;
+      container.innerHTML = "";
+
+      if (!list || list.length === 0) {
+          const empty = document.createElement("span");
+          empty.className = "ct-movements-empty";
+          empty.textContent = "No cash movements recorded.";
+          container.appendChild(empty);
+          return;
+      }
+
+      list.forEach(movement => {
+          const row = document.createElement("div");
+          row.className = "ct-movement-row " + (movement.type === "IN" ? "in" : "out");
+
+          const typeSpan = document.createElement("span");
+          typeSpan.className = "ct-movement-type " + (movement.type === "IN" ? "in" : "out");
+          typeSpan.textContent = movement.type === "IN" ? "↓ IN" : "↑ OUT";
+
+          const detailsDiv = document.createElement("div");
+          detailsDiv.className = "ct-movement-details";
+          const reasonSpan = document.createElement("div");
+          reasonSpan.className = "ct-movement-reason";
+          reasonSpan.textContent = movement.reason;
+          const metaSpan = document.createElement("div");
+          metaSpan.className = "ct-movement-meta";
+          metaSpan.textContent = movement.approved_by
+              ? `${movement.performed_by} @ ${movement.created_at} (Approved: ${movement.approved_by})`
+              : `${movement.performed_by} @ ${movement.created_at}`;
+          detailsDiv.appendChild(reasonSpan);
+          detailsDiv.appendChild(metaSpan);
+
+          const amountSpan = document.createElement("span");
+          amountSpan.className = "ct-movement-amount";
+          amountSpan.textContent = formatPeso(movement.amount);
+
+          row.appendChild(typeSpan);
+          row.appendChild(detailsDiv);
+          row.appendChild(amountSpan);
+          container.appendChild(row);
+      });
+  }
+
   // ---------------------------------------------------------------------------
   // Open modal — fetch fresh data each time
   // ---------------------------------------------------------------------------
@@ -1937,6 +2026,8 @@
 
       resetEl("close-trans-opening-cash");
       resetEl("close-trans-paid-in-cash");
+      resetEl("close-trans-mid-cash-in");
+      resetEl("close-trans-mid-cash-out");
       resetEl("close-trans-net-worth");
       resetEl("close-trans-gross-sales");
       resetEl("close-trans-total-discounts");
@@ -1971,6 +2062,8 @@
       .then(data => {
           const openingCash     = parseFloat(data.opening_cash)     || 0;
           const paidInCash      = parseFloat(data.paid_in_cash)     || 0;
+          const midCashIn       = parseFloat(data.total_mid_cash_in) || 0;
+          const midCashOut      = parseFloat(data.total_mid_cash_out) || 0;
           const cashReturned    = parseFloat(data.cash_returned)    || 0;
           const creditDebitCash = parseFloat(data.credit_debit_cash)|| 0;
           const expectedCash    = parseFloat(data.expected_cash)    || 0;
@@ -1986,6 +2079,8 @@
           // Store on modal for form submit and variance recalc
           modal._openingCash     = openingCash;
           modal._paidInCash      = paidInCash;
+          modal._midCashIn       = midCashIn;
+          modal._midCashOut      = midCashOut;
           modal._cashReturned    = cashReturned;
           modal._creditDebitCash = creditDebitCash;
           modal._expectedCash    = expectedCash;
@@ -2001,6 +2096,8 @@
           // Update display
           resetEl("close-trans-opening-cash",     formatPeso(openingCash));
           resetEl("close-trans-paid-in-cash",     formatPeso(paidInCash));
+          resetEl("close-trans-mid-cash-in",      formatPeso(midCashIn));
+          resetEl("close-trans-mid-cash-out",     formatPeso(midCashOut));
           resetEl("close-trans-expected-cash",    formatPeso(expectedCash));
           resetEl("close-trans-actual-cash",      formatPeso(expectedCash)); // until closing cash input re-enabled
           resetEl("close-trans-net-worth",        formatPeso(netWorth));
@@ -2022,6 +2119,19 @@
           _syncHiddenFields(modal);
 
           renderCreditDebitBreakdown(data.credit_debit_cash_list || []);
+          
+          // Fetch and render cash movements history
+          fetch("/sales/cash-movements-history/", {
+              method: "GET",
+              headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
+          })
+          .then(r => r.json())
+          .then(movementsData => {
+              if (movementsData.ok) {
+                  renderCashMovementsHistory(movementsData.movements || []);
+              }
+          })
+          .catch(err => console.warn("Could not load cash movements history:", err));
       })
       .catch(err => console.error("Failed to load session details:", err));
 
@@ -2044,6 +2154,8 @@
 
       setVal("hidden-opening-cash",      modal._openingCash);
       setVal("hidden-paid-in-cash",      modal._paidInCash);
+      setVal("hidden-mid-cash-in",       modal._midCashIn);
+      setVal("hidden-mid-cash-out",      modal._midCashOut);
       setVal("hidden-credit-debit-cash", modal._creditDebitCash);
       setVal("hidden-expected-cash",     modal._expectedCash);
       setVal("hidden-net-worth",         modal._netWorth);
@@ -2097,7 +2209,7 @@
 
       if (!cashInput || !varianceEl || !modal) return;
 
-      const expected = (modal._openingCash || 0) + (modal._paidInCash || 0);
+      const expected = (modal._expectedCash || 0);
       const raw      = cashInput.value;
       const actual   = parseFloat(raw) || 0;
 
@@ -2177,6 +2289,67 @@
           closeTransForm.submit();
       });
   }
+
+  window.openCashInOutModal = function (defaultType) {
+    const modal = document.getElementById("cash-inout-modal");
+    const form = document.getElementById("cash-inout-form");
+    const typeEl = document.getElementById("cash-movement-type");
+    if (!modal) return;
+
+    if (form) form.reset();
+    if (typeEl && defaultType) {
+      typeEl.value = defaultType;
+    }
+
+    modal.classList.add("open");
+    setTimeout(() => {
+      document.getElementById("cash-movement-amount")?.focus();
+    }, 80);
+  };
+
+  window.closeCashInOutModal = function () {
+    const modal = document.getElementById("cash-inout-modal");
+    if (modal) modal.classList.remove("open");
+    document.getElementById("barcode-input")?.focus();
+  };
+
+  window.closeCashInOutModalOutside = function (evt) {
+    const modal = document.getElementById("cash-inout-modal");
+    if (evt.target === modal) {
+      window.closeCashInOutModal();
+    }
+  };
+
+  window.submitCashInOut = function () {
+    const form = document.getElementById("cash-inout-form");
+    if (!form) return;
+
+    const payload = new URLSearchParams(new FormData(form));
+
+    fetch(CASH_INOUT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        "X-CSRFToken": CSRF_TOKEN,
+      },
+      body: payload.toString(),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data.ok) {
+          alert(data.error || "Unable to save cash movement.");
+          return;
+        }
+
+        const movementLabel = data.movement_type === "IN" ? "Cash In" : "Cash Out";
+        alert(movementLabel + " saved: " + formatPeso(data.amount));
+        window.closeCashInOutModal();
+      })
+      .catch(() => {
+        alert("Network error while saving cash movement.");
+      });
+  };
+
   // ---------------------------------------------------------------------------
   // Denomination Modal
   // ---------------------------------------------------------------------------
