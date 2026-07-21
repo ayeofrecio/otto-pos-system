@@ -40,7 +40,7 @@ class TransactionHeader(models.Model):
     change_amount     = models.DecimalField(max_digits=15, decimal_places=4, default=0)
 
     # VAT breakdown snapshot — computed at payment time
-    vat_rate          = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.12"))
+    vat_rate          = models.DecimalField(max_digits=8, decimal_places=4, default=Decimal("0.12"))
     vatable_amount    = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # net of VAT
     vat_amount        = models.DecimalField(max_digits=15, decimal_places=4, default=0)  # VAT portion
     vat_exempt_amount = models.DecimalField(max_digits=15, decimal_places=4, default=0)
