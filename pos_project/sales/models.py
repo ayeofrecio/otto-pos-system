@@ -109,6 +109,45 @@ class TransactionItem(models.Model):
     def __str__(self):
         return f'{self.header.transaction_no} / {self.item_code}'
 
+# ---------------------------------------------------------------------------
+# Transaction Logs Payment / tender lines
+# ---------------------------------------------------------------------------
+
+# Note: In the old Clarion POS, payment lines were stored in the same file as the cart lines (TEMPTRANS), with item_code='PAYMENT' and the tender code in the discount_code field.  Here we split them into a separate Payments table for better data integrity and easier querying.
+class Payment(models.Model):
+    """
+    Payment lines. One transaction can have multiple tender types
+    (e.g. partial cash + card split). Linked to TransactionHeader,
+    not to individual items.
+
+    amount         = net amount applied toward the bill (what gets totalized)
+    tendered_amount = gross amount handed over by customer (cash only; equals
+                      amount for non-cash since they can't overpay)
+    change_amount  = tendered_amount - amount (cash only, else 0)
+    """
+    header = models.ForeignKey(
+        TransactionHeader,
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
+
+    pcode             = models.CharField(max_length=3)
+    amount            = models.DecimalField(max_digits=15, decimal_places=4, default=0)
+    tendered_amount   = models.DecimalField(max_digits=15, decimal_places=4, default=0,
+                            help_text="Gross amount handed over. Equals amount for non-cash.")
+    change_amount     = models.DecimalField(max_digits=15, decimal_places=4, default=0,
+                            help_text="Change returned for this tender line. Non-zero for cash only.")
+    tender_desc       = models.CharField(max_length=15, blank=True)
+    payment_reference = models.CharField(max_length=20, blank=True, null=True)
+
+    class Meta:
+        db_table = 'payment'
+        indexes = [
+            models.Index(fields=['header']),
+        ]
+
+    def __str__(self):
+        return f'{self.header.transaction_no} – {self.pcode} {self.amount}'
 
 class AccountingSummary(models.Model):
     """
@@ -934,9 +973,8 @@ class CashInOut(models.Model):
 
     def __str__(self):
         return f"{self.session_id} {self.movement_type} {self.amount}"
-
-
 # Note: Transaction Payment / Tender counts for Z-reading continuity tracking.  Updated on each transaction close.
+
 class TransactionTenderCount(models.Model):
     """
     Tracks the count of each tender type used in a transaction, for Z-reading continuity.
