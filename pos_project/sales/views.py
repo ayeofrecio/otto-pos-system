@@ -933,6 +933,7 @@ def cart_void_item(request):
         transaction_type=TRTYPE_VOID_ITEM,
         return_code=RCODE_ITEM_VOID,
         item_ref=str(line.rec_ctr),
+        amount_total=line.item_price_ext or 0,
     )
     TransactionItem.objects.create(
         header=header,
@@ -1000,6 +1001,9 @@ def cart_void_transaction(request):
         return JsonResponse({"ok": False, "error": "No open POS session"}, status=400)
 
     now = datetime.datetime.now()
+    trans_disc = _get_trans_disc(request)
+    _, _, void_total = _compute_totals(cart_lines, trans_disc)
+
     header = TransactionHeader.objects.create(
         session=session,
         user_id=user_id,
@@ -1011,6 +1015,7 @@ def cart_void_transaction(request):
         transaction_time=now.strftime("%H:%M"),
         transaction_type=TRTYPE_VOID_TRANS,
         return_code=TRTYPE_VOID_TRANS,
+        amount_total=void_total,
     )
 
     TransactionItem.objects.bulk_create([
@@ -2738,6 +2743,8 @@ def item_search(request):
 
     from django.db.models import Q
 
+    from sales.color_lookup import get_color_description
+
     # Search Item master by description or code (exclude inactive items)
     items = Item.objects.filter(
         Q(short_desc__icontains=q) | Q(long_desc__icontains=q) | Q(icode__icontains=q)
@@ -2756,6 +2763,7 @@ def item_search(request):
                     "size": v.size,
                     "color": v.color,
                     "color_desc": v.color_desc,
+                    "color_display": get_color_description(v.color or "", icode=item.icode, size=v.size),
                     "price": str(v.price or item.price),
                 })
         else:
@@ -2766,6 +2774,7 @@ def item_search(request):
                 "size": item.size or "",
                 "color": item.color or "",
                 "color_desc": item.color_desc or "",
+                "color_display": get_color_description(item.color or "", icode=item.icode, size=item.size or ""),
                 "price": str(item.price),
             })
 
@@ -3212,7 +3221,10 @@ def _print_receipt(printer, terminal_config, context, current_operator):
  
     # ── Items ─────────────────────────────────────────────────────────────────
     for line in context["lines"]:
-        write_line(line.get("description", "")[:paper_width])
+        desc = line.get("description", "")
+        if line.get("is_return"):
+            desc += " (R)"
+        write_line(desc[:paper_width])
         write_line(item_line(
             format_qty(line.get("qty")),
             format_money(line.get("price")),

@@ -161,13 +161,13 @@
 
     <!-- ── Items (mirrors items loop) ────────────────────────── -->
     {% for line in lines %}
-        <div class="r-item-desc">{{ line.description }}</div>
+        <div class="r-item-desc">{{ line.description }}{% if line.is_return %} (R){% endif %}</div>
         <div class="r-item-amounts">
-            <span class="r-left">{{ line.qty }} x {{ line.price }}</span>
-            <span class="r-right">{{ line.ext }}</span>
+            <span class="r-left">{{ line.qty }} x {{ line.price|floatformat:2 }}</span>
+            <span class="r-right">{{ line.ext|floatformat:2 }}</span>
         </div>
         {% if line.disc_pct %}
-            <div class="r-item-disc">{{ line.disc_pct }}% - {{ line.disc_total }}</div>
+            <div class="r-item-disc">{{ line.disc_pct }}% - {{ line.disc_total|floatformat:2 }}</div>
         {% endif %}
     {% endfor %}
 
@@ -176,12 +176,12 @@
         <hr class="sep">
         <div class="r-lr">
             <span>Subtotal</span>
-            <span>{{ subtotal }}</span>
+            <span>{{ subtotal|floatformat:2 }}</span>
         </div>
         <div class="r-disc-label">{{ trans_disc_label }} ({{ trans_disc_pct }}%)</div>
         <div class="r-lr">
             <span>Discount</span>
-            <span>-{{ trans_disc_amt }}</span>
+            <span>-{{ trans_disc_amt|floatformat:2 }}</span>
         </div>
     {% endif %}
 
@@ -189,22 +189,22 @@
     <hr class="sep">
         <div class="r-lr">
             <span>VAT-Exempt</span>
-            <span>{{ vat_exempt_amount }}</span>
+            <span>{{ vat_exempt_amount|floatformat:2 }}</span>
         </div>
 
         <div class="r-lr">
             <span>VATable</span>
-            <span>{{ vatable_amount }}</span>
+            <span>{{ vatable_amount|floatformat:2 }}</span>
         </div>
 
         <div class="r-lr">
             <span>VAT @ {{ vat_rate }}</span>
-            <span>{{ vat_amount }}</span>
+            <span>{{ vat_amount|floatformat:2 }}</span>
         </div>
 
         <div class="r-lr r-total">
             <span>TOTAL</span>
-            <span>{{ total }}</span>
+            <span>{{ total|floatformat:2 }}</span>
         </div>
 
     <hr class="sep">
@@ -213,21 +213,21 @@
     {% for t in tender_lines %}
         <div class="r-lr">
             <span>{{ t.desc }}</span>
-            <span>{{ t.amount }}</span>
+            <span>{{ t.amount|floatformat:2 }}</span>
         </div>
     {% endfor %}
 
     {% if amount_tendered %}
         <div class="r-lr">
             <span>Tendered</span>
-            <span>{{ amount_tendered }}</span>
+            <span>{{ amount_tendered|floatformat:2 }}</span>
         </div>
     {% endif %}
 
     {% if is_cash and change_amount and change_amount != "0" and change_amount != "0.0000" %}
         <div class="r-lr r-change">
             <span>CHANGE</span>
-            <span>{{ change_amount }}</span>
+            <span>{{ change_amount|floatformat:2 }}</span>
         </div>
     {% endif %}
 

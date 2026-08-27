@@ -743,6 +743,31 @@
     }
   };
 
+  window.voidSelectedLineItem = function () {
+    const recInput = document.getElementById('line-disc-rec-ctr');
+    const recCtr = lineDiscRecCtr || (recInput && recInput.value);
+    if (!recCtr) {
+      alert('No item selected to void.');
+      return;
+    }
+    if (!confirm('Void this item?')) {
+      return;
+    }
+
+    postFormEncoded(CART_VOID_ITEM_URL, { rec_ctr: recCtr })
+      .then(function (res) {
+        if (!res.ok || !res.data.ok) {
+          alert(res.data.error || 'Failed to void item.');
+          return;
+        }
+        window.closeLineDiscModal();
+        window.location.reload();
+      })
+      .catch(function () {
+        alert('Failed to void item.');
+      });
+  };
+
   window.selectLineDiscType = function (btn, code, label, defaultPct) {
     lineDiscType = code;
     refreshLineDiscTypeBtns(code);
@@ -1223,23 +1248,10 @@
       const variantHtml = variant ? '<span class="search-result-variant">(' + variant + ')</span>' : '';
       return '<div class="search-result" onclick="selectSearchResult(\'' +
         escHtml(item.barcode) + '\')" title="Click to add to cart">' +
-        // '<span class="search-result-desc">' + escHtml(item.description) +
-        // ' ' + variantHtml + '</span>' 
-        '<div class="flex flex-col gap-1">' + 
-          
-          // Row 1: Description
-          '<div class="flex flex-row">' +
-            '<span class="search-result-desc">' + escHtml(item.description) + '</span>' +
-          '</div>' +
-          
-          // Row 2: Variant (Only renders if variantHtml is not empty)
-          (variantHtml ? 
-            '<div class="flex flex-row">' +
-              '<span>' + variantHtml + '</span>' +
-            '</div>' : ''
-          ) +
-
-        '</div>' 
+        '<div class="search-result-info">' +
+          '<span class="search-result-desc">' + escHtml(item.description) + '</span>' +
+          (variantHtml ? variantHtml : '') +
+        '</div>'
         + '<span class="search-result-code">' + escHtml(item.code) + '</span>' +
         '<span class="search-result-variant">' + escHtml(item.barcode) + '</span>' +
         '<span class="search-result-price">₱' + parseFloat(item.price).toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '</span>' +

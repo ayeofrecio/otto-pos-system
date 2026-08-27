@@ -61,8 +61,9 @@
         }
 
         .receipt-no {
-            font-size: 1rem;
-            color: #8b949e;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #e6edf3;
         }
 
         .cashier {
@@ -159,16 +160,18 @@
 
         .item-detail dl {
             margin: 0;
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            column-gap: 0.5rem;
+            row-gap: 0.5rem;
         }
 
         .item-detail dt {
-            float: left;
-            margin-right: 0.5rem;
             color: #8b949e;
         }
 
         .item-detail dd {
-            margin: 0 0 0.5rem;
+            margin: 0;
         }
 
         .scanned-items-panel {
@@ -248,6 +251,7 @@
 
         .scanned-item-amount {
             font-weight: 600;
+            font-size: 1.15rem;
             color: #e6edf3;
             margin-left: auto;
         }
@@ -519,6 +523,11 @@
 
         .btn-primary:hover {
             background: #7a3540;
+        }
+
+        .btn-primary:focus-visible {
+            outline: 2px solid #e6a23c;
+            outline-offset: 2px;
         }
 
         .btn-secondary {
@@ -1000,10 +1009,19 @@
             background: #8a6a25;
         }
 
+        .btn-void-item {
+            background: #6e1a1a;
+            color: #e6edf3;
+            margin-right: auto;
+        }
+
+        .btn-void-item:hover {
+            background: #8a2222;
+        }
+
         .btn-remove-disc {
             background: #3a1520;
             color: #e6edf3;
-            margin-right: auto;
         }
 
         .btn-remove-disc:hover {
@@ -1300,6 +1318,12 @@
             padding-left: calc(0.75rem - 3px);
         }
 
+        .search-result-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+
         .search-result-desc {
             font-weight: 500;
             font-size: 1.2rem;
@@ -1430,6 +1454,34 @@
             border-color: #8b3d4a;
             background: #8b3d4a;
             color: white;
+        }
+
+        .pay-tender-btn:focus-visible {
+            outline: 2px solid #e6a23c;
+            outline-offset: 2px;
+        }
+
+        .pay-tender-key {
+            display: inline-block;
+            min-width: 1.2em;
+            margin-right: 0.4em;
+            padding: 0 0.3em;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #8b949e;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+        }
+
+        .pay-tender-btn.selected .pay-tender-key {
+            color: rgba(255, 255, 255, 0.85);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .pay-hotkey-hint {
+            font-size: 0.75rem;
+            color: #6e7681;
+            margin: -0.75rem 0 1rem;
         }
 
         .pay-cash-section {
@@ -2556,11 +2608,9 @@
                         <dt>Code:</dt>
                         <dd>{{ last_item.item_code }}</dd>
                         <dt>Size:</dt>
-                        <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—"
-                            }}</dd>
+                        <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—" }}</dd>
                         <dt>Color:</dt>
-                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as
-                            item_color_display %}{{ item_color_display|default:"—" }}</dd>
+                        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as item_color_display %}{{ item_color_display|default:"—" }}</dd>
                         <dt>Price:</dt>
                         <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
                     </dl>
@@ -2750,6 +2800,7 @@
                     <span class="disc-pct-sym">%</span>
                 </div>
                 <div class="disc-modal-footer">
+                    <button type="button" class="btn btn-void-item" onclick="voidSelectedLineItem()">Void Item</button>
                     <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove
                         Discount</button>
                     <button type="button" class="btn btn-secondary" onclick="closeLineDiscModal()">Cancel</button>

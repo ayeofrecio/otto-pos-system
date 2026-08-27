@@ -9,7 +9,7 @@
         <div class="scanned-item-meta">
             <span class="scanned-item-qty">{{ line.item_qty|floatformat:"-2" }} × &#8369;{{ line.item_price|floatformat:2|intcomma }}</span>
             {% if line.item_size or line.item_color %}
-            <span class="scanned-item-variant">{% size_display line.item_size %}{% if line.item_size and line.item_color_desc %}/{% endif %}{% color_display line.item_color_desc line.item_code line.item_size %}</span>
+            <span class="scanned-item-variant">{% size_display line.item_size %}{% if line.item_size and line.item_color %}/{% endif %}{% color_display line.item_color line.item_code line.item_size %}</span>
             {% endif %}
             {% if line.tag1 == 'R' %}
             <span class="scanned-item-return-badge">RETURN</span>

@@ -61,10 +61,11 @@
                                 data-desc="{{ tender.description }}"
                                 data-pchange="{{ tender.pchange }}"
                                 onclick="selectTenderForAdd('{{ tender.pcode }}', '{{ tender.description }}', '{{ tender.pchange }}')">
-                            {{ tender.description }}
+                            <span class="pay-tender-key">{{ forloop.counter }}</span>{{ tender.description }}
                         </button>
                         {% endfor %}
                     </div>
+                    <div class="pay-hotkey-hint">Press 1-9 to pick a method &middot; Enter to add &middot; Enter again completes payment when balance is settled</div>
 
                     <div class="pay-cash-section" id="pay-cash-section">
                         <div class="pay-cash-section-title">Amount</div>
@@ -143,11 +144,39 @@
 
     function focusDefaultTenderButton() {
         const tenderButtons = Array.from(document.querySelectorAll('.pay-tender-btn'));
-        if (!tenderButtons.length) return;
+        if (tenderButtons.length) {
+            // Prefer the tender that can return change (usually Cash), fallback to first.
+            const cashBtn = tenderButtons.find(btn => (btn.getAttribute('data-pchange') || '').toUpperCase() === 'Y');
+            (cashBtn || tenderButtons[0]).focus();
+            return;
+        }
+        // No tenders to pick (e.g. zero/negative total) — jump straight to the action button.
+        const payBtn = document.getElementById('pay-btn');
+        if (payBtn) payBtn.focus();
+    }
 
-        // Prefer the tender that can return change (usually Cash), fallback to first.
-        const cashBtn = tenderButtons.find(btn => (btn.getAttribute('data-pchange') || '').toUpperCase() === 'Y');
-        (cashBtn || tenderButtons[0]).focus();
+    // Number keys 1-9 pick a tender button directly, so the whole flow can be
+    // driven without a mouse (Tab still works too). The modal content is
+    // reloaded via HTMX on every open, so guard against attaching this
+    // document-level listener more than once.
+    if (!window.__payModalHotkeysAttached) {
+        window.__payModalHotkeysAttached = true;
+        document.addEventListener('keydown', function(evt) {
+            const payModal = document.getElementById('pay-modal');
+            if (!payModal || !payModal.classList.contains('open')) return;
+            const active = document.activeElement;
+            const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+            if (isTyping) return;
+            if (evt.key >= '1' && evt.key <= '9') {
+                const tenderButtons = Array.from(document.querySelectorAll('.pay-tender-btn'));
+                const idx = parseInt(evt.key, 10) - 1;
+                if (tenderButtons[idx]) {
+                    evt.preventDefault();
+                    tenderButtons[idx].focus();
+                    tenderButtons[idx].click();
+                }
+            }
+        });
     }
 
     function fmt(n) {
@@ -282,15 +311,36 @@
 
         renderEntries();
         if (inp) inp.value = '';
-        if (refInput) refInput.value = '';
+        if (refInput) {
+            refInput.value = '';
+            refInput.required = false;
+        }
+        const refSection = document.getElementById('pay-reference-section');
+        if (refSection) refSection.style.display = 'none';
+        document.querySelectorAll('.pay-tender-btn').forEach(b => b.classList.remove('selected'));
+        selectedTender = null;
         updateAddAmount();
         buildQuickAmounts();
+        focusNextStep();
     };
+
+    // After a payment is added, jump the keyboard focus to whatever the
+    // cashier needs next: the Complete button once the balance is settled,
+    // otherwise back to the tender buttons to keep tendering.
+    function focusNextStep() {
+        const payBtn = document.getElementById('pay-btn');
+        if (getRemainingBalance() <= 0 && payBtn && !payBtn.disabled) {
+            payBtn.focus();
+            return;
+        }
+        focusDefaultTenderButton();
+    }
 
     window.removeTenderEntry = function(idx) {
         tenderEntries.splice(idx, 1);
         renderEntries();
         buildQuickAmounts();
+        focusDefaultTenderButton();
     };
 
     function renderEntries() {
