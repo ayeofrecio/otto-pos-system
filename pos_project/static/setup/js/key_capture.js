@@ -15,6 +15,25 @@ document.addEventListener('DOMContentLoaded', function () {
         'F10': String.fromCharCode(0xFD),   // chr(253) - pPrOverKey
         'F11': String.fromCharCode(0xFE),   // chr(254) - pSTDiscKey
         'F12': String.fromCharCode(0xFF),   // chr(255) - pIDiscKey
+
+        // Non-F-key specials — each gets its own byte so it survives the
+        // 2-char DB column without colliding (previously these fell through
+        // to key.substring(0,2), so 'End'/'Enter' both became "En" and all
+        // four arrow keys became "Ar"). Mirrors CHAR_TO_FKEY in cashier.html.
+        'Enter'     : String.fromCharCode(0x0D),
+        'Escape'    : String.fromCharCode(0x1B),
+        'Backspace' : String.fromCharCode(0x08),
+        'Tab'       : String.fromCharCode(0x09),
+        'Insert'    : String.fromCharCode(0x1A),
+        'Delete'    : String.fromCharCode(0x7F),
+        'Home'      : String.fromCharCode(0x01),
+        'End'       : String.fromCharCode(0x02),
+        'PageUp'    : String.fromCharCode(0x04),
+        'PageDown'  : String.fromCharCode(0x05),
+        'ArrowUp'   : String.fromCharCode(0x0B),
+        'ArrowDown' : String.fromCharCode(0x0C),
+        'ArrowLeft' : String.fromCharCode(0x0E),
+        'ArrowRight': String.fromCharCode(0x0F),
     };
 
     // Display-friendly label shown in the badge (does not affect saved value)

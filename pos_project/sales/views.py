@@ -18,6 +18,7 @@ from django.core.management import call_command, CommandError
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
+from django.conf import settings
 
 from users.models import Users
 from users.models import POSSession, POSSessionUsers
@@ -3009,6 +3010,24 @@ class _SocketPrinterWrapper:
     def close(self):
         self._sock.close()
 
+class _FilePrinterWrapper:
+    """Writes receipt/report bytes to a local text file instead of a real printer.
+    Used for dev/testing when connection_type == 'FILE' (no printer attached)."""
+
+    def __init__(self, label: str = "print"):
+        out_dir = os.path.join(settings.BASE_DIR, "printer_output")
+        os.makedirs(out_dir, exist_ok=True)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self._path = os.path.join(out_dir, f"{label}_{ts}.txt")
+        self._fh = open(self._path, "wb")
+
+    def write(self, data: bytes):
+        self._fh.write(data)
+
+    def close(self):
+        self._fh.close()
+
+
 class _WindowsPrinterWrapper:
     """Wraps the Windows Spooler API to expose the same .write()/.close() API as serial.Serial."""
     def __init__(self, printer_name: str):
@@ -3066,7 +3085,11 @@ def _open_printer(printer_port):
             
             # Returns the Windows print handler wrapper
             return _WindowsPrinterWrapper(printer_port.port_name)
- 
+
+    elif ct == "FILE":
+        # No physical printer — writes output to printer_output/*.txt instead.
+        return _FilePrinterWrapper(label=printer_port.port_type.lower())
+
     else:
         raise ValueError(f"Unsupported connection_type: {ct!r}")
  

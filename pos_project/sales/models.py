@@ -1005,6 +1005,8 @@ class TerminalConfiguration(models.Model):
         ("SERIAL","Serial"),
         ("USB","USB"),
         ("NETWORK","Network"),
+        ("WINDOWS","Windows"),
+        ("FILE","File (No Printer / Dev-Testing)"),
     ]
     store_id = models.CharField(max_length=3)
     terminal_id = models.CharField(max_length=3)
@@ -1081,6 +1083,7 @@ class TerminalPort(models.Model):
         ("USB","USB"),
         ("NETWORK","Network"),
         ("WINDOWS","Windows"),
+        ("FILE","File (No Printer / Dev-Testing)"),
     ]
 
     terminal = models.ForeignKey(

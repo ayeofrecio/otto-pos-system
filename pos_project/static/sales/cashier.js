@@ -23,17 +23,36 @@
   }
   maximizeBrowserWindow();
 
+  // Tracks whether a fullscreen exit was explicitly requested via F9, so the
+  // fullscreenchange listener below can tell that apart from the browser's
+  // own automatic exit-on-Escape behavior (which we want to undo).
+  let exitingFullscreenViaF9 = false;
+
   async function toggleFullscreenMode() {
     try {
       if (!document.fullscreenElement) {
         await document.documentElement.requestFullscreen();
       } else {
+        exitingFullscreenViaF9 = true;
         await document.exitFullscreen();
       }
     } catch (_) {
       // Fullscreen may be blocked by browser policy.
+      exitingFullscreenViaF9 = false;
     }
   }
+
+  // The Fullscreen API auto-exits fullscreen whenever Escape is pressed,
+  // regardless of app-level keydown handling — this can't be prevented with
+  // evt.preventDefault(). That means closing a modal (e.g. Search) with
+  // Escape while in kiosk fullscreen mode unintentionally un-maximizes the
+  // window. Restore fullscreen unless the exit was the deliberate F9 toggle.
+  document.addEventListener('fullscreenchange', function () {
+    if (!document.fullscreenElement && !exitingFullscreenViaF9) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    exitingFullscreenViaF9 = false;
+  });
 
   // ---------------------------------------------------------------------------
   // Live time tick
@@ -324,6 +343,8 @@
     const barcodeInput = document.getElementById('barcode-input');
     const qtyInput = document.getElementById('qty-input');
     const suspendHotkey = (typeof POS_FKEYS !== 'undefined' && POS_FKEYS.iSusRt) ? POS_FKEYS.iSusRt : 'F3';
+    const searchHotkey = (typeof POS_FKEYS !== 'undefined' && POS_FKEYS.iView) ? POS_FKEYS.iView : 'F1';
+    const qtyHotkey = (typeof POS_FKEYS !== 'undefined' && POS_FKEYS.iQty) ? POS_FKEYS.iQty : 'F2';
 
     // Block browser defaults for ALL keys that are mapped to POS functions
     if (typeof POS_FKEYS !== 'undefined') {
@@ -355,13 +376,13 @@
       return;
     }
 
-    if (evt.key === 'F1') {
+    if (evt.key === searchHotkey) {
       evt.preventDefault();
       window.openSearchModal();
       return;
     }
 
-    if (evt.key === 'F2') {
+    if (evt.key === qtyHotkey) {
       evt.preventDefault();
       if (qtyInput) { qtyInput.focus(); qtyInput.select(); }
       return;

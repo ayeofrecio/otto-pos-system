@@ -397,8 +397,8 @@
         .actions {
             flex-shrink: 0;
             display: flex;
-            gap: 0.75rem;
-            padding: 0.75rem 1.5rem;
+            gap: 1rem;
+            padding: 1rem 1.5rem;
             background: #252b33;
             border-top: 1px solid #2f3640;
             align-items: center;
@@ -407,7 +407,7 @@
 
         .actions-fn-grid {
             display: flex;
-            gap: 0.5rem;
+            gap: 0.75rem;
             flex: 1;
             justify-content: space-between;
             align-items: center;
@@ -422,8 +422,8 @@
         }
 
         .btn-fn {
-            padding: 0.6rem 1.1rem;
-            font-size: 0.875rem;
+            padding: 0.9rem 1.4rem;
+            font-size: 1.05rem;
             border: 2px solid;
             border-radius: 6px;
             cursor: pointer;
@@ -431,18 +431,19 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.15rem;
+            gap: 0.2rem;
             line-height: 1.2;
         }
 
         .btn-fn .fn-key {
-            font-size: 0.65rem;
+            font-size: 1.3rem;
             font-weight: 700;
             letter-spacing: 0.06em;
             opacity: 0.75;
         }
 
         .btn-fn .fn-label {
+            font-size: 0.8rem;
             font-weight: 600;
         }
 
@@ -1726,10 +1727,32 @@
         .close-trans-modal-box {
             width: 820px;
             max-width: 95vw;
-            max-height: 98vh;
+            max-height: 90vh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+        }
+
+        /* Form fills remaining modal height; only the summary scrolls so the
+           notes field and action buttons (Process Z-Read / Confirm) stay
+           visible without needing to zoom out. */
+        .close-trans-modal-box #close-trans-form {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .close-trans-modal-box .close-trans-summary {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        .close-trans-modal-box .close-trans-notes-section,
+        .close-trans-modal-box .close-trans-footer,
+        .close-trans-modal-box .close-trans-confirm-strip {
+            flex: 0 0 auto;
         }
 
         .modal-body {
@@ -3388,6 +3411,21 @@
             [String.fromCharCode(0xFD)]: 'F10',
             [String.fromCharCode(0xFE)]: 'F11',
             [String.fromCharCode(0xFF)]: 'F12',
+            // Non-F-key specials — see matching KEY_LABELS in key_capture.js
+            [String.fromCharCode(0x0D)]: 'Enter',
+            [String.fromCharCode(0x1B)]: 'Escape',
+            [String.fromCharCode(0x08)]: 'Backspace',
+            [String.fromCharCode(0x09)]: 'Tab',
+            [String.fromCharCode(0x1A)]: 'Insert',
+            [String.fromCharCode(0x7F)]: 'Delete',
+            [String.fromCharCode(0x01)]: 'Home',
+            [String.fromCharCode(0x02)]: 'End',
+            [String.fromCharCode(0x04)]: 'PageUp',
+            [String.fromCharCode(0x05)]: 'PageDown',
+            [String.fromCharCode(0x0B)]: 'ArrowUp',
+            [String.fromCharCode(0x0C)]: 'ArrowDown',
+            [String.fromCharCode(0x0E)]: 'ArrowLeft',
+            [String.fromCharCode(0x0F)]: 'ArrowRight',
         };
         // Translate all POS_KEYS values to their physical key names for keydown comparisons
         const POS_FKEYS = {};

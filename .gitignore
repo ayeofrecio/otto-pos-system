@@ -30,6 +30,7 @@ db.sqlite3
 db.sqlite3-journal
 media/
 staticfiles/
+pos_project/printer_output/
 
 # Environment variables
 .env
