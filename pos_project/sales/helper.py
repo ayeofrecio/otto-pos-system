@@ -8,6 +8,7 @@ Handles the database-side of a Z-Reading:
 Call update_z_reading_db() right after _do_print_z_reading() succeeds.
 """
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from django.db import transaction
@@ -31,6 +32,10 @@ from sales.pos_constants import (
 )
 
 VAT_RATE = Decimal("0.12")
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
 
 # ---------------------------------------------------------------------------
 # Shared aggregation helper

@@ -60,7 +60,7 @@ from .pos_constants import (
 
 from sales.services import import_products_from_csv
 from setup.pos_keys import get_pos_keys
-from sales.helper import update_z_reading_db
+from sales.helper import update_z_reading_db, utcnow
 
 #  for debugging
 from pprint import pprint
@@ -100,7 +100,7 @@ STORE_ID = "001"
 TERMINAL_ID = "001"
 
 
-
+now = utcnow()
 # ---------------------------------------------------------------------------
 # Transaction-level discount helpers
 # ---------------------------------------------------------------------------
@@ -3247,6 +3247,8 @@ def _print_receipt(printer, terminal_config, context, current_operator):
         desc = line.get("description", "")
         if line.get("is_return"):
             desc += " (R)"
+        else:
+            desc += " (T)"
         write_line(desc[:paper_width])
         write_line(item_line(
             format_qty(line.get("qty")),
@@ -3287,7 +3289,7 @@ def _print_receipt(printer, terminal_config, context, current_operator):
  
     # ── Footer ────────────────────────────────────────────────────────────────
     separator()
- 
+    write_line(" ")
     footers = _get_customer_footers(terminal_config)
 
     if footers:

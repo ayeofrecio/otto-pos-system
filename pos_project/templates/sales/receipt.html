@@ -37,20 +37,28 @@
         /* ── Header ────────────────────────────────────── */
         .r-header {
             text-align: center;
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.1rem;
+
+        }
+
+        /* Base resets to eliminate default element gaps */
+        .r-header-bold,
+        .r-header-normal {
+            line-height: 1.0; 
+            margin: 0; 
         }
 
         /* Mirrors is_capitalized → \x1b\x21\x10 (double-height) */
         .r-header-bold {
-            font-size: 1.1rem;
+            font-size: 1rem;
             font-weight: 700;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.0em;
+            margin-bottom: 2px; 
         }
 
         .r-header-normal {
             font-size: 0.82rem;
         }
-
         /* ── "SALES INVOICE" title ──────────────────────── */
         .r-title {
             text-align: center;
@@ -63,10 +71,16 @@
         .r-meta {
             font-size: 0.8rem;
             margin-bottom: 0.25rem;
+            line-height: 0.81;
         }
 
         /* ── Item rows ──────────────────────────────────── */
         /* Description line — full width, truncated */
+        .r-item-desc,
+        .r-item-disc,
+        .r-item-amounts {
+            line-height: 1;
+        }
         .r-item-desc {
             white-space: nowrap;
             overflow: hidden;
@@ -94,6 +108,7 @@
             display: flex;
             justify-content: space-between;
             padding: 0.1rem 0;
+            line-height: 1;
         }
 
         /* ── Transaction discount block ─────────────────── */
@@ -114,8 +129,8 @@
         }
 
         /* ── Footer ─────────────────────────────────────── */
-        .r-footer-center { text-align: center; }
-        .r-footer-left   { text-align: left; }
+        .r-footer-center { text-align: center; line-height: 1; }
+        .r-footer-left   { text-align: left; line-height: 1; }
 
         /* ── Actions ─────────────────────────────────────── */
         .actions { text-align: center; margin-top: 1.5rem; }
@@ -131,13 +146,20 @@
             color: white;
         }
         .btn:hover { background: #7a3540; }
+
+        /* Space between */
+        .margin-space {
+            margin-top: 2;
+            margin-bottom: 2;
+            padding: 5px 0px 5px 0;
+        }
     </style>
 </head>
 <body>
 <div class="receipt">
 
     <!-- ── Header (mirrors db_headers loop) ───────────────────── -->
-    <div class="r-header">
+    <div class="r-header -p-2">
         {% for h in headers %}
             {% if h.is_capitalized %}
                 <div class="r-header-bold">{{ h.header_text }}</div>
@@ -163,7 +185,7 @@
     {% for line in lines %}
         <div class="r-item-desc">{{ line.description }}{% if line.is_return %} (R){% endif %}</div>
         <div class="r-item-amounts">
-            <span class="r-left">{{ line.qty }} x {{ line.price|floatformat:2 }}</span>
+            <span class="r-left">{{ line.qty|floatformat:0 }} x {{ line.price|floatformat:2 }}</span>
             <span class="r-right">{{ line.ext|floatformat:2 }}</span>
         </div>
         {% if line.disc_pct %}
@@ -229,20 +251,28 @@
             <span>CHANGE</span>
             <span>{{ change_amount|floatformat:2 }}</span>
         </div>
-    {% endif %}
-
+        {% endif %}
+    <div class="margin-space"></div>
+    <div class="r-footer-center">
+        {{ date }}, {{ time }}
+    </div>
+    <div class="margin-space"></div>
+    <div class="margin-space"></div>
     <!-- ── Footer (mirrors footers loop) ─────────────────────── -->
-    <hr class="sep">
+    <!-- <hr class="sep"> -->
     {% if footers %}
-        {% for f in footers %}
-            <div class="{% if f.is_centered %}r-footer-center{% else %}r-footer-left{% endif %}">
+    {% for f in footers %}
+        <div class="{% if f.is_centered %}r-footer-center{% else %}r-footer-left{% endif %}">
+            {% if f.footer_text and f.footer_text.strip %}
                 {{ f.footer_text }}
-            </div>
-        {% endfor %}
+            {% else %}
+                &nbsp;
+            {% endif %}
+        </div>
+    {% endfor %}
     {% else %}
         <div class="r-footer-center">Thank you for your purchase!</div>
     {% endif %}
-
 </div>
 
 <div class="actions">
@@ -256,9 +286,9 @@
         const targetUrl = "{% url 'sales:pos_cashier' %}"; 
         
         // Wait 5000 milliseconds (5 seconds), then redirect
-        setTimeout(function() {
-            window.location.href = targetUrl;
-        }, 5000); 
+        // setTimeout(function() {
+        //     window.location.href = targetUrl;
+        // }, 5000); 
     });
 </script>
 </body>
