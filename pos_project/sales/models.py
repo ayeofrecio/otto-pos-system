@@ -16,8 +16,8 @@ class TransactionHeader(models.Model):
     )
 
     # Clarion identity fields — kept here for migration traceability
-    user_id            = models.CharField(max_length=10)               # USERID
-    user_id2           = models.CharField(max_length=4,  blank=True)   # USERID2
+    user_id            = models.CharField(max_length=30)               # USERID
+    user_id2           = models.CharField(max_length=30,  blank=True)   # USERID2
     terminal_id        = models.CharField(max_length=3)                # TERMID
     store_id           = models.CharField(max_length=3)                # STOREID
 
@@ -139,6 +139,8 @@ class Payment(models.Model):
                             help_text="Change returned for this tender line. Non-zero for cash only.")
     tender_desc       = models.CharField(max_length=15, blank=True)
     payment_reference = models.CharField(max_length=20, blank=True, null=True)
+    holder            = models.CharField(max_length=50, blank=True, null=True)
+    approval_code     = models.CharField(max_length=30, blank=True, null=True)
 
     class Meta:
         db_table = 'payment'

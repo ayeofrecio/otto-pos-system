@@ -76,6 +76,12 @@
 
         /* ── Item rows ──────────────────────────────────── */
         /* Description line — full width, truncated */
+        .r-padding-left{
+            margin-left: 8px;
+        }
+        .r-padding-left-discount{
+            margin-left: 12px;
+        }
         .r-item-desc,
         .r-item-disc,
         .r-item-amounts {
@@ -176,21 +182,35 @@
 
     <!-- ── Meta (mirrors SI#, User Id, StoreId) ──────────────── -->
     <div class="r-meta">SI #: {{ transaction_no }}</div>
-    <div class="r-meta">User Id    : {{ cashier_name }}</div>
+    <div class="r-meta">Cashier    : {{ cashier_name }}</div>
     <div class="r-meta">StoreId    : {{ store_id }}</div>
 
     <hr class="sep">
 
     <!-- ── Items (mirrors items loop) ────────────────────────── -->
     {% for line in lines %}
-        <div class="r-item-desc">{{ line.description }}{% if line.is_return %} (R){% endif %}</div>
+    {% if line.is_single_qty %}
         <div class="r-item-amounts">
-            <span class="r-left">{{ line.qty|floatformat:0 }} x {{ line.price|floatformat:2 }}</span>
-            <span class="r-right">{{ line.ext|floatformat:2 }}</span>
+            <span class="r-left r-item-desc">{{ line.description }}</span>
+            <span class="r-right">{{ line.ext|floatformat:2 }} {% if line.is_return %}R{% else %}T{% endif %}</span>
         </div>
-        {% if line.disc_pct %}
-            <div class="r-item-disc">{{ line.disc_pct }}% - {{ line.disc_total|floatformat:2 }}</div>
+        {% if line.variant %}
+            <div class="r-item-desc r-padding-left">{{ line.variant }}</div>
         {% endif %}
+    {% else %}
+        <div class="r-item-desc">{{ line.description }}</div>
+        {% if line.variant %}
+            <div class="r-item-desc r-padding-left">{{ line.variant }}</div>
+        {% endif %}
+        <div class="r-item-amounts r-padding-left">
+            <span class="r-left">{{ line.qty|floatformat:0 }} x {{ line.price|floatformat:2 }}</span>
+            <span class="r-right">{{ line.ext|floatformat:2 }} {% if line.is_return %}R{% else %}T{% endif %}</span>
+        </div>
+    {% endif %}
+
+    {% if line.disc_pct %}
+        <div class="r-item-disc r-padding-left-discount">{{ line.disct_code }}: {{ line.disc_pct }}% - {{ line.disc_total|floatformat:2 }}</div>
+    {% endif %}
     {% endfor %}
 
     <!-- ── Transaction discount block (mirrors trans_disc_amt check) ── -->
@@ -211,7 +231,7 @@
     <hr class="sep">
         <div class="r-lr">
             <span>VAT-Exempt</span>
-            <span>{{ vat_exempt_amount|floatformat:2 }}</span>
+            <span> {%if vat_exempt_amount%} {{vat_exempt_amount|floatformat:2}} {% else %} 0.00 {% endif%}</span>
         </div>
 
         <div class="r-lr">

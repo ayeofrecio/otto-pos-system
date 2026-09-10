@@ -242,6 +242,12 @@ def _get_user_id(request):
     return request.user.username[:10] if request.user.is_authenticated else ""
 
 
+def _qty_is_one(qty_str):
+    try:
+        return Decimal(qty_str or "0") == 1
+    except InvalidOperation:
+        return False
+    
 # ----------------------------------------------------------------------------
 # Getting the current session's store_id and terminal_id from the POSSession model instead of the user model allows for more flexible assignment of terminals to users and better tracking of sessions across different terminals. This way, the store_id and terminal_id are tied to the actual POS session rather than the user account, which can be useful in scenarios where users may operate multiple terminals or when terminals are shared among users. The helper functions can be updated to retrieve this information from the current open session for the logged-in user, ensuring that all operations are correctly associated with the active session's store and terminal.
 # ----------------------------------------------------------------------------
@@ -2491,7 +2497,6 @@ def payment_complete(request):
 
     trans_disc = _get_trans_disc(request)
     subtotal, trans_disc_amt, total = _compute_totals(cart_lines_list, trans_disc)
-    print("SUBTOTAL:", subtotal, "DISC_AMT:", trans_disc_amt, "TOTAL:", total)
 
     if total > 0 and not tender_entries:
         return redirect("sales:pay")
@@ -2519,7 +2524,6 @@ def payment_complete(request):
         biz_date = now.date()
 
 
-    # for item in cart_lines_list:
     for line in cart_lines_list:
         ext = line.item_price_ext or Decimal("0")
         tax_code = (line.item_tax_code or "V").upper()
@@ -2637,7 +2641,7 @@ def payment_complete(request):
         )
         for line in cart_lines_list
     ])
-
+    print(cart_line_disc)
     # --- Create one Payment per tender entry ---
     Payment.objects.bulk_create([
         Payment(
@@ -2703,13 +2707,21 @@ def payment_complete(request):
                 "description": line.item_description or "",
                 "qty": str(line.item_qty),
                 "price": str(line.item_price or 0),
+                "ext": str(line.item_price_ext or 0),
+                "variant": " X ".join(filter(None, [
+                    get_color_description(line.item_color_desc or "", icode=line.item_code or "", size=line.item_size or ""),
+                    get_size_description(line.item_size or ""),
+                ])),
+                "is_single_qty": _qty_is_one(str(line.item_qty)),
+                "is_return": (line.tag1 or "") == TAG_ITEM_RETURN,
                 "gross": str(line.item_gross),
+                "disct_code": line.discount_code,
                 "disc_pct": line.disc_pct,
                 "disc_total": str(line.item_disc_total),
                 "ext": str(line.item_price_ext or 0),
                 "size": get_size_description(line.item_size or ""),
                 "color": get_color_description(
-                    line.item_color or "",
+                    line.item_color_desc or "",
                     icode=line.item_code or "",
                     size=line.item_size or "",
                 ),
@@ -2732,6 +2744,7 @@ def payment_complete(request):
     request.session.pop("pos_trans_no", None)
     _clear_trans_disc(request)
 
+    # return True
     return redirect("sales:receipt")
 
 
@@ -3236,28 +3249,50 @@ def _print_receipt(printer, terminal_config, context, current_operator):
     
     # printer.write(b"\x1b\x21\x00")
     printer.write(b"\x1b\x61\x00")  # left
-    write_line(f"SI #: {context['transaction_no']}")
-    write_line(f"User Id    : {current_operator}")
+    write_line(f"SI #       : {context['transaction_no']}")
+    write_line(f"Cashier    : {current_operator}")
     write_line(f"StoreId    : {terminal_config.store_id}")
     # write_line(f"Terminal No: {session.terminal_id}")
     separator()
  
     # ── Items ─────────────────────────────────────────────────────────────────
+
     for line in context["lines"]:
         desc = line.get("description", "")
-        if line.get("is_return"):
-            desc += " (R)"
+        color = line.get("color", "")
+        size = line.get("size", "")
+        variant = " X ".join(filter(None, [color, size]))  # "Red X Large", or just "Red" / "Large" / "" if one/both missing
+
+        # qty comes in as a string ("1.000" etc.) — cast before comparing
+        try:
+            qty_val = Decimal(line.get("qty") or "0")
+        except InvalidOperation:
+            qty_val = Decimal("0")
+
+        indicator = "R" if line.get("is_return") else "T"
+
+        if qty_val == 1:
+            # single item: name line, then price + indicator right-aligned
+            price_str = format_money(line.get("ext"))
+            tail = f"{price_str} {indicator}"
+            name_col_width = paper_width - len(tail) - 1
+            line_out = f"{desc[:name_col_width]:<{name_col_width}} {tail}"
+            write_line(line_out[:paper_width])
+            if variant:
+                write_line(f" {variant[:paper_width]}")
         else:
-            desc += " (T)"
-        write_line(desc[:paper_width])
-        write_line(item_line(
-            format_qty(line.get("qty")),
-            format_money(line.get("price")),
-            format_money(line.get("ext")),
-        ))
+            # multi-qty: name line, variant line, then "qty X price = ext" line
+            write_line(desc[:paper_width])
+            if variant:
+                write_line(f" {variant[:paper_width]}")
+            qty_price = f" {format_qty(line.get('qty'))} X {format_money(line.get('price'))}"
+            tail = f"{format_money(line.get('ext'))} {indicator}"
+            gap = paper_width - len(qty_price) - len(tail)
+            write_line(f"{qty_price}{' ' * max(gap, 1)}{tail}"[:paper_width])
+
         if line.get("disc_pct"):
-            write_line(f"  {line['disc_pct']}% - {format_money(line.get('disc_total'))}")
- 
+            write_line(f"  {line['disct_code']}: {line['disc_pct']}% - {format_money(line.get('disc_total'))}")
+
     # ── Transaction discount ──────────────────────────────────────────────────
     if context["trans_disc_amt"] not in ("0", "0.0000", None, ""):
         separator()
@@ -3288,6 +3323,7 @@ def _print_receipt(printer, terminal_config, context, current_operator):
         printer.write(b"\x1b\x45\x00")
  
     # ── Footer ────────────────────────────────────────────────────────────────
+    write_line(" ")
     separator()
     write_line(" ")
     footers = _get_customer_footers(terminal_config)
@@ -3597,7 +3633,7 @@ def receipt_view(request):
  
     terminal_config = _get_terminal_config()
  
-    setup_details = _get_store_details()
+    # setup_details = _get_store_details()
  
     tender_lines = receipt.get("tender_lines") or []
     if not tender_lines and receipt.get("tender"):
