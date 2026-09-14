@@ -3308,14 +3308,18 @@ def _print_receipt(printer, terminal_config, context, current_operator):
     printer.write(b"\x1b\x45\x01")  # bold on
     write_line(align_lr("TOTAL", format_money(context["total"])))
     printer.write(b"\x1b\x45\x00")  # bold off
-    separator()
+    write_line(" ")
+    printer.write(b"\x1b\x61\x01")
+    write_line(f"{context['date']}, {context['time']}")
+    printer.write(b"\x1b\x61\x00")
+    write_line(" ")
  
     # ── Tender lines ──────────────────────────────────────────────────────────
     for t in context["tender_lines"]:
         write_line(align_lr(t["desc"], format_money(t["amount"])))
  
-    if context["amount_tendered"]:
-        write_line(align_lr("Tendered", format_money(context["amount_tendered"])))
+    # if context["amount_tendered"]:
+    #     write_line(align_lr("Tendered", format_money(context["amount_tendered"])))
  
     if context["is_cash"] and context["change_amount"] not in ("", "0", "0.0000"):
         printer.write(b"\x1b\x45\x01")
@@ -3323,8 +3327,6 @@ def _print_receipt(printer, terminal_config, context, current_operator):
         printer.write(b"\x1b\x45\x00")
  
     # ── Footer ────────────────────────────────────────────────────────────────
-    write_line(" ")
-    separator()
     write_line(" ")
     footers = _get_customer_footers(terminal_config)
 
