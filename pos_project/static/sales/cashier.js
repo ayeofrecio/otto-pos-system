@@ -1264,17 +1264,14 @@
     const rows = results.map(function (item) {
       const sizeLabel = item.size_display || item.size || '';
       const colorLabel = item.color_display || item.color_desc || '';
-      // const variant = [sizeLabel, colorLabel].filter(Boolean).join('/');
-      const variant = [colorLabel, sizeLabel].filter(Boolean).join('/');
-      const variantHtml = variant ? '<span class="search-result-variant">(' + variant + ')</span>' : '';
+      const meta = [colorLabel, sizeLabel, item.code, item.barcode]
+        .filter(Boolean)
+        .map(escHtml)
+        .join(' &ndash; ');
       return '<div class="search-result" onclick="selectSearchResult(\'' +
         escHtml(item.barcode) + '\')" title="Click to add to cart">' +
-        '<div class="search-result-info">' +
-          '<span class="search-result-desc">' + escHtml(item.description) + '</span>' +
-          (variantHtml ? variantHtml : '') +
-        '</div>'
-        + '<span class="search-result-code">' + escHtml(item.code) + '</span>' +
-        '<span class="search-result-variant">' + escHtml(item.barcode) + '</span>' +
+        '<span class="search-result-desc">' + escHtml(item.description) + '</span>' +
+        '<span class="search-result-meta">' + meta + '</span>' +
         '<span class="search-result-price">₱' + parseFloat(item.price).toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '</span>' +
         '</div>';
     });
