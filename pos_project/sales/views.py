@@ -2641,7 +2641,6 @@ def payment_complete(request):
         )
         for line in cart_lines_list
     ])
-    print(cart_line_disc)
     # --- Create one Payment per tender entry ---
     Payment.objects.bulk_create([
         Payment(

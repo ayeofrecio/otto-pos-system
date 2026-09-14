@@ -139,8 +139,9 @@ class Payment(models.Model):
                             help_text="Change returned for this tender line. Non-zero for cash only.")
     tender_desc       = models.CharField(max_length=15, blank=True)
     payment_reference = models.CharField(max_length=20, blank=True, null=True)
-    holder            = models.CharField(max_length=50, blank=True, null=True)
-    approval_code     = models.CharField(max_length=30, blank=True, null=True)
+    cardholder_name = models.CharField(max_length=100, blank=True, null=True)
+    card_number_masked = models.CharField(max_length=25, blank=True, null=True)
+    approval_code = models.CharField(max_length=20, blank=True, null=True)
 
     class Meta:
         db_table = 'payment'
