@@ -41,7 +41,7 @@ from .pos_constants import (
     TRTYPE_VOID_TRANS_LEGACY,
     VOID_TRANSACTION_TYPES_ALL,
 )
-from .services import get_business_date
+from .services import get_business_date, mask_card_number
 from .transaction_services.transaction_service import TransactionService, RecordCode
 from .pos_constants import (
     RCODE_ITEM_VOID,
@@ -2442,9 +2442,6 @@ def pay_view(request):
 
 
 def _parse_tender_entries(request):
-    """Parse tender_entries JSON from POST.
-    Returns list of {"pcode": ..., "amount": ..., "payment_reference": ...} or empty.
-    """
     import json
     raw = request.POST.get("tender_entries", "").strip()
     if not raw:
@@ -2459,8 +2456,20 @@ def _parse_tender_entries(request):
             except (ValueError, TypeError):
                 amt = Decimal("0")
             payment_reference = str(item.get("payment_reference") or "").strip()[:20]
+            is_card = bool(item.get("is_card"))
+            cardholder_name = str(item.get("cardholder_name") or "").strip()[:100]
+            card_number_masked = mask_card_number(item.get("card_number") or "")[:25]
+            approval_code = str(item.get("approval_code") or "").strip()[:20]
             if pcode and amt > 0:
-                entries.append({"pcode": pcode, "amount": amt, "payment_reference": payment_reference})
+                entries.append({
+                    "pcode": pcode,
+                    "amount": amt,
+                    "payment_reference": payment_reference,
+                    "is_card": is_card,
+                    "cardholder_name": cardholder_name,
+                    "card_number_masked": card_number_masked,
+                    "approval_code": approval_code,
+                })
         return entries
     except (json.JSONDecodeError, TypeError):
         return []
@@ -2511,10 +2520,14 @@ def payment_complete(request):
         for t in tender_entries:
             tender = Tender.objects.filter(pcode=t["pcode"]).first()
             is_cash = bool(tender and tender.pchange == "Y")
-            if not is_cash and not (t.get("payment_reference") or "").strip():
-                return redirect("sales:pay")
-            if not is_cash and t["amount"] > running_remaining:
-                return redirect("sales:pay")
+            is_card = t.get("is_card") or bool(tender and getattr(tender, "is_card", False))
+            if not is_cash:
+                if is_card and not (t.get("cardholder_name") and t.get("card_number_masked") and t.get("approval_code")):
+                    return redirect("sales:pay")
+                if not is_card and not (t.get("payment_reference") or "").strip():
+                    return redirect("sales:pay")
+                if t["amount"] > running_remaining:
+                    return redirect("sales:pay")
             running_remaining = max(Decimal("0"), running_remaining - t["amount"])
 
     now = datetime.datetime.now()
@@ -2542,24 +2555,18 @@ def payment_complete(request):
 
     # --- Build tender summary ---
     tender_lines = []
-    tender_entries_full = []  # For TransactionService
+    tender_entries_full = []
     running_remaining = total
     total_cash = Decimal("0")
     for t in tender_entries:
         pcode = t["pcode"]
         amt = t["amount"]
-
         tender = Tender.objects.filter(pcode=pcode).first()
         desc = tender.description if tender else pcode
         is_cash = bool(tender and tender.pchange == "Y")
-        
-        # For cash: effective amount is capped at remaining balance.
-        # Non-cash is already validated upstream to not exceed remaining.
-        if is_cash:
-            effective_amt = min(amt, max(Decimal("0"), running_remaining))
-        else:
-            effective_amt = amt
+        is_card = t.get("is_card") or bool(tender and getattr(tender, "is_card", False))
 
+        effective_amt = min(amt, max(Decimal("0"), running_remaining)) if is_cash else amt
         running_remaining = max(Decimal("0"), running_remaining - effective_amt)
 
         tender_lines.append({
@@ -2567,10 +2574,15 @@ def payment_complete(request):
             "desc": desc,
             "amount": str(effective_amt),
             "gross_amount": str(amt),
-            "is_cash": is_cash
+            "is_cash": is_cash,
+            "is_card": is_card,
+            "cardholder_name": t.get("cardholder_name", ""),
+            "card_number_masked": t.get("card_number_masked", ""),
+            "approval_code": t.get("approval_code", ""),
+            "payment_reference": t.get("payment_reference", ""),
+            "change": str(amt - effective_amt) if is_cash else "0",
         })
         tender_entries_full.append((pcode, amt, desc, is_cash))
-
         if is_cash:
             total_cash += amt
 
@@ -2645,21 +2657,17 @@ def payment_complete(request):
     Payment.objects.bulk_create([
         Payment(
             header=header,
-#             pcode=t["pcode"],
-#             amount=t["amount"],
-#             tender_desc=next(
-#                 (tl["desc"] for tl in tender_lines if tl["pcode"] == t["pcode"]),
-#                 t["pcode"]
-#             ),
-#             payment_reference=(t.get("payment_reference") or "")[:20],
             pcode=tl["pcode"],
-            amount=Decimal(tl["amount"]),               # net applied
-            tendered_amount=Decimal(tl["gross_amount"]), # what customer handed over
-            change_amount=Decimal(tl["gross_amount"]) - Decimal(tl["amount"]),  # per-tender change
+            amount=Decimal(tl["amount"]),
+            tendered_amount=Decimal(tl["gross_amount"]),
+            change_amount=Decimal(tl["gross_amount"]) - Decimal(tl["amount"]),
             tender_desc=tl["desc"],
-            payment_reference=(t.get("payment_reference") or "") or None,
+            payment_reference=(tl.get("payment_reference") or "") or None,
+            cardholder_name=(tl.get("cardholder_name") or "") or None,
+            card_number_masked=(tl.get("card_number_masked") or "") or None,
+            approval_code=(tl.get("approval_code") or "") or None,
         )
-        for tl, t in zip(tender_lines, tender_entries)
+        for tl in tender_lines
     ])
 
     # --- Clipper-style flat transaction log (TransactionLog / TLOG) ---
@@ -3315,16 +3323,25 @@ def _print_receipt(printer, terminal_config, context, current_operator):
  
     # ── Tender lines ──────────────────────────────────────────────────────────
     for t in context["tender_lines"]:
-        write_line(align_lr(t["desc"], format_money(t["amount"])))
- 
-    # if context["amount_tendered"]:
-    #     write_line(align_lr("Tendered", format_money(context["amount_tendered"])))
- 
-    if context["is_cash"] and context["change_amount"] not in ("", "0", "0.0000"):
-        printer.write(b"\x1b\x45\x01")
-        write_line(align_lr("CHANGE", format_money(context["change_amount"])))
-        printer.write(b"\x1b\x45\x00")
- 
+        if t.get("is_cash"):
+            write_line(align_lr(f"{t['desc']} Tendered", format_money(t["gross_amount"])))
+            change = Decimal(t["gross_amount"]) - Decimal(t["amount"])
+            if change > 0:
+                printer.write(b"\x1b\x45\x01")  # bold on
+                write_line(align_lr("Change", format_money(change)))
+                printer.write(b"\x1b\x45\x00")  # bold off
+        elif t.get("is_card"):
+            write_line(align_lr(t["desc"], format_money(t["amount"])))
+            if t.get("cardholder_name"):
+                write_line(f"  Holder: {t['cardholder_name']}")
+            if t.get("card_number_masked"):
+                write_line(f"  {t['card_number_masked']}")
+            if t.get("approval_code"):
+                write_line(f"  Approval: {t['approval_code']}")
+        else:
+            write_line(align_lr(t["desc"], format_money(t["amount"])))
+            if t.get("payment_reference"):
+                write_line(f"  Ref: {t['payment_reference']}")
     # ── Footer ────────────────────────────────────────────────────────────────
     write_line(" ")
     footers = _get_customer_footers(terminal_config)

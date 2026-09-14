@@ -32,6 +32,7 @@ from .exceptions import (
 )
 from .models import OpenTerminal, TerminalSetup, Item, ItemDetail
 from django.db import connection, transaction
+import re
 
 
 # ---------------------------------------------------------------------------
@@ -337,3 +338,18 @@ def import_products_from_csv(items_path, itemdtl_path, itemscosts_path):
         "item_details_loaded": details_count,
         "costs_updated": costs_updated,
     }
+
+
+def mask_card_number(raw: str) -> str:
+    """Mask a card number/slip reference for storage and receipt display.
+    Keeps first 6 and last 4 digits; everything else becomes X.
+    Never pass the full PAN downstream of this function.
+    """
+    digits = re.sub(r"\D", "", raw or "")
+    if not digits:
+        return ""
+    if len(digits) <= 4:
+        return "X" * len(digits)
+    if len(digits) <= 10:
+        return digits[:2] + "X" * (len(digits) - 4) + digits[-2:]
+    return digits[:6] + "X" * (len(digits) - 10) + digits[-4:]

@@ -253,25 +253,41 @@
 
     <!-- ── Tender lines (mirrors tender_lines loop) ──────────── -->
     {% for t in tender_lines %}
-        <div class="r-lr">
-            <span>{{ t.desc }}</span>
-            <span>{{ t.amount|floatformat:2 }}</span>
-        </div>
-    {% endfor %}
-
-    {% if amount_tendered %}
-        <div class="r-lr">
-            <span>Tendered</span>
-            <span>{{ amount_tendered|floatformat:2 }}</span>
-        </div>
-    {% endif %}
-
-    {% if is_cash and change_amount and change_amount != "0" and change_amount != "0.0000" %}
-        <div class="r-lr r-change">
-            <span>CHANGE</span>
-            <span>{{ change_amount|floatformat:2 }}</span>
-        </div>
+        {% if t.is_cash %}
+            <div class="r-lr">
+                <span>{{ t.desc }} Tendered</span>
+                <span>{{ t.gross_amount|floatformat:2 }}</span>
+            </div>
+            {% if t.change and t.change != "0" and t.change != "0.0000" %}
+                <div class="r-lr r-change">
+                    <span>Change</span>
+                    <span>{{ t.change|floatformat:2 }}</span>
+                </div>
+            {% endif %}
+        {% elif t.is_card %}
+            <div class="r-lr">
+                <span>{{ t.desc }}</span>
+                <span>{{ t.amount|floatformat:2 }}</span>
+            </div>
+            {% if t.holder %}
+                <div class="r-item-desc r-padding-left">Holder: {{ t.holder }}</div>
+            {% endif %}
+            {% if t.card_number_masked %}
+                <div class="r-item-desc r-padding-left">{{ t.card_number_masked }}</div>
+            {% endif %}
+            {% if t.approval_code %}
+                <div class="r-item-desc r-padding-left">Approval: {{ t.approval_code }}</div>
+            {% endif %}
+        {% else %}
+            <div class="r-lr">
+                <span>{{ t.desc }}</span>
+                <span>{{ t.amount|floatformat:2 }}</span>
+            </div>
+            {% if t.payment_reference %}
+                <div class="r-item-desc r-padding-left">Ref: {{ t.payment_reference }}</div>
+            {% endif %}
         {% endif %}
+    {% endfor %}
     <div class="margin-space"></div>
     <div class="r-footer-center">
         {{ date }}, {{ time }}

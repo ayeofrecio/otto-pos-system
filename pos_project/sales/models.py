@@ -459,6 +459,7 @@ class Tender(models.Model):
     pexpiry     = models.CharField(max_length=1, blank=True)           # PEXPIRY  (has expiry)
     pcharge     = models.CharField(max_length=1, blank=True)           # PCHARGE  (has surcharge)
     pconvert    = models.CharField(max_length=1, blank=True)           # PCONVERT (currency convert)
+    is_card     = models.BooleanField(default=False)
 
     # --- Keyboard shortcut characters ---
     keychar1    = models.CharField(max_length=1, blank=True)           # KEYCHAR1
