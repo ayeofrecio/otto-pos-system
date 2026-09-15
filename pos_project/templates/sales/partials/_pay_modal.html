@@ -149,376 +149,376 @@
         {% endif %}
     </div>
     {% endif %}
-</div>
-            <script>
-                (function () {
-                    const totalEl = document.querySelector('.pay-total-amount');
-                    const TOTAL = totalEl ? parseFloat(totalEl.getAttribute('data-total') || totalEl.textContent.replace(/[^0-9.-]/g, '')) || 0 : 0;
+</div><script>
+    (function () {
+        const totalEl = document.querySelector('.pay-total-amount');
+        const TOTAL = totalEl ? parseFloat(totalEl.getAttribute('data-total') || totalEl.textContent.replace(/[^0-9.-]/g, '')) || 0 : 0;
 
-                    var tenderEntries = [];  // { pcode, desc, amount, pchange }
-                    var selectedTender = null;
+        var tenderEntries = [];  // { pcode, desc, amount, pchange }
+        var selectedTender = null;
 
-                    window.PAY_MODAL_TOTAL = TOTAL;
+        window.PAY_MODAL_TOTAL = TOTAL;
 
-                    function focusDefaultTenderButton() {
-                        const tenderButtons = Array.from(document.querySelectorAll('.pay-tender-btn'));
-                        if (tenderButtons.length) {
-                            // Prefer the tender that can return change (usually Cash), fallback to first.
-                            const cashBtn = tenderButtons.find(btn => (btn.getAttribute('data-pchange') || '').toUpperCase() === 'Y');
-                            (cashBtn || tenderButtons[0]).focus();
-                            return;
-                        }
-                        // No tenders to pick (e.g. zero/negative total) — jump straight to the action button.
-                        const payBtn = document.getElementById('pay-btn');
-                        if (payBtn) payBtn.focus();
+        function focusDefaultTenderButton() {
+            const tenderButtons = Array.from(document.querySelectorAll('.pay-tender-btn'));
+            if (tenderButtons.length) {
+                // Prefer the tender that can return change (usually Cash), fallback to first.
+                const cashBtn = tenderButtons.find(btn => (btn.getAttribute('data-pchange') || '').toUpperCase() === 'Y');
+                (cashBtn || tenderButtons[0]).focus();
+                return;
+            }
+            // No tenders to pick (e.g. zero/negative total) — jump straight to the action button.
+            const payBtn = document.getElementById('pay-btn');
+            if (payBtn) payBtn.focus();
+        }
+
+        // Number keys 1-9 pick a tender button directly, so the whole flow can be
+        // driven without a mouse (Tab still works too). The modal content is
+        // reloaded via HTMX on every open, so guard against attaching this
+        // document-level listener more than once.
+        if (!window.__payModalHotkeysAttached) {
+            window.__payModalHotkeysAttached = true;
+            document.addEventListener('keydown', function (evt) {
+                const payModal = document.getElementById('pay-modal');
+                if (!payModal || !payModal.classList.contains('open')) return;
+                const active = document.activeElement;
+                const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+                if (isTyping) return;
+                if (evt.key >= '1' && evt.key <= '9') {
+                    const tenderButtons = Array.from(document.querySelectorAll('.pay-tender-btn'));
+                    const idx = parseInt(evt.key, 10) - 1;
+                    if (tenderButtons[idx]) {
+                        evt.preventDefault();
+                        tenderButtons[idx].focus();
+                        tenderButtons[idx].click();
                     }
+                }
+            });
+        }
 
-                    // Number keys 1-9 pick a tender button directly, so the whole flow can be
-                    // driven without a mouse (Tab still works too). The modal content is
-                    // reloaded via HTMX on every open, so guard against attaching this
-                    // document-level listener more than once.
-                    if (!window.__payModalHotkeysAttached) {
-                        window.__payModalHotkeysAttached = true;
-                        document.addEventListener('keydown', function (evt) {
-                            const payModal = document.getElementById('pay-modal');
-                            if (!payModal || !payModal.classList.contains('open')) return;
-                            const active = document.activeElement;
-                            const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
-                            if (isTyping) return;
-                            if (evt.key >= '1' && evt.key <= '9') {
-                                const tenderButtons = Array.from(document.querySelectorAll('.pay-tender-btn'));
-                                const idx = parseInt(evt.key, 10) - 1;
-                                if (tenderButtons[idx]) {
-                                    evt.preventDefault();
-                                    tenderButtons[idx].focus();
-                                    tenderButtons[idx].click();
-                                }
-                            }
-                        });
+        function fmt(n) {
+            return n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function getRemainingBalance() {
+            return Math.max(0, TOTAL - tenderEntries.reduce((s, e) => s + e.amount, 0));
+        }
+
+        window.selectTenderForAdd = function (pcode, desc, pchange, isCard) {
+            selectedTender = { pcode: pcode, desc: desc, pchange: pchange, isCard: isCard === '1' };
+            document.querySelectorAll('.pay-tender-btn').forEach(b => b.classList.remove('selected'));
+            const sel = document.querySelector('.pay-tender-btn[data-pcode="' + pcode + '"]');
+            if (sel) sel.classList.add('selected');
+
+            const cashSection = document.getElementById('pay-cash-section');
+            const inp = document.getElementById('tendered-input');
+            const refSection = document.getElementById('pay-reference-section');
+            const refInput = document.getElementById('payment-reference-input');
+            const cardSection = document.getElementById('pay-card-details-section');
+            const cardholderInput = document.getElementById('cardholder-name-input');
+            const cardNumberInput = document.getElementById('card-number-input');
+            const approvalInput = document.getElementById('approval-code-input');
+
+            if (cashSection) cashSection.classList.add('visible');
+
+            const needsCard = pchange !== 'Y' && selectedTender.isCard;
+            const needsRef = pchange !== 'Y' && !selectedTender.isCard;
+
+            if (refSection) refSection.style.display = needsRef ? 'block' : 'none';
+            if (cardSection) cardSection.style.display = needsCard ? 'block' : 'none';
+
+            if (refInput) {
+                refInput.value = '';
+                refInput.required = needsRef;
+                refInput.placeholder = 'Enter ' + desc + ' reference';
+            }
+            if (cardholderInput) cardholderInput.value = '';
+            if (cardNumberInput) cardNumberInput.value = '';
+            if (approvalInput) approvalInput.value = '';
+
+            if (inp) {
+                inp.value = '';
+                inp.placeholder = pchange === 'Y' ? '0.00 (exact or with change)' : '0.00';
+                if (pchange !== 'Y') {
+                    inp.max = getRemainingBalance().toFixed(2);
+                } else {
+                    inp.removeAttribute('max');
+                }
+                inp.focus();
+            }
+            buildQuickAmounts();
+            updateAddAmount();
+        };
+
+        function buildQuickAmounts() {
+            const container = document.getElementById('pay-quick-amounts');
+            if (!container) return;
+            container.innerHTML = '';
+            const remaining = getRemainingBalance();
+            const amounts = getQuickAmounts(Math.max(0, remaining));
+            amounts.forEach((amt, i) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'pay-quick-btn' + (i === 0 ? ' exact' : '');
+                btn.textContent = (i === 0 && remaining > 0 ? 'Exact  ' : '') + '₱' + fmt(amt);
+                btn.onclick = () => { setTendered(amt); };
+                container.appendChild(btn);
+            });
+        }
+
+        function getQuickAmounts(remaining) {
+            if (remaining <= 0) remaining = TOTAL;
+            const amounts = [remaining];
+            // Non-cash tenders cannot exceed remaining balance.
+            if (selectedTender && selectedTender.pchange !== 'Y') {
+                return amounts;
+            }
+            const steps = [100, 200, 500, 1000, 2000, 5000, 10000];
+            for (const step of steps) {
+                const rounded = Math.ceil(remaining / step) * step;
+                if (rounded > remaining && !amounts.includes(rounded)) amounts.push(rounded);
+                if (amounts.length >= 5) break;
+            }
+            return amounts;
+        }
+
+        function setTendered(amt) {
+            const inp = document.getElementById('tendered-input');
+            if (inp) {
+                if (selectedTender && selectedTender.pchange !== 'Y') {
+                    amt = Math.min(amt, getRemainingBalance());
+                }
+                inp.value = amt.toFixed(2);
+                updateAddAmount();
+                inp.focus();
+            }
+        }
+        window.updateAddAmount = function () {
+            const inp = document.getElementById('tendered-input');
+            let amt = inp ? parseFloat(inp.value) || 0 : 0;
+            const refInput = document.getElementById('payment-reference-input');
+            const reference = refInput ? refInput.value.trim() : '';
+            const cardholderInput = document.getElementById('cardholder-name-input');
+            const cardNumberInput = document.getElementById('card-number-input');
+            const approvalInput = document.getElementById('approval-code-input');
+            const isCard = !!(selectedTender && selectedTender.isCard);
+            const needsReference = !!(selectedTender && selectedTender.pchange !== 'Y' && !isCard);
+            const needsCardDetails = !!(selectedTender && selectedTender.pchange !== 'Y' && isCard);
+            const remaining = getRemainingBalance();
+
+            if (selectedTender && selectedTender.pchange !== 'Y') {
+                if (inp) {
+                    inp.max = remaining.toFixed(2);
+                    if (amt > remaining) {
+                        amt = remaining;
+                        inp.value = remaining.toFixed(2);
                     }
+                }
+            }
 
-                    function fmt(n) {
-                        return n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    }
+            const cardOk = !needsCardDetails || (
+                cardholderInput && cardholderInput.value.trim() &&
+                cardNumberInput && cardNumberInput.value.trim() &&
+                approvalInput && approvalInput.value.trim()
+            );
 
-                    function getRemainingBalance() {
-                        return Math.max(0, TOTAL - tenderEntries.reduce((s, e) => s + e.amount, 0));
-                    }
+            const addBtn = document.getElementById('pay-add-btn');
+            if (addBtn) addBtn.disabled = !selectedTender || amt <= 0 || (needsReference && !reference) || !cardOk;
+        };
+        window.addTenderEntry = function () {
+            if (!selectedTender) return;
+            const inp = document.getElementById('tendered-input');
+            let amt = inp ? parseFloat(inp.value) || 0 : 0;
+            const refInput = document.getElementById('payment-reference-input');
+            const paymentRef = refInput ? refInput.value.trim() : '';
+            const cardholderInput = document.getElementById('cardholder-name-input');
+            const cardNumberInput = document.getElementById('card-number-input');
+            const approvalInput = document.getElementById('approval-code-input');
+            const isCard = selectedTender.isCard;
+            const cardholderName = cardholderInput ? cardholderInput.value.trim() : '';
+            const cardNumber = cardNumberInput ? cardNumberInput.value.trim() : '';
+            const approvalCode = approvalInput ? approvalInput.value.trim() : '';
 
-                    window.selectTenderForAdd = function (pcode, desc, pchange, isCard) {
-                        selectedTender = { pcode: pcode, desc: desc, pchange: pchange, isCard: isCard === '1' };
-                        document.querySelectorAll('.pay-tender-btn').forEach(b => b.classList.remove('selected'));
-                        const sel = document.querySelector('.pay-tender-btn[data-pcode="' + pcode + '"]');
-                        if (sel) sel.classList.add('selected');
+            if (selectedTender.pchange !== 'Y') {
+                amt = Math.min(amt, getRemainingBalance());
+            }
+            if (amt <= 0) return;
+            if (selectedTender.pchange !== 'Y' && !isCard && !paymentRef) return;
+            if (selectedTender.pchange !== 'Y' && isCard && (!cardholderName || !cardNumber || !approvalCode)) return;
 
-                        const cashSection = document.getElementById('pay-cash-section');
-                        const inp = document.getElementById('tendered-input');
-                        const refSection = document.getElementById('pay-reference-section');
-                        const refInput = document.getElementById('payment-reference-input');
-                        const cardSection = document.getElementById('pay-card-details-section');
-                        const cardholderInput = document.getElementById('cardholder-name-input');
-                        const cardNumberInput = document.getElementById('card-number-input');
-                        const approvalInput = document.getElementById('approval-code-input');
+            tenderEntries.push({
+                pcode: selectedTender.pcode,
+                desc: selectedTender.desc,
+                amount: amt,
+                pchange: selectedTender.pchange,
+                payment_reference: paymentRef,
+                is_card: isCard,
+                cardholder_name: cardholderName,
+                card_number: cardNumber,
+                approval_code: approvalCode
+            });
 
-                        if (cashSection) cashSection.classList.add('visible');
+            renderEntries();
+            if (inp) inp.value = '';
+            [refInput, cardholderInput, cardNumberInput, approvalInput].forEach(el => { if (el) el.value = ''; });
+            if (refInput) refInput.required = false;
+            const refSection = document.getElementById('pay-reference-section');
+            const cardSection = document.getElementById('pay-card-details-section');
+            if (refSection) refSection.style.display = 'none';
+            if (cardSection) cardSection.style.display = 'none';
+            document.querySelectorAll('.pay-tender-btn').forEach(b => b.classList.remove('selected'));
+            selectedTender = null;
+            updateAddAmount();
+            buildQuickAmounts();
+            focusNextStep();
+        };
 
-                        const needsCard = pchange !== 'Y' && selectedTender.isCard;
-                        const needsRef = pchange !== 'Y' && !selectedTender.isCard;
+        // After a payment is added, jump the keyboard focus to whatever the
+        // cashier needs next: the Complete button once the balance is settled,
+        // otherwise back to the tender buttons to keep tendering.
+        function focusNextStep() {
+            const payBtn = document.getElementById('pay-btn');
+            if (getRemainingBalance() <= 0 && payBtn && !payBtn.disabled) {
+                payBtn.focus();
+                return;
+            }
+            focusDefaultTenderButton();
+        }
 
-                        if (refSection) refSection.style.display = needsRef ? 'block' : 'none';
-                        if (cardSection) cardSection.style.display = needsCard ? 'block' : 'none';
+        window.removeTenderEntry = function (idx) {
+            tenderEntries.splice(idx, 1);
+            renderEntries();
+            buildQuickAmounts();
+            focusDefaultTenderButton();
+        };
+        function renderEntries() {
+            const list = document.getElementById('pay-entries-list');
+            if (!list) return;
+            if (tenderEntries.length === 0) {
+                list.innerHTML = '<p class="pay-entries-empty" id="pay-entries-empty">No payments added yet</p>';
+                updateBalance();
+                return;
+            }
+            list.innerHTML = tenderEntries.map((e, i) => {
+                let detail = '';
+                if (e.is_card) {
+                    detail = ' <span class="pay-summary-label">[' + escapeHtml(e.cardholder_name) + ' · ' + escapeHtml(e.card_number) + ']</span>';
+                } else if (e.payment_reference) {
+                    detail = ' <span class="pay-summary-label">[' + escapeHtml(e.payment_reference) + ']</span>';
+                }
+                return '<div class="pay-entry-item">' +
+                    '<span class="pay-entry-desc">' + escapeHtml(e.desc) + detail + '</span>' +
+                    '<span class="pay-entry-amt">₱' + fmt(e.amount) + '</span>' +
+                    '<button type="button" class="pay-entry-remove" onclick="removeTenderEntry(' + i + ')" title="Remove">×</button>' +
+                    '</div>';
+            }).join('');
+            updateBalance();
+        }
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
 
-                        if (refInput) {
-                            refInput.value = '';
-                            refInput.required = needsRef;
-                            refInput.placeholder = 'Enter ' + desc + ' reference';
-                        }
-                        if (cardholderInput) cardholderInput.value = '';
-                        if (cardNumberInput) cardNumberInput.value = '';
-                        if (approvalInput) approvalInput.value = '';
+        function updateBalance() {
+            const totalTendered = tenderEntries.reduce((s, e) => s + e.amount, 0);
+            const balance = Math.round((totalTendered - TOTAL) * 100) / 100;
+            const hasCash = tenderEntries.some(e => e.pchange === 'Y');
 
-                        if (inp) {
-                            inp.value = '';
-                            inp.placeholder = pchange === 'Y' ? '0.00 (exact or with change)' : '0.00';
-                            if (pchange !== 'Y') {
-                                inp.max = getRemainingBalance().toFixed(2);
-                            } else {
-                                inp.removeAttribute('max');
-                            }
-                            inp.focus();
-                        }
-                        buildQuickAmounts();
-                        updateAddAmount();
-                    };
+            const totalEl = document.getElementById('total-tendered');
+            const balanceEl = document.getElementById('balance-display');
+            const changeRow = document.getElementById('pay-change-row');
+            const changeEl = document.getElementById('change-display');
+            const payBtn = document.getElementById('pay-btn');
 
-                    function buildQuickAmounts() {
-                        const container = document.getElementById('pay-quick-amounts');
-                        if (!container) return;
-                        container.innerHTML = '';
-                        const remaining = getRemainingBalance();
-                        const amounts = getQuickAmounts(Math.max(0, remaining));
-                        amounts.forEach((amt, i) => {
-                            const btn = document.createElement('button');
-                            btn.type = 'button';
-                            btn.className = 'pay-quick-btn' + (i === 0 ? ' exact' : '');
-                            btn.textContent = (i === 0 && remaining > 0 ? 'Exact  ' : '') + '₱' + fmt(amt);
-                            btn.onclick = () => { setTendered(amt); };
-                            container.appendChild(btn);
-                        });
-                    }
+            if (totalEl) totalEl.textContent = '₱' + fmt(totalTendered);
 
-                    function getQuickAmounts(remaining) {
-                        if (remaining <= 0) remaining = TOTAL;
-                        const amounts = [remaining];
-                        // Non-cash tenders cannot exceed remaining balance.
-                        if (selectedTender && selectedTender.pchange !== 'Y') {
-                            return amounts;
-                        }
-                        const steps = [100, 200, 500, 1000, 2000, 5000, 10000];
-                        for (const step of steps) {
-                            const rounded = Math.ceil(remaining / step) * step;
-                            if (rounded > remaining && !amounts.includes(rounded)) amounts.push(rounded);
-                            if (amounts.length >= 5) break;
-                        }
-                        return amounts;
-                    }
+            if (balance < -0.005) {
+                if (balanceEl) {
+                    balanceEl.textContent = 'Short ₱' + fmt(Math.abs(balance));
+                    balanceEl.className = 'pay-summary-value short';
+                }
+                if (changeRow) changeRow.style.display = 'none';
+                if (payBtn) payBtn.disabled = true;
+            } else if (balance <= 0.005) {
+                if (balanceEl) {
+                    balanceEl.textContent = '₱0.00 (Exact)';
+                    balanceEl.className = 'pay-summary-value ok';
+                }
+                if (changeRow) changeRow.style.display = 'none';
+                if (payBtn) payBtn.disabled = false;
+            } else {
+                if (balanceEl) {
+                    balanceEl.textContent = '₱' + fmt(balance) + ' over';
+                    balanceEl.className = 'pay-summary-value ok';
+                }
+                if (changeRow && changeEl) {
+                    changeRow.style.display = hasCash ? 'flex' : 'none';
+                    changeEl.textContent = '₱' + fmt(balance);
+                }
+                if (payBtn) payBtn.disabled = false;
+            }
 
-                    function setTendered(amt) {
-                        const inp = document.getElementById('tendered-input');
-                        if (inp) {
-                            if (selectedTender && selectedTender.pchange !== 'Y') {
-                                amt = Math.min(amt, getRemainingBalance());
-                            }
-                            inp.value = amt.toFixed(2);
-                            updateAddAmount();
-                            inp.focus();
-                        }
-                    }
-                    window.updateAddAmount = function() {
-                        const inp = document.getElementById('tendered-input');
-                        let amt = inp ? parseFloat(inp.value) || 0 : 0;
-                        const refInput = document.getElementById('payment-reference-input');
-                        const reference = refInput ? refInput.value.trim() : '';
-                        const cardholderInput = document.getElementById('cardholder-name-input');
-                        const cardNumberInput = document.getElementById('card-number-input');
-                        const approvalInput = document.getElementById('approval-code-input');
-                        const isCard = !!(selectedTender && selectedTender.isCard);
-                        const needsReference = !!(selectedTender && selectedTender.pchange !== 'Y' && !isCard);
-                        const needsCardDetails = !!(selectedTender && selectedTender.pchange !== 'Y' && isCard);
-                        const remaining = getRemainingBalance();
+            // Sync hidden input for form submit
+            const hidden = document.getElementById('tender-entries');
+            if (hidden) {
+                hidden.value = JSON.stringify(tenderEntries.map(e => ({
+                    pcode: e.pcode,
+                    amount: e.amount,
+                    payment_reference: e.payment_reference || '',
+                    is_card: !!e.is_card,
+                    cardholder_name: e.cardholder_name || '',
+                    card_number: e.card_number || '',
+                    approval_code: e.approval_code || ''
+                })));
+            }
+        }
 
-                        if (selectedTender && selectedTender.pchange !== 'Y') {
-                            if (inp) {
-                                inp.max = remaining.toFixed(2);
-                                if (amt > remaining) {
-                                    amt = remaining;
-                                    inp.value = remaining.toFixed(2);
-                                }
-                            }
-                        }
+        window.handleReferenceKey = function (evt) {
+            if (evt.key === 'Enter') {
+                evt.preventDefault();
+                const addBtn = document.getElementById('pay-add-btn');
+                if (addBtn && !addBtn.disabled) {
+                    addTenderEntry();
+                }
+            }
+        };
 
-                        const cardOk = !needsCardDetails || (
-                            cardholderInput && cardholderInput.value.trim() &&
-                            cardNumberInput && cardNumberInput.value.trim() &&
-                            approvalInput && approvalInput.value.trim()
-                        );
+        window.handleTenderedKey = function (evt) {
+            if (evt.key === 'Enter') {
+                evt.preventDefault();
+                const addBtn = document.getElementById('pay-add-btn');
+                if (addBtn && !addBtn.disabled) {
+                    addTenderEntry();
+                } else {
+                    const payBtn = document.getElementById('pay-btn');
+                    const form = document.getElementById('pay-form');
+                    if (payBtn && !payBtn.disabled && form) form.submit();
+                }
+            }
+        };
+        window.validatePayment = function () {
+            const totalTendered = tenderEntries.reduce((s, e) => s + e.amount, 0);
+            const balance = Math.round((totalTendered - TOTAL) * 100) / 100;
+            if (balance < -0.005) {
+                alert('Total tendered (₱' + fmt(totalTendered) + ') is less than amount due (₱' + fmt(TOTAL) + ').');
+                return false;
+            }
+            document.getElementById('tender-entries').value = JSON.stringify(
+                tenderEntries.map(e => ({
+                    pcode: e.pcode,
+                    amount: e.amount,
+                    payment_reference: e.payment_reference || '',
+                    is_card: !!e.is_card,
+                    cardholder_name: e.cardholder_name || '',
+                    card_number: e.card_number || '',
+                    approval_code: e.approval_code || ''
+                }))
+            );
+            return true;
+        };
 
-                        const addBtn = document.getElementById('pay-add-btn');
-                        if (addBtn) addBtn.disabled = !selectedTender || amt <= 0 || (needsReference && !reference) || !cardOk;
-                    };
-                    window.addTenderEntry = function() {
-                        if (!selectedTender) return;
-                        const inp = document.getElementById('tendered-input');
-                        let amt = inp ? parseFloat(inp.value) || 0 : 0;
-                        const refInput = document.getElementById('payment-reference-input');
-                        const paymentRef = refInput ? refInput.value.trim() : '';
-                        const cardholderInput = document.getElementById('cardholder-name-input');
-                        const cardNumberInput = document.getElementById('card-number-input');
-                        const approvalInput = document.getElementById('approval-code-input');
-                        const isCard = selectedTender.isCard;
-                        const cardholderName = cardholderInput ? cardholderInput.value.trim() : '';
-                        const cardNumber = cardNumberInput ? cardNumberInput.value.trim() : '';
-                        const approvalCode = approvalInput ? approvalInput.value.trim() : '';
-
-                        if (selectedTender.pchange !== 'Y') {
-                            amt = Math.min(amt, getRemainingBalance());
-                        }
-                        if (amt <= 0) return;
-                        if (selectedTender.pchange !== 'Y' && !isCard && !paymentRef) return;
-                        if (selectedTender.pchange !== 'Y' && isCard && (!cardholderName || !cardNumber || !approvalCode)) return;
-
-                        tenderEntries.push({
-                            pcode: selectedTender.pcode,
-                            desc: selectedTender.desc,
-                            amount: amt,
-                            pchange: selectedTender.pchange,
-                            payment_reference: paymentRef,
-                            is_card: isCard,
-                            cardholder_name: cardholderName,
-                            card_number: cardNumber,      // sent as typed; server masks it — never trust client masking alone
-                            approval_code: approvalCode
-                        });
-
-                        renderEntries();
-                        if (inp) inp.value = '';
-                        [refInput, cardholderInput, cardNumberInput, approvalInput].forEach(el => { if (el) el.value = ''; });
-                        const refSection = document.getElementById('pay-reference-section');
-                        const cardSection = document.getElementById('pay-card-details-section');
-                        if (refSection) refSection.style.display = 'none';
-                        if (cardSection) cardSection.style.display = 'none';
-                        document.querySelectorAll('.pay-tender-btn').forEach(b => b.classList.remove('selected'));
-                        selectedTender = null;
-                        updateAddAmount();
-                        buildQuickAmounts();
-                        focusNextStep();
-                    };
-
-                    // After a payment is added, jump the keyboard focus to whatever the
-                    // cashier needs next: the Complete button once the balance is settled,
-                    // otherwise back to the tender buttons to keep tendering.
-                    function focusNextStep() {
-                        const payBtn = document.getElementById('pay-btn');
-                        if (getRemainingBalance() <= 0 && payBtn && !payBtn.disabled) {
-                            payBtn.focus();
-                            return;
-                        }
-                        focusDefaultTenderButton();
-                    }
-
-                    window.removeTenderEntry = function (idx) {
-                        tenderEntries.splice(idx, 1);
-                        renderEntries();
-                        buildQuickAmounts();
-                        focusDefaultTenderButton();
-                    };
-                    function renderEntries() {
-                        const list = document.getElementById('pay-entries-list');
-                        if (!list) return;
-                        if (tenderEntries.length === 0) {
-                            list.innerHTML = '<p class="pay-entries-empty" id="pay-entries-empty">No payments added yet</p>';
-                            updateBalance();
-                            return;
-                        }
-                        list.innerHTML = tenderEntries.map((e, i) => {
-                            let detail = '';
-                            if (e.is_card) {
-                                detail = ' <span class="pay-summary-label">[' + escapeHtml(e.cardholder_name) + ' · ' + escapeHtml(e.card_number) + ']</span>';
-                            } else if (e.payment_reference) {
-                                detail = ' <span class="pay-summary-label">[' + escapeHtml(e.payment_reference) + ']</span>';
-                            }
-                            return '<div class="pay-entry-item">' +
-                                '<span class="pay-entry-desc">' + escapeHtml(e.desc) + detail + '</span>' +
-                                '<span class="pay-entry-amt">₱' + fmt(e.amount) + '</span>' +
-                                '<button type="button" class="pay-entry-remove" onclick="removeTenderEntry(' + i + ')" title="Remove">×</button>' +
-                                '</div>';
-                        }).join('');
-                        updateBalance();
-                    }
-                    function escapeHtml(s) {
-                        const d = document.createElement('div');
-                        d.textContent = s;
-                        return d.innerHTML;
-                    }
-
-                    function updateBalance() {
-                        const totalTendered = tenderEntries.reduce((s, e) => s + e.amount, 0);
-                        const balance = Math.round((totalTendered - TOTAL) * 100) / 100;
-                        const hasCash = tenderEntries.some(e => e.pchange === 'Y');
-
-                        const totalEl = document.getElementById('total-tendered');
-                        const balanceEl = document.getElementById('balance-display');
-                        const changeRow = document.getElementById('pay-change-row');
-                        const changeEl = document.getElementById('change-display');
-                        const payBtn = document.getElementById('pay-btn');
-
-                        if (totalEl) totalEl.textContent = '₱' + fmt(totalTendered);
-
-                        if (balance < -0.005) {
-                            if (balanceEl) {
-                                balanceEl.textContent = 'Short ₱' + fmt(Math.abs(balance));
-                                balanceEl.className = 'pay-summary-value short';
-                            }
-                            if (changeRow) changeRow.style.display = 'none';
-                            if (payBtn) payBtn.disabled = true;
-                        } else if (balance <= 0.005) {
-                            if (balanceEl) {
-                                balanceEl.textContent = '₱0.00 (Exact)';
-                                balanceEl.className = 'pay-summary-value ok';
-                            }
-                            if (changeRow) changeRow.style.display = 'none';
-                            if (payBtn) payBtn.disabled = false;
-                        } else {
-                            if (balanceEl) {
-                                balanceEl.textContent = '₱' + fmt(balance) + ' over';
-                                balanceEl.className = 'pay-summary-value ok';
-                            }
-                            if (changeRow && changeEl) {
-                                changeRow.style.display = hasCash ? 'flex' : 'none';
-                                changeEl.textContent = '₱' + fmt(balance);
-                            }
-                            if (payBtn) payBtn.disabled = false;
-                        }
-
-                        // Sync hidden input for form submit
-                        const hidden = document.getElementById('tender-entries');
-                        if (hidden) {
-                            hidden.value = JSON.stringify(tenderEntries.map(e => ({
-                                pcode: e.pcode,
-                                amount: e.amount,
-                                payment_reference: e.payment_reference || '',
-                                is_card: !!e.is_card,
-                                cardholder_name: e.cardholder_name || '',
-                                card_number: e.card_number || '',
-                                approval_code: e.approval_code || ''
-                            })));
-                        }
-                    }
-
-                    window.handleReferenceKey = function (evt) {
-                        if (evt.key === 'Enter') {
-                            evt.preventDefault();
-                            const addBtn = document.getElementById('pay-add-btn');
-                            if (addBtn && !addBtn.disabled) {
-                                addTenderEntry();
-                            }
-                        }
-                    };
-
-                    window.handleTenderedKey = function (evt) {
-                        if (evt.key === 'Enter') {
-                            evt.preventDefault();
-                            const addBtn = document.getElementById('pay-add-btn');
-                            if (addBtn && !addBtn.disabled) {
-                                addTenderEntry();
-                            } else {
-                                const payBtn = document.getElementById('pay-btn');
-                                const form = document.getElementById('pay-form');
-                                if (payBtn && !payBtn.disabled && form) form.submit();
-                            }
-                        }
-                    };
-window.validatePayment = function () {
-    const totalTendered = tenderEntries.reduce((s, e) => s + e.amount, 0);
-    const balance = Math.round((totalTendered - TOTAL) * 100) / 100;
-    if (balance < -0.005) {
-        alert('Total tendered (₱' + fmt(totalTendered) + ') is less than amount due (₱' + fmt(TOTAL) + ').');
-        return false;
-    }
-    document.getElementById('tender-entries').value = JSON.stringify(
-        tenderEntries.map(e => ({
-            pcode: e.pcode,
-            amount: e.amount,
-            payment_reference: e.payment_reference || '',
-            is_card: !!e.is_card,
-            cardholder_name: e.cardholder_name || '',
-            card_number: e.card_number || '',
-            approval_code: e.approval_code || ''
-        }))
-    );
-    return true;
-};
-
-                    // Payment modal content is injected via HTMX; set initial keyboard focus after paint.
-                    setTimeout(focusDefaultTenderButton, 0);
-                })();
-            </script>
+        // Payment modal content is injected via HTMX; set initial keyboard focus after paint.
+        setTimeout(focusDefaultTenderButton, 0);
+    })();
+</script>
