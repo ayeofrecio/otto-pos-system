@@ -62,3 +62,27 @@
             cWithD: 'Cash Withdrawal',
             resendTxt: 'Resend Text File',
         };
+
+        // Initialize button labels with dynamic function keys
+        (function () {
+            const keyMappings = {
+                'key-paymnt': 'paymnt',
+                'key-search': 'iView',
+                'key-idisc': 'iDisc',
+                'key-stdisc': 'stDisc',
+                'key-prover': 'prOver',
+                'key-iret': 'iRet',
+                'key-susrt': 'iSusRt',
+                'key-ivoid': 'iVoid',
+                'key-voidtr': 'voidTr',
+                'key-ivoida': 'iVoidA',
+                'key-cwithd': 'cWithD'
+            };
+
+            for (const [elemId, posKeyName] of Object.entries(keyMappings)) {
+                const elem = document.getElementById(elemId);
+                if (elem && POS_FKEYS[posKeyName]) {
+                    elem.textContent = POS_FKEYS[posKeyName];
+                }
+            }
+        })();
