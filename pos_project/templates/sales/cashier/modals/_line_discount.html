@@ -1,0 +1,27 @@
+<div class="modal-overlay" id="line-disc-modal" onclick="closeLineDiscModalOutside(event)">
+    <div class="modal disc-modal">
+        <div class="modal-header">
+            <h2>Apply Discount to Line</h2>
+            <button class="modal-close" onclick="closeLineDiscModal()">&#10005;</button>
+        </div>
+        <form id="line-disc-form" hx-post="{% url 'sales:cart_line_disc' %}" hx-target="#cart-summary"
+            hx-swap="outerHTML" hx-trigger="submit">
+            {% csrf_token %}
+            <input type="hidden" id="line-disc-rec-ctr" name="rec_ctr" value="">
+            <input type="hidden" id="line-disc-type" name="disc_type" value="">
+            {% include "sales/cashier/_disc_type_grid.html" with handler="selectLineDiscType" code_attr="data-code" pct_attr="data-pct" extra_class="line-disc-type-btn" %}
+            <div class="disc-pct-row">
+                <label class="disc-pct-label" for="line-disc-pct-input">Discount %:</label>
+                <input type="number" id="line-disc-pct-input" name="disc_pct" class="disc-pct-num" value="0" min="0"
+                    max="100" step="1" autocomplete="off">
+                <span class="disc-pct-sym">%</span>
+            </div>
+            <div class="disc-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="openPriceOverrideFromLineDisc()">Price Override</button>
+                <button type="button" class="btn btn-remove-disc" onclick="removeLineDiscAndClose()">Remove Discount</button>
+                <button type="button" class="btn btn-secondary" onclick="closeLineDiscModal()">Cancel</button>
+                <button type="button" class="btn btn-apply-disc" onclick="applyLineDisc()">Apply</button>
+            </div>
+        </form>
+    </div>
+</div>

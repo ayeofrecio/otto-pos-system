@@ -1,0 +1,147 @@
+{% load static %}
+{% load sales_tags %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Cashier</title>
+    <link rel="stylesheet" href="{% static 'css/pages/pos.css' %}">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+
+<body>
+
+    {% include "sales/cashier/_header.html" %}
+
+    <main class="main">
+        <div class="left">
+            {% include "sales/cashier/_barcode_bar.html" %}
+            {% include "sales/cashier/_cart_summary.html" %}
+            <div class="detail-and-items-row">
+                {% include "sales/cashier/_item_detail.html" %}
+                {% include "sales/cashier/_scanned_panel.html" %}
+            </div>
+        </div>
+    </main>
+
+    <div id="toast-container"></div>
+    
+    {% include "sales/cashier/_hidden_forms.html" %}
+
+    <!-- Transaction Subtotal Discount Modal (F4) -->
+    {% include "sales/cashier/modals/_discount_subtotal.html" %}
+
+    <!-- Line Discount Modal (click row in Items Entered) -->
+    {% include "sales/cashier/modals/_line_discount.html" %}
+
+    <!-- Line Price Override Modal (prOver key) -->
+    {% include "sales/cashier/modals/_price_override.html" %}
+
+    <!-- Discount Modal (F3) -->
+    <div class="modal-overlay" id="discount-modal" onclick="closeDiscountModalOutside(event)">
+        <div class="modal disc-modal">
+            <div class="modal-header">
+                <h2>Apply Discount</h2>
+                <button class="modal-close" onclick="closeDiscountModal()">&#10005;</button>
+            </div>
+            <div class="disc-type-grid">
+                <button class="disc-type-btn" data-disc-code="REG" data-disc-pct="0"
+                    onclick="selectDiscType(this, 'REG',  'Regular',          0)">Regular %</button>
+                <button class="disc-type-btn" data-disc-code="SC" data-disc-pct="20"
+                    onclick="selectDiscType(this, 'SC',   'Senior Citizen',  20)">Senior Citizen (20%)</button>
+                <button class="disc-type-btn" data-disc-code="PWD" data-disc-pct="20"
+                    onclick="selectDiscType(this, 'PWD',  'PWD',             20)">PWD (20%)</button>
+                <button class="disc-type-btn" data-disc-code="EMP" data-disc-pct="10"
+                    onclick="selectDiscType(this, 'EMP',  'Employee',        10)">Employee (10%)</button>
+            </div>
+            <div class="disc-pct-row">
+                <label class="disc-pct-label" for="disc-pct-modal-input">Discount %:</label>
+                <input type="number" id="disc-pct-modal-input" class="disc-pct-num" value="0" min="0" max="100" step="1"
+                    autocomplete="off">
+                <span class="disc-pct-sym">%</span>
+            </div>
+            <div class="disc-modal-footer">
+                <button class="btn btn-remove-disc" onclick="removeDiscountAndClose()">Remove Discount</button>
+                <button class="btn btn-secondary" onclick="closeDiscountModal()">Cancel</button>
+                <button class="btn btn-apply-disc" onclick="applyDiscount()">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pay Modal (tender floating window) -->
+    {% include "sales/cashier/modals/_pay.html" %}
+
+    <!-- Close Transaction Modal (F8) -->
+    {% include "sales/cashier/modals/_close_session.html" %}
+
+    <div class="modal-overlay" id="cash-inout-modal" onclick="closeCashInOutModalOutside(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Cash In / Out</h2>
+                <button type="button" class="modal-close" onclick="closeCashInOutModal()">&#10005;</button>
+            </div>
+
+            <form id="cash-inout-form" class="close-trans-notes-section"
+                onsubmit="event.preventDefault(); submitCashInOut();">
+                {% csrf_token %}
+                <label class="close-trans-label" for="cash-movement-type">Movement Type</label>
+                <select id="cash-movement-type" name="movement_type" class="close-trans-notes-input" required>
+                    <option value="IN">Cash In</option>
+                    <option value="OUT">Cash Out</option>
+                </select>
+
+                <label class="close-trans-label" for="cash-movement-amount" style="margin-top:0.75rem;">Amount</label>
+                <input id="cash-movement-amount" name="amount" type="number" min="0.01" step="0.01"
+                    class="close-trans-notes-input" placeholder="0.00" required>
+
+                <label class="close-trans-label" for="cash-movement-reason" style="margin-top:0.75rem;">Reason</label>
+                <input id="cash-movement-reason" name="reason" type="text" maxlength="120"
+                    class="close-trans-notes-input" placeholder="e.g. Additional Change Fund" required>
+
+                <label class="close-trans-label" for="cash-movement-approved-by" style="margin-top:0.75rem;">Approved By
+                    (optional)</label>
+                <input id="cash-movement-approved-by" name="approved_by" type="text" maxlength="60"
+                    class="close-trans-notes-input" placeholder="Manager name">
+
+                <label class="close-trans-label" for="cash-movement-notes" style="margin-top:0.75rem;">Notes
+                    (optional)</label>
+                <textarea id="cash-movement-notes" name="notes" rows="2" maxlength="200" class="close-trans-notes-input"
+                    placeholder="Additional details..."></textarea>
+
+                <div class="close-trans-footer" style="margin-top:1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeCashInOutModal()">Cancel</button>
+                    <button type="submit" class="btn close-trans-confirm-btn">Save Cash Movement</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Close Transaction Modal -> Denomination Modal -->
+    {% include "sales/cashier/modals/_denomination.html" %}
+
+    <!-- Color / Size Picker Modal (alias items) -->
+    {% include "sales/cashier/modals/_color_size.html" %}
+    <!-- Function Key Help Modal -->
+    {% include "sales/cashier/modals/_fkey_help.html" %}
+
+    <!-- Item Search Modal -->
+    {% include "sales/cashier/modals/_search.html" %}
+
+    <!-- Sync Modal -->
+    {% include "sales/cashier/modals/_sync.html" %}
+
+    {% include "sales/cashier/modals/_item_return.html" %}
+
+    {% include "sales/cashier/modals/_suspend.html" %}
+
+    {% include "sales/cashier/_action_bar.html" %}
+
+    <script src="{% static 'sales/cashier.js' %}"></script>
+    <script src="{% static 'sales/pos-keys.js' %}"></script>
+    <script src="{% static 'sales/pos-config.js' %}"></script>
+    <script src="{% static 'sales/cloud-sync.js' %}"></script>
+    <script src="{% static 'sales/close-session.js' %}"></script>
+</body>
+
+</html>

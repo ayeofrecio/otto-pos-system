@@ -1,0 +1,20 @@
+<div class="modal-overlay" id="discount-modal" onclick="closeDiscountModalOutside(event)">
+    <div class="modal disc-modal">
+        <div class="modal-header">
+            <h2>Apply Discount</h2>
+            <button class="modal-close" onclick="closeDiscountModal()">&#10005;</button>
+        </div>
+        {% include "sales/cashier/_disc_type_grid.html" with handler="selectDiscType" code_attr="data-disc-code" pct_attr="data-disc-pct" %}
+        <div class="disc-pct-row">
+            <label class="disc-pct-label" for="disc-pct-modal-input">Discount %:</label>
+            <input type="number" id="disc-pct-modal-input" class="disc-pct-num" value="0" min="0" max="100" step="1"
+                autocomplete="off">
+            <span class="disc-pct-sym">%</span>
+        </div>
+        <div class="disc-modal-footer">
+            <button class="btn btn-remove-disc" onclick="removeDiscountAndClose()">Remove Discount</button>
+            <button class="btn btn-secondary" onclick="closeDiscountModal()">Cancel</button>
+            <button class="btn btn-apply-disc" onclick="applyDiscount()">Apply</button>
+        </div>
+    </div>
+</div>

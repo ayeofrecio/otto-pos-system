@@ -1,0 +1,76 @@
+
+    const ITEM_SEARCH_URL = "{% url 'sales:item_search' %}";
+    const CART_ADD_URL = "{% url 'sales:cart_add' %}";
+    const CART_LINE_DISC_URL = "{% url 'sales:cart_line_disc' %}";
+    const CART_LINE_PRICE_OVERRIDE_URL = "{% url 'sales:cart_line_price_override' %}";
+    const CART_VOID_ITEM_URL = "{% url 'sales:cart_void_item' %}";
+    const CART_VOID_TRANSACTION_URL = "{% url 'sales:cart_void_transaction' %}";
+    const CART_VOID_PREVIOUS_URL = "{% url 'sales:cart_void_previous' %}";
+    const CART_SUSPEND_URL = "{% url 'sales:cart_suspend' %}";
+    const CART_SUSPENDED_LIST_URL = "{% url 'sales:cart_suspended_list' %}";
+    const CART_SUSPENDED_RETRIEVE_URL = "{% url 'sales:cart_suspended_retrieve' %}";
+    const INITIAL_SUSPENDED_COUNT = {{ suspended_count|default:0 }};
+    const CART_ITEM_RETURN_TOGGLE_URL = "{% url 'sales:cart_item_return_toggle' %}";
+    const CART_RETURN_LOOKUP_URL = "{% url 'sales:cart_return_lookup' %}";
+    const CART_RETURN_IMPORT_URL = "{% url 'sales:cart_return_import' %}";
+    const CASH_INOUT_URL = "{% url 'sales:cash_inout' %}";
+    const CSRF_TOKEN = "{{ csrf_token }}";
+    const POS_KEYS = {
+        iDisc: "{{ pos_keys.pIDiscKey|escapejs }}",
+        iView: "{{ pos_keys.pIViewKey|escapejs }}",
+        stDisc: "{{ pos_keys.pSTDiscKey|escapejs }}",
+        prOver: "{{ pos_keys.pPrOverKey|escapejs }}",
+        iRet: "{{ pos_keys.pIRetKey|escapejs }}",
+        iVoid: "{{ pos_keys.pIVoidKey|escapejs }}",
+        iVoidA: "{{ pos_keys.pIVoidAKey|escapejs }}",
+        voidTr: "{{ pos_keys.pVoidTrKey|escapejs }}",
+        iSusRt: "{{ pos_keys.pISusRtKey|escapejs }}",
+        stat: "{{ pos_keys.pStatKey|escapejs }}",
+        subTot: "{{ pos_keys.pSubTotKey|escapejs }}",
+        paymnt: "{{ pos_keys.pPaymntKey|escapejs }}",
+        iQty: "{{ pos_keys.pIQtyKey|escapejs }}",
+        tsRep: "{{ pos_keys.pTSRepKey|escapejs }}",
+        zRead: "{{ pos_keys.pZReadKey|escapejs }}",
+        jRep: "{{ pos_keys.pJRepKey|escapejs }}",
+        sOff: "{{ pos_keys.pSOffKey|escapejs }}",
+        menu: "{{ pos_keys.pMenuKey|escapejs }}",
+        sman: "{{ pos_keys.pSManKey|escapejs }}",
+        cWithD: "{{ pos_keys.pCWithDKey|escapejs }}",
+        resendTxt: "{{ pos_keys.pResendTxt|escapejs }}",
+    };
+    
+    
+    // Initialize button labels with dynamic function keys
+    (function () {
+    const keyMappings = {
+        'key-paymnt': 'paymnt',
+        'key-search': 'iView',
+        'key-idisc': 'iDisc',
+        'key-stdisc': 'stDisc',
+        'key-prover': 'prOver',
+        'key-iret': 'iRet',
+        'key-susrt': 'iSusRt',
+        'key-ivoid': 'iVoid',
+        'key-voidtr': 'voidTr',
+        'key-ivoida': 'iVoidA',
+        'key-cwithd': 'cWithD'
+    };
+    
+    
+    for (const [elemId, posKeyName] of Object.entries(keyMappings)) {
+        const elem = document.getElementById(elemId);
+            if (elem && POS_FKEYS[posKeyName]) {
+                elem.textContent = POS_FKEYS[posKeyName];
+            }
+        }
+    })();
+    
+    
+    // Initialise trans_disc state from server session (survives page reload)
+    const INITIAL_TRANS_DISC = {
+    pct: "{{ trans_disc.pct|default:0 }}",
+    type: "{{ trans_disc.type|default:'' }}",
+    label: "{{ trans_disc.label|default:'' }}"
+    };
+    
+    const Z_READING_REQUIRED = {{ z_reading_required|yesno:"true,false" }};

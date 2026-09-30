@@ -1,0 +1,45 @@
+<div class="barcode-area">
+    <form id="barcode-form" hx-post="{% url 'sales:cart_add' %}" hx-target="#toast-container"
+        hx-swap="innerHTML" hx-trigger="submit">
+        {% csrf_token %}
+        <input type="hidden" id="disc-pct-field" name="disc_pct" value="0">
+        <input type="hidden" id="disc-type-field" name="disc_type" value="">
+        <div class="barcode-row">
+            <div class="qty-wrapper">
+                <span class="qty-label">Qty</span>
+                <input type="number" id="qty-input" name="qty" class="qty-input" value="1" min="1"
+                    max="9999" autocomplete="off" title="Set quantity before scanning (F2 to focus)">
+            </div>
+            <span class="qty-multiplier">×</span>
+            <input type="text" id="barcode-input" name="barcode" class="barcode-input"
+                placeholder="Scan or enter barcode here" autofocus autocomplete="off">
+            <button type="button" class="btn-search" onclick="openSearchModal()"
+                title="Search items (F1)">&#128269; Search</button>
+            <button type="button" class="btn-fkey-help" onclick="openFkeyHelpModal()"
+                title="Function Key Reference">&#63;</button>
+        </div>
+    </form>
+    <div class="disc-badge" id="disc-badge">
+        <span class="disc-badge-label">Discount Active</span>
+        <span id="disc-badge-text"></span>
+        <button type="button" class="disc-badge-clear" onclick="clearDiscount()"
+            title="Remove discount">&#10005;</button>
+    </div>
+</div>
+
+
+<div class="modal-overlay" id="search-modal" onclick="closeSearchModalOutside(event)">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Item Lookup</h2>
+            <button type="button" class="modal-close" onclick="closeSearchModal()">&#10005;</button>
+        </div>
+        <div class="modal-search-bar">
+            <input type="text" id="modal-search-input" class="modal-search-input"
+                placeholder="Type item name, code, or description..." autocomplete="off">
+        </div>
+        <div class="modal-results" id="modal-results">
+            <p class="search-hint">Type at least 2 characters to search</p>
+        </div>
+    </div>
+</div>
