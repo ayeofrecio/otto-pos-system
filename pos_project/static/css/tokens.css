@@ -1,9 +1,13 @@
-/* tokens.css */
+/* =========================================================
+   POS UI — DESIGN TOKENS
+========================================================= */
 
 :root {
+    /* Light theme */
     --bg: #f6f4f7;
     --surface: #ffffff;
     --surface-raised: #efeeef;
+    --surface-sunken: #f5f4f6;
 
     --border: #d9d9dc;
 
@@ -17,6 +21,14 @@
     --accent: #9aceeb;
 
     --danger: #c94f5d;
+    --success: #1b7f46;
+    --success-bg: #e4f4ea;
+    --info: #17689a;
+    --info-bg: #e3f0f8;
+    --warning: #8a5d00;
+    --warning-bg: #fbf1d9;
+    --orange: #b85400;
+    --purple: #7b3f98;
     --focus: rgba(154, 206, 235, 0.45);
 
     --shadow:
@@ -26,10 +38,13 @@
     --radius: 10px;
 }
 
+
 [data-theme="dark"] {
+    color-scheme: dark;
     --bg: #1e2328;
     --surface: #252b33;
     --surface-raised: #2b323b;
+    --surface-sunken: #1f252c;
 
     --border: #363e48;
 
@@ -43,7 +58,15 @@
     --accent: #9aceeb;
 
     --danger: #d65a67;
-    --focus: rgba(139, 61, 74, 0.35);
+    --success: #6edb8f;
+    --success-bg: #122a1a;
+    --info: #60b8f0;
+    --info-bg: #0d2035;
+    --warning: #f0c060;
+    --warning-bg: #3d3320;
+    --orange: #fb8500;
+    --purple: #d29fe2;
+    --focus: rgba(154, 206, 235, 0.35);
 
     --shadow:
         0 20px 50px rgba(0, 0, 0, 0.25),

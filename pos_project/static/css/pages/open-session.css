@@ -205,3 +205,9 @@
     }
 
 }
+.session-page ~ .theme-toggle,
+.theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+}
