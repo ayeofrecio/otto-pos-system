@@ -1,0 +1,39 @@
+<div class="modal-overlay" id="item-return-modal" onclick="closeItemReturnModalOutside(event)">
+    <div class="modal return-modal">
+        <div class="modal-header">
+            <h2>Previous Receipt Return</h2>
+            <button type="button" class="modal-close" onclick="closeItemReturnModal()">&#10005;</button>
+        </div>
+        <div class="return-modal-body">
+            <div class="return-modal-line" id="item-return-line-label">Enter receipt number, load items, then select
+                item(s) to return.</div>
+
+            <label class="return-modal-label" for="item-return-source-trans">Original Transaction No.</label>
+            <div class="return-lookup-row">
+                <input id="item-return-source-trans" class="return-modal-input" type="text" maxlength="8"
+                    placeholder="e.g. 00001234" required>
+                <button type="button" class="btn btn-secondary" onclick="lookupPreviousReceiptForReturn()">Load</button>
+            </div>
+
+            <div id="item-return-source-date" class="return-modal-line" style="display:none;"></div>
+            <div class="return-receipt-results" id="item-return-results">
+                <div class="return-receipt-empty">No receipt loaded yet.</div>
+            </div>
+
+            <label class="return-modal-label" for="item-return-select-all">
+                <input id="item-return-select-all" type="checkbox" onchange="toggleAllReturnItems(this.checked)">
+                Select all loaded items
+            </label>
+
+            <label class="return-modal-label" for="item-return-admin-pin">Admin / Manager PIN</label>
+            <input id="item-return-admin-pin" class="return-modal-input" type="password" maxlength="64"
+                placeholder="Required for return tagging" required>
+
+            <div class="return-modal-error" id="item-return-error"></div>
+        </div>
+        <div class="disc-modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeItemReturnModal()">Cancel</button>
+            <button type="button" class="btn btn-return-apply" onclick="importSelectedReturnItems()">Insert Selected Return Items</button>
+        </div>
+    </div>
+</div>

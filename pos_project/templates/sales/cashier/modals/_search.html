@@ -1,0 +1,16 @@
+
+<div class="modal-overlay" id="search-modal" onclick="closeSearchModalOutside(event)">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Item Lookup</h2>
+            <button type="button" class="modal-close" onclick="closeSearchModal()">&#10005;</button>
+        </div>
+        <div class="modal-search-bar">
+            <input type="text" id="modal-search-input" class="modal-search-input"
+                placeholder="Type item name, code, or description..." autocomplete="off">
+        </div>
+        <div class="modal-results" id="modal-results">
+            <p class="search-hint">Type at least 2 characters to search</p>
+        </div>
+    </div>
+</div>

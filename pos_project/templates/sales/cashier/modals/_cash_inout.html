@@ -1,0 +1,39 @@
+<div class="modal-overlay" id="cash-inout-modal" onclick="closeCashInOutModalOutside(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2>Cash In / Out</h2>
+            <button type="button" class="modal-close" onclick="closeCashInOutModal()">&#10005;</button>
+        </div>
+
+        <form id="cash-inout-form" class="close-trans-notes-section"
+            onsubmit="event.preventDefault(); submitCashInOut();">
+            {% csrf_token %}
+            <label class="close-trans-label" for="cash-movement-type">Movement Type</label>
+            <select id="cash-movement-type" name="movement_type" class="close-trans-notes-input" required>
+                <option value="IN">Cash In</option>
+                <option value="OUT">Cash Out</option>
+            </select>
+
+            <label class="close-trans-label close-trans-label--spaced" for="cash-movement-amount">Amount</label>
+            <input id="cash-movement-amount" name="amount" type="number" min="0.01" step="0.01"
+                class="close-trans-notes-input" placeholder="0.00" required>
+
+            <label class="close-trans-label close-trans-label--spaced" for="cash-movement-reason">Reason</label>
+            <input id="cash-movement-reason" name="reason" type="text" maxlength="120"
+                class="close-trans-notes-input" placeholder="e.g. Additional Change Fund" required>
+
+            <label class="close-trans-label close-trans-label--spaced" for="cash-movement-approved-by">Approved By (optional)</label>
+            <input id="cash-movement-approved-by" name="approved_by" type="text" maxlength="60"
+                class="close-trans-notes-input" placeholder="Manager name">
+
+            <label class="close-trans-label close-trans-label--spaced" for="cash-movement-notes">Notes (optional)</label>
+            <textarea id="cash-movement-notes" name="notes" rows="2" maxlength="200" class="close-trans-notes-input"
+                placeholder="Additional details..."></textarea>
+
+            <div class="close-trans-footer cash-inout-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeCashInOutModal()">Cancel</button>
+                <button type="submit" class="btn close-trans-confirm-btn">Save Cash Movement</button>
+            </div>
+        </form>
+    </div>
+</div>

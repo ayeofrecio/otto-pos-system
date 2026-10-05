@@ -1,5 +1,5 @@
 {% load sales_tags humanize %}
-<h3 class="scanned-items-title">Items Entered <span class="scanned-items-hint">(click for discount, price override, void, refund)</span></h3>
+<h3 class="scanned-items-title">{{ item_count }} Item{{ item_count|pluralize }} Entered <span class="scanned-items-hint">(click for discount, price override, void, refund)</span></h3>
 <div class="scanned-items-inner">
 {% if cart_lines %}
 <div class="scanned-items-list">

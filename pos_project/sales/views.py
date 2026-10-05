@@ -2467,8 +2467,10 @@ def _parse_tender_entries(request):
                     "payment_reference": payment_reference,
                     "is_card": is_card,
                     "cardholder_name": cardholder_name,
+                    "card_number": item.get("card_number"),
                     "card_number_masked": card_number_masked,
                     "approval_code": approval_code,
+                    "card_expiry": item.get("card_expiry"),
                 })
         return entries
     except (json.JSONDecodeError, TypeError):

@@ -96,8 +96,13 @@
 
                             <div class="pay-cash-section-title">Approval Code</div>
                             <input type="text" id="approval-code-input" class="pay-tendered-input"
-                                   maxlength="20" placeholder="Approval / auth code" autocomplete="off"
+                                   maxlength="16" type="number" placeholder="Approval / auth code" autocomplete="off"
                                    oninput="updateAddAmount()" onkeydown="handleReferenceKey(event)">
+                            
+                            <div class="pay-cash-section-title">Expiry Date</div>
+                            <input type="text" id="card-expiry-input" class="pay-tendered-input"
+                                   maxlength="5" placeholder="MM/YY" autocomplete="off"
+                                   oninput="updateAddAmount()">
                         </div>
                     </div>
 

@@ -1,0 +1,20 @@
+{% load sales_tags %}
+<div class="item-detail" id="item-detail"{% if oob %} hx-swap-oob="true"{% endif %}>
+    <h3>Item Detail</h3>
+    {% if last_item %}
+    <dl>
+        <dt>Product:</dt>
+        <dd>{{ last_item.item_description }}</dd>
+        <dt>Code:</dt>
+        <dd>{{ last_item.item_code }}</dd>
+        <dt>Size:</dt>
+        <dd>{% size_display last_item.item_size as item_size_display %}{{ item_size_display|default:"—" }}</dd>
+        <dt>Color:</dt>
+        <dd>{% color_display last_item.item_color last_item.item_code last_item.item_size as item_color_display %}{{ item_color_display|default:"—" }}</dd>
+        <dt>Price:</dt>
+        <dd>₱{{ last_item.item_price|floatformat:2 }}</dd>
+    </dl>
+    {% else %}
+    <p class="empty">Scan an item to see details</p>
+    {% endif %}
+</div>

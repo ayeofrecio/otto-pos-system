@@ -1,0 +1,20 @@
+<div class="modal-overlay" id="trans-disc-modal" onclick="closeTransDiscModalOutside(event)">
+    <div class="modal disc-modal">
+        <div class="modal-header">
+            <h2>Subtotal Discount</h2>
+            <button class="modal-close" onclick="closeTransDiscModal()">&#10005;</button>
+        </div>
+        {% include "sales/cashier/_disc_type_grid.html" with handler="selectTransDiscType" code_attr="data-tdcode" pct_attr="data-tdpct" %}
+        <div class="disc-pct-row">
+            <label class="disc-pct-label" for="trans-disc-pct-input">Discount %:</label>
+            <input type="number" id="trans-disc-pct-input" class="disc-pct-num disc-pct-num--info" value="0" min="0"
+                max="100" step="1" autocomplete="off">
+            <span class="disc-pct-sym disc-pct-sym--info">%</span>
+        </div>
+        <div class="disc-modal-footer">
+            <button class="btn btn-remove-disc" onclick="removeTransDiscAndClose()">Remove Discount</button>
+            <button class="btn btn-secondary" onclick="closeTransDiscModal()">Cancel</button>
+            <button class="btn btn-apply-trans" onclick="applyTransDisc()">Apply to Subtotal</button>
+        </div>
+    </div>
+</div>

@@ -37,10 +37,170 @@ body {
 
 .header-right {
     display: flex;
-    gap: 2rem;
+    gap: 1.25rem;
     align-items: center;
 }
+/* Header menu */
+.header-menu {
+    position: relative;
+}
 
+.header-menu__trigger {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid #2f3640;
+    border-radius: 8px;
+    color: #8b949e;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.header-menu__trigger:hover,
+.header-menu__trigger[aria-expanded="true"] {
+    background: #2d343e;
+    border-color: #3d454d;
+    color: #e6edf3;
+}
+
+.header-menu__trigger:focus-visible {
+    outline: 2px solid #e6a23c;
+    outline-offset: 2px;
+}
+
+.header-menu__panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 1500;
+    min-width: 240px;
+    padding: 6px;
+    background: #252b33;
+    border: 1px solid #2f3640;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s linear 0.12s;
+}
+
+.header-menu__panel.is-open {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition-delay: 0s;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 0.75rem;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    color: #e6edf3;
+    font-size: 0.95rem;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.menu-item:hover {
+    background: #2d343e;
+}
+
+.menu-item:focus-visible {
+    outline: none;
+    background: #2d343e;
+    box-shadow: inset 0 0 0 2px #e6a23c;
+}
+
+.menu-item[aria-disabled="true"] {
+    cursor: progress;
+}
+
+.menu-item__icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8b949e;
+}
+
+.menu-item:hover .menu-item__icon {
+    color: #e6edf3;
+}
+
+.menu-item__label {
+    flex: 1;
+}
+
+.menu-item__status {
+    font-size: 0.78rem;
+    color: #8b949e;
+}
+
+.menu-divider {
+    height: 1px;
+    margin: 6px 4px;
+    background: #2f3640;
+}
+
+.menu-item--danger,
+.menu-item--danger .menu-item__icon {
+    color: #f85149;
+}
+
+.menu-item--danger:hover {
+    background: #3a1520;
+}
+
+/* Sync item: icon swaps by state (is-loading / is-success / is-error) */
+.sync-icon {
+    position: relative;
+}
+
+.sync-icon .icon {
+    width: 100%;
+    height: 100%;
+}
+
+.menu-item.is-loading .sync-icon .icon,
+.menu-item.is-success .sync-icon .icon,
+.menu-item.is-error .sync-icon .icon {
+    opacity: 0;
+}
+
+.menu-item.is-loading .sync-icon .icon-loading,
+.menu-item.is-success .sync-icon .icon-success,
+.menu-item.is-error .sync-icon .icon-error {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.menu-item.is-success .sync-icon .icon-success,
+.menu-item.is-error .sync-icon .icon-error {
+    animation: pop 0.35s ease;
+}
+
+.menu-item.is-success .menu-item__icon,
+.menu-item.is-success .menu-item__status {
+    color: #16a34a;
+}
+
+.menu-item.is-error .menu-item__icon,
+.menu-item.is-error .menu-item__status {
+    color: #dc2626;
+}
 .date {
     font-size: 1.125rem;
 }

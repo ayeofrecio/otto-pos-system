@@ -1,0 +1,9 @@
+{% load sales_tags %}
+<div class="disc-type-grid">
+    {% discount_types as types %}
+    {% for t in types %}
+    <button type="button" class="disc-type-btn{% if extra_class %} {{ extra_class }}{% endif %}"
+        {{ code_attr }}="{{ t.code }}" {{ pct_attr }}="{{ t.pct }}"
+        onclick="{{ handler }}(this,'{{ t.code }}','{{ t.label }}',{{ t.pct }})">{{ t.button }}</button>
+    {% endfor %}
+</div>

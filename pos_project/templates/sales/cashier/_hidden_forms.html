@@ -1,0 +1,17 @@
+
+<!-- Hidden HTMX form for transaction-level discount -->
+<form id="trans-disc-form" hx-post="{% url 'sales:cart_trans_disc' %}" hx-target="#cart-summary" hx-swap="outerHTML"
+    hx-trigger="submit" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" id="trans-disc-pct-hidden" name="trans_disc_pct" value="0">
+    <input type="hidden" id="trans-disc-type-hidden" name="trans_disc_type" value="">
+    <input type="hidden" id="trans-disc-label-hidden" name="trans_disc_label" value="">
+</form>
+
+<!-- Hidden HTMX form for line price override -->
+<form id="line-price-override-form" hx-post="{% url 'sales:cart_line_price_override' %}" hx-target="#cart-summary"
+    hx-swap="outerHTML" hx-trigger="submit" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" id="line-price-rec-ctr" name="rec_ctr" value="">
+    <input type="hidden" id="line-price-new" name="new_price" value="0">
+</form>

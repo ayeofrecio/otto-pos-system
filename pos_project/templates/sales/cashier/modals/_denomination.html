@@ -1,0 +1,37 @@
+{% load sales_tags %}
+<div class="modal-overlay" id="denom-modal" onclick="closeDenominationModalOutside(event)">
+    <div class="modal denom-modal-box" onclick="event.stopPropagation()">
+
+        <div class="modal-header">
+            <h2>Count Cash</h2>
+            <button type="button" class="modal-close" onclick="closeDenominationModal()">&#10005;</button>
+        </div>
+
+        <div class="denom-modal-grid">
+            {% denominations as denoms %}
+            {% for d in denoms %}
+            <div class="denom-row" data-value="{{ d.value }}">
+                <span class="denom-label">{{ d.label }}</span>
+                <div class="denom-controls">
+                    <button type="button" class="denom-btn minus" aria-label="Decrease {{ d.label }}">−</button>
+                    <input type="number" value="" min="0" class="denom-qty" placeholder="0"
+                        aria-label="{{ d.label }} count">
+                    <button type="button" class="denom-btn plus" aria-label="Increase {{ d.label }}">+</button>
+                </div>
+                <span class="denom-subtotal">₱0.00</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="denom-modal-total">
+            <span>Total</span>
+            <span id="denom-total-display">₱0.00</span>
+        </div>
+
+        <div class="close-trans-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeDenominationModal()">Cancel</button>
+            <button type="button" class="btn close-trans-confirm-btn" onclick="applyDenominationTotal()">Use This Amount</button>
+        </div>
+
+    </div>
+</div>

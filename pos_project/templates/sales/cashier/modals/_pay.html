@@ -1,0 +1,11 @@
+<div class="modal-overlay" id="pay-modal" onclick="closePayModalOutside(event)">
+    <div class="modal pay-modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2>Payment</h2>
+            <button class="modal-close" onclick="closePayModal()">&#10005;</button>
+        </div>
+        <div id="pay-modal-content">
+            <p class="search-hint pay-loading">Loading…</p>
+        </div>
+    </div>
+</div>

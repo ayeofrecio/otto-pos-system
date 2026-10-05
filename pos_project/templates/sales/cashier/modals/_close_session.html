@@ -1,0 +1,174 @@
+
+    <div class="modal-overlay" id="close-trans-modal" onclick="closeCloseTransModalOutside(event)">
+        <div class="modal close-trans-modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Close Transaction</h2>
+                <!-- <button class="btn btn-secondary" onclick="fetch('/pos/x-reading/', {
+            method: 'GET', headers: {'X-CSRFToken': CSRF_TOKEN}
+        }).then(r => r.json()).then(d => alert(d.message || d.error))">
+                    Print X-Reading -->
+                    <button type="button" class="btn btn-secondary" id="print-x-reading-btn"
+               data-url="/pos/x-reading/" onclick="printXReading()">Print X-Reading</button>
+                </button>
+                <button type="button" class="modal-close" onclick="closeCloseTransModal()">&#10005;</button>
+            </div>
+
+            <form id="close-trans-form" method="POST" action="{% url 'sales:close_session' %}">
+                {% csrf_token %}
+                <input type="hidden" name="opening_cash" id="hidden-opening-cash" value="0">
+                <input type="hidden" name="paid_in_cash" id="hidden-paid-in-cash" value="0">
+                <input type="hidden" name="mid_cash_in" id="hidden-mid-cash-in" value="0">
+                <input type="hidden" name="mid_cash_out" id="hidden-mid-cash-out" value="0">
+                <input type="hidden" name="credit_debit_cash" id="hidden-credit-debit-cash" value="0">
+                <input type="hidden" name="expected_cash" id="hidden-expected-cash" value="0">
+                <input type="hidden" name="cash_variance" id="hidden-cash-variance" value="0">
+                <input type="hidden" name="net_worth" id="hidden-net-worth" value="0">
+                <input type="hidden" name="gross_sales" id="hidden-gross-sales" value="0">
+                <input type="hidden" name="total_discounts" id="hidden-total-discounts" value="0">
+                <input type="hidden" name="net_sales" id="hidden-net-sales" value="0">
+                <input type="hidden" name="void_count" id="hidden-void-count" value="0">
+                <input type="hidden" name="void_amount" id="hidden-void-amount" value="0">
+                <input type="hidden" name="return_count" id="hidden-return-count" value="0">
+                <input type="hidden" name="return_amount" id="hidden-return-amount" value="0">
+
+                <div class="close-trans-summary">
+
+                    <div>
+                        <div class="ct-section-label">Cash Summary</div>
+                        <div class="ct-stat-grid ct-stat-grid--3">
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Change Fund</span>
+                                <span class="ct-stat-value" id="close-trans-opening-cash">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Paid in Cash</span>
+                                <span class="ct-stat-value" id="close-trans-paid-in-cash">₱0.00</span>
+                                <span class="ct-stat-sub" id="close-trans-cash-returned"></span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Manual Cash In</span>
+                                <span class="ct-stat-value" id="close-trans-mid-cash-in">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Manual Cash Out</span>
+                                <span class="ct-stat-value" id="close-trans-mid-cash-out">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Expected Cash</span>
+                                <span class="ct-stat-value ct-val--blue" id="close-trans-expected-cash">₱0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="ct-divider">
+
+                    <div>
+                        <div class="ct-section-label">Sales Summary</div>
+                        <div class="ct-stat-grid ct-stat-grid--3">
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Gross Sales</span>
+                                <span class="ct-stat-value" id="close-trans-gross-sales">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Total Discounts</span>
+                                <span class="ct-stat-value ct-val--discount"
+                                    id="close-trans-total-discounts">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Net Sales</span>
+                                <span class="ct-stat-value ct-val--positive" id="close-trans-net-sales">₱0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="ct-divider">
+
+                    <div class="ct-credit-section">
+                        <div class="ct-section-label">Credit / Debit Breakdown</div>
+                        <div id="close-trans-credit-debit-list" class="ct-credit-list"></div>
+                        <div class="ct-credit-total">
+                            <span>Total Credit / Debit</span>
+                            <span id="close-trans-credit-debit-cash">₱0.00</span>
+                        </div>
+                    </div>
+
+                    <hr class="ct-divider">
+
+                    <div>
+                        <div class="ct-section-label">Activity</div>
+                        <div class="ct-activity-grid">
+                            <div class="ct-activity-cell ct-activity-cell--void">
+                                <span class="ct-stat-label">Voids</span>
+                                <span class="ct-activity-count">
+                                    <span id="close-trans-void-count">0</span> transactions
+                                </span>
+                                <span class="ct-activity-amount ct-val--red" id="close-trans-void-amount">₱0.00</span>
+                            </div>
+                            <div class="ct-activity-cell ct-activity-cell--return">
+                                <span class="ct-stat-label">Returns</span>
+                                <span class="ct-activity-count">
+                                    <span id="close-trans-return-count">0</span> transactions
+                                </span>
+                                <span class="ct-activity-amount ct-val--discount"
+                                    id="close-trans-return-amount">₱0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="ct-divider">
+
+                    <div>
+                        <div class="ct-section-label">Cash Movements</div>
+                        <div id="close-trans-movements-list" class="ct-movements-list">
+                            <span class="ct-movements-empty">No cash movements recorded.</span>
+                        </div>
+                    </div>
+
+                    <hr class="ct-divider">
+
+                    <div>
+                        <div class="ct-section-label">Session Total</div>
+                        <div class="ct-stat-grid ct-stat-grid--2">
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Actual Cash</span>
+                                <span class="ct-stat-value" id="close-trans-actual-cash">₱0.00</span>
+                            </div>
+                            <div class="ct-stat-cell">
+                                <span class="ct-stat-label">Net Worth</span>
+                                <span class="ct-stat-value ct-val--positive" id="close-trans-net-worth">₱0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="close-trans-notes-section">
+                    <label class="close-trans-label" for="close-trans-notes">Notes (optional)</label>
+                    <textarea id="close-trans-notes" name="notes" class="close-trans-notes-input" rows="2"
+                        placeholder="e.g. short due to petty cash withdrawal…"></textarea>
+                </div>
+
+                <div class="close-trans-footer" id="close-trans-footer-default">
+                    <button type="button" class="btn btn-secondary" onclick="closeCloseTransModal()">Cancel</button>
+                    <button type="button" class="btn close-trans-confirm-btn" id="close-trans-confirm-btn"
+                        onclick="showZReadConfirm()">Process Z-Read</button>
+                </div>
+
+                <div class="close-trans-confirm-strip" id="close-trans-confirm-strip" style="display:none;">
+                    <div class="close-trans-confirm-strip-warning">
+                        <span class="close-trans-confirm-strip-title">Confirm Z-Read</span>
+                        <span class="close-trans-confirm-strip-desc">This will close the session and cannot be
+                            undone.</span>
+                    </div>
+                    <div class="close-trans-footer">
+                        <button type="button" class="btn btn-secondary" onclick="hideZReadConfirm()">No, go
+                            back</button>
+                        <button type="submit" form="close-trans-form" class="btn close-trans-zread-final-btn">
+                            Yes, process Z-Read
+                        </button>
+                    </div>
+                </div>
+
+            </form>
+        </div>
+    </div>

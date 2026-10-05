@@ -1,0 +1,22 @@
+<div class="modal-overlay" id="price-override-modal" onclick="closePriceOverrideModalOutside(event)">
+    <div class="modal disc-modal">
+        <div class="modal-header">
+            <h2>Price Override</h2>
+            <button class="modal-close" onclick="closePriceOverrideModal()">&#10005;</button>
+        </div>
+        <div class="disc-pct-row disc-pct-row--split">
+            <span class="disc-pct-label">Current Price:</span>
+            <span id="price-override-current" class="disc-current-price">₱0.00</span>
+        </div>
+        <div class="disc-pct-row">
+            <label class="disc-pct-label" for="price-override-input">New Unit Price:</label>
+            <span class="disc-pct-sym disc-pct-sym--lg">₱</span>
+            <input type="number" id="price-override-input" class="disc-pct-num disc-pct-num--warn" value="0" min="0"
+                step="0.01" autocomplete="off">
+        </div>
+        <div class="disc-modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closePriceOverrideModal()">Cancel</button>
+            <button type="button" class="btn btn-apply-override" onclick="applyPriceOverride()">Apply Override</button>
+        </div>
+    </div>
+</div>

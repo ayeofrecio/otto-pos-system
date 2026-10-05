@@ -7,19 +7,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Cashier</title>
-    
-    <script>
-        try {
-            if (localStorage.getItem("pos-theme") === "dark") {
-                document.documentElement.dataset.theme = "dark";
-            }
-        } catch (e) { }
-    </script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
-    <link rel="stylesheet" href="{% static 'css/base.css' %}">
-    <link rel="stylesheet" href="{% static 'css/components.css' %}">
     <link rel="stylesheet" href="{% static 'css/pages/pos.css' %}">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
 
 <body>
@@ -38,7 +27,7 @@
     </main>
 
     <div id="toast-container"></div>
-
+    
     {% include "sales/cashier/_hidden_forms.html" %}
 
     <!-- Transaction Subtotal Discount Modal (F4) -->
@@ -148,10 +137,9 @@
 
     {% include "sales/cashier/_action_bar.html" %}
 
-    {% include "sales/cashier/_pos_config.html" %}
     <script src="{% static 'sales/cashier.js' %}"></script>
     <script src="{% static 'sales/pos-keys.js' %}"></script>
-    <script src="{% static 'sales/header-menu.js' %}"></script>
+    <script src="{% static 'sales/pos-config.js' %}"></script>
     <script src="{% static 'sales/cloud-sync.js' %}"></script>
     <script src="{% static 'sales/close-session.js' %}"></script>
 </body>
