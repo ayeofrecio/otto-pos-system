@@ -1,0 +1,207 @@
+/* =========================================================
+   OPEN SESSION PAGE
+========================================================= */
+
+.session-page {
+    min-height: 100vh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 24px;
+}
+
+
+/* =========================================================
+   SESSION CARD
+========================================================= */
+
+.session-card {
+    width: 100%;
+    max-width: 380px;
+
+    padding: 36px;
+
+    background: var(--surface);
+
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+
+    box-shadow: var(--shadow);
+
+    text-align: center;
+}
+
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+.session-header {
+    margin-bottom: 28px;
+}
+
+
+.session-header h1 {
+    margin: 0 0 8px;
+
+    color: var(--text);
+
+    font-size: 1.5rem;
+    font-weight: 700;
+
+    letter-spacing: -0.02em;
+}
+
+
+.session-subtitle {
+    margin: 0;
+
+    color: var(--text-muted);
+
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+
+/* =========================================================
+   MONEY INPUT
+========================================================= */
+
+.money-input {
+    display: flex;
+    align-items: center;
+
+    min-height: 66px;
+
+    padding: 0 16px;
+
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+
+    background: var(--surface-raised);
+
+    transition:
+        background 120ms ease,
+        border-color 120ms ease,
+        box-shadow 120ms ease;
+}
+
+
+.money-input:focus-within {
+    border-color: var(--accent);
+
+    background: var(--surface);
+
+    box-shadow:
+        0 0 0 3px var(--focus);
+}
+
+
+.money-input__currency {
+    flex-shrink: 0;
+
+    color: var(--text-muted);
+
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+
+.money-input input {
+    width: 100%;
+
+    padding: 10px 4px;
+
+    border: 0;
+    outline: 0;
+
+    background: transparent;
+    color: var(--text);
+
+    font-size: 1.625rem;
+    font-weight: 700;
+
+    text-align: right;
+}
+
+
+.money-input input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+
+/* Remove number input arrows */
+
+.money-input input::-webkit-outer-spin-button,
+.money-input input::-webkit-inner-spin-button {
+    margin: 0;
+
+    -webkit-appearance: none;
+}
+
+
+.money-input input[type="number"] {
+    appearance: textfield;
+}
+
+
+/* =========================================================
+   HINT
+========================================================= */
+
+.session-hint {
+    margin: 10px 0 0;
+
+    color: var(--text-muted);
+
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+
+/* =========================================================
+   START SESSION
+========================================================= */
+
+.session-card .btn--primary {
+    margin-top: 26px;
+    width: 100%;
+}
+
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+
+.session-logout {
+    margin-top: 20px;
+}
+
+
+.session-logout .btn--secondary {
+    font-size: 0.875rem;
+}
+
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 480px) {
+
+    .session-page {
+        padding: 16px;
+    }
+
+    .session-card {
+        padding: 28px 24px;
+    }
+
+    .money-input input {
+        font-size: 1.5rem;
+    }
+
+}

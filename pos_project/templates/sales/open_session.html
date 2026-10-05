@@ -1,202 +1,77 @@
 {% load static %}
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <title>Open POS Session</title>
-
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <style>
-        :root {
-            --bg: #1e2328;
-            --card: #252b33;
-            --input: #2d343e;
-            --border: #2f3640;
-            --accent: #8b3d4a;
-            --accent-hover: #7a3540;
-            --text: #e6edf3;
-            --muted: #9aa4af;
-        }
+    <title>Open POS Session</title>
 
-        * {
-            box-sizing: border-box;
-        }
+    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
 
-        body {
-            margin: 0;
-            background: var(--bg);
-            color: var(--text);
-            font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
 
-        /* Card */
+    <link rel="stylesheet" href="{% static 'css/components.css' %}">
 
-        .session-box {
-            background: var(--card);
-            padding: 40px 36px;
-            border-radius: 14px;
-            width: 380px;
-            border: 1px solid var(--border);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
-            text-align: center;
-        }
-
-        /* Title */
-
-        h2 {
-            margin: 0 0 10px 0;
-            font-size: 26px;
-            font-weight: 700;
-        }
-
-        .subtitle {
-            color: var(--muted);
-            font-size: 14px;
-            margin-bottom: 28px;
-        }
-
-        /* Input group */
-
-        .input-group {
-            display: flex;
-            align-items: center;
-            background: var(--input);
-            border: 2px solid var(--border);
-            border-radius: 10px;
-            padding: 0 14px;
-            transition: all .15s ease;
-        }
-
-        .input-group:focus-within {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(139, 61, 74, .25);
-        }
-
-        .currency {
-            font-weight: 600;
-            font-size: 18px;
-            color: var(--muted);
-            margin-right: 6px;
-        }
-
-        input {
-            width: 100%;
-            padding: 14px 4px;
-            font-size: 26px;
-            font-weight: 700;
-            text-align: right;
-            border: none;
-            outline: none;
-            background: transparent;
-            color: var(--text);
-        }
-
-        /* Remove spinner arrows */
-
-        input::-webkit-outer-spin-button,
-        input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
-        /* Button */
-
-        button {
-            margin-top: 26px;
-            width: 100%;
-            padding: 14px;
-            font-size: 16px;
-            font-weight: 600;
-            border: none;
-            border-radius: 10px;
-            background: var(--accent);
-            color: white;
-            cursor: pointer;
-            transition: all .15s ease;
-        }
-
-        button:hover {
-            background: var(--accent-hover);
-            transform: translateY(-1px);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        /* Small helper */
-
-        .hint {
-            margin-top: 10px;
-            font-size: 12px;
-            color: var(--muted);
-        }
-
-        .logout {
-            margin-top: 20px;
-        }
-
-        .logout-btn {
-            display: inline-block;
-            width: 100%;
-            padding: 10px;
-            text-align: center;
-            text-decoration: none;
-            border-radius: 8px;
-            background: #323943;
-            color: #c9d1d9;
-            font-size: 14px;
-            transition: all .15s ease;
-            border: 1px solid #3a424c;
-        }
-
-        .logout-btn:hover {
-            background: #3b444f;
-            color: white;
-        }
-    </style>
-
+    <link rel="stylesheet" href="{% static 'css/pages/open-session.css' %}">
 </head>
 
 <body>
 
-    <div class="session-box">
+    <main class="session-page">
 
-        <h2>Open POS Session</h2>
+        <section class="session-card">
 
-        <div class="subtitle">
-            Enter the starting cash in your drawer
-        </div>
+            <header class="session-header">
 
-        <form method="post">
-            {% csrf_token %}
+                <h1>
+                    Open POS Session
+                </h1>
 
-            <div class="input-group">
-                <span class="currency">₱</span>
-                <!-- Added a temporary value for the opening session -->
-                <input type="number" name="opening_cash" value="3000" step="0.01" placeholder="0.00" autofocus required>
+                <p class="session-subtitle">
+                    Enter the starting cash in your drawer
+                </p>
+
+            </header>
+
+            <form method="post">
+
+                {% csrf_token %}
+
+                <div class="money-input">
+
+                    <span class="money-input__currency">
+                        ₱
+                    </span>
+
+                    <input type="number" name="opening_cash" value="3000" step="0.01" placeholder="0.00" autofocus
+                        required>
+
+                </div>
+
+                <p class="session-hint">
+                    This amount will be used as the opening balance.
+                </p>
+
+                <button type="submit" class="btn btn--primary">
+                    Start Session
+                </button>
+
+            </form>
+
+            <div class="session-logout">
+
+                <a href="{% url 'pos_logout' %}" class="btn btn--secondary">
+                    Logout
+                </a>
+
             </div>
 
-            <div class="hint">
-                This amount will be used as the opening balance.
-            </div>
+        </section>
 
-            <button type="submit">
-                Start Session
-            </button>
-
-        </form>
-        <div class="logout">
-            <a href="{% url 'pos_logout' %}" class="logout-btn">
-                Logout
-            </a>
-        </div>
-    </div>
+    </main>
 
 </body>
 

@@ -1,0 +1,51 @@
+/* tokens.css */
+
+:root {
+    --bg: #f6f4f7;
+    --surface: #ffffff;
+    --surface-raised: #efeeef;
+
+    --border: #d9d9dc;
+
+    --text: #4d4f48;
+    --text-muted: #73756f;
+
+    --primary: #8b3d4a;
+    --primary-hover: #9b4654;
+    --primary-active: #783440;
+
+    --accent: #9aceeb;
+
+    --danger: #c94f5d;
+    --focus: rgba(154, 206, 235, 0.45);
+
+    --shadow:
+        0 16px 40px rgba(30, 35, 40, 0.08),
+        0 3px 10px rgba(30, 35, 40, 0.05);
+
+    --radius: 10px;
+}
+
+[data-theme="dark"] {
+    --bg: #1e2328;
+    --surface: #252b33;
+    --surface-raised: #2b323b;
+
+    --border: #363e48;
+
+    --text: #f1f3f5;
+    --text-muted: #929aa5;
+
+    --primary: #8b3d4a;
+    --primary-hover: #9b4654;
+    --primary-active: #783440;
+
+    --accent: #9aceeb;
+
+    --danger: #d65a67;
+    --focus: rgba(139, 61, 74, 0.35);
+
+    --shadow:
+        0 20px 50px rgba(0, 0, 0, 0.25),
+        0 4px 12px rgba(0, 0, 0, 0.15);
+}
