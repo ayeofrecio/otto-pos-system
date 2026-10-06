@@ -9,6 +9,7 @@
 
     <title>Cashier Login</title>
 
+    {% include "sales/partials/_theme_init.html" %}
     <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
 
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
@@ -20,10 +21,7 @@
 
 <body>
 
-    <button type="button" class="theme-toggle" id="themeToggle" aria-label="Switch theme"
-        title="Switch theme">
-        ☀
-    </button>
+    {% include "sales/partials/_theme_toggle.html" %}
     <main class="login-page">
 
         <section class="login-card">
@@ -164,60 +162,9 @@
         });
 
 
-        /* =========================================================
-           THEME
-        ========================================================= */
-
-        const themeToggle =
-            document.getElementById("themeToggle");
-
-
-        const savedTheme =
-            localStorage.getItem("pos-theme");
-
-
-        if (savedTheme === "dark") {
-
-            document.documentElement.dataset.theme = "dark";
-
-            themeToggle.textContent = "☾";
-
-        }
-
-
-        themeToggle.addEventListener("click", () => {
-
-            const isDark =
-                document.documentElement.dataset.theme === "dark";
-
-
-            if (isDark) {
-
-                delete document.documentElement.dataset.theme;
-
-                localStorage.setItem(
-                    "pos-theme",
-                    "light"
-                );
-
-                themeToggle.textContent = "☀";
-
-            } else {
-
-                document.documentElement.dataset.theme = "dark";
-
-                localStorage.setItem(
-                    "pos-theme",
-                    "dark"
-                );
-
-                themeToggle.textContent = "☾";
-
-            }
-
-        });
-
+        
     </script>
+    <script src="{% static 'sales/theme.js' %}" defer></script>
 
 </body>
 

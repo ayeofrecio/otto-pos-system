@@ -3,7 +3,7 @@
     if (!root) return;
     const trigger = document.getElementById("header-menu-trigger");
     const panel = document.getElementById("header-menu-panel");
-    const items = () => Array.from(panel.querySelectorAll('[role="menuitem"]'));
+    const items = () => Array.from(panel.querySelectorAll('[role="menuitem"], [role="menuitemcheckbox"]'));
     const isOpen = () => panel.classList.contains("is-open");
 
     function open(focusFirst) {

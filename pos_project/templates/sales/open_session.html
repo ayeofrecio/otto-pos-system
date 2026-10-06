@@ -9,13 +9,8 @@
 
     <title>Open POS Session</title>
 
-    <script>
-        try {
-            if (localStorage.getItem("pos-theme") === "dark") {
-                document.documentElement.dataset.theme = "dark";
-            }
-        } catch (e) { }
-    </script>
+    {% include "sales/partials/_theme_init.html" %}
+
     <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
 
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
@@ -26,9 +21,8 @@
 </head>
 
 <body>
-    <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
-        ☀
-    </button>
+    {% include "sales/partials/_theme_toggle.html" %}
+
     <main class="session-page">
 
         <section class="session-card">
@@ -82,26 +76,7 @@
 
     </main>
 
-    <script>
-        const root = document.documentElement;
-        const themeToggle = document.getElementById("themeToggle");
-
-        function syncToggle() {
-            const dark = root.dataset.theme === "dark";
-            themeToggle.textContent = dark ? "☾" : "☀";
-            themeToggle.setAttribute("aria-pressed", dark);
-        }
-
-        themeToggle.addEventListener("click", () => {
-            const next = root.dataset.theme === "dark" ? "light" : "dark";
-            if (next === "dark") root.dataset.theme = "dark";
-            else delete root.dataset.theme;
-            try { localStorage.setItem("pos-theme", next); } catch (e) { }
-            syncToggle();
-        });
-
-        syncToggle();
-    </script>
+    <script src="{% static 'sales/theme.js' %}" defer></script>
 </body>
 
 </html>

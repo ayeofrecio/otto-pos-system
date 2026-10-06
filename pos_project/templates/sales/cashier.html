@@ -8,13 +8,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Cashier</title>
     
-    <script>
-        try {
-            if (localStorage.getItem("pos-theme") === "dark") {
-                document.documentElement.dataset.theme = "dark";
-            }
-        } catch (e) { }
-    </script>
+    {% include "sales/partials/_theme_init.html" %}
+
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
@@ -149,10 +144,12 @@
     {% include "sales/cashier/_action_bar.html" %}
 
     {% include "sales/cashier/_pos_config.html" %}
+
     <script src="{% static 'sales/cashier.js' %}"></script>
     <script src="{% static 'sales/pos-keys.js' %}"></script>
     <script src="{% static 'sales/header-menu.js' %}"></script>
     <script src="{% static 'sales/cloud-sync.js' %}"></script>
+    <script src="{% static 'sales/theme.js' %}"></script>
     <script src="{% static 'sales/close-session.js' %}"></script>
 </body>
 
