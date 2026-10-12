@@ -2619,83 +2619,110 @@ def payment_complete(request):
     has_return_lines = any((line.tag1 or "") == TAG_ITEM_RETURN for line in cart_lines_list)
     all_lines_return = has_return_lines and all((line.tag1 or "") == TAG_ITEM_RETURN for line in cart_lines_list)
 
-    # --- Create one TransactionHeader for the whole transaction ---
-    header = TransactionHeader.objects.create(
-        session=current_session,
-        user_id=user_id,
-        terminal_id=TERMINAL_ID,
-        store_id=STORE_ID,
-        transaction_no=trans_no,
-        transaction_date=biz_date,
-        transaction_time=now.strftime("%H:%M"),
-        transaction_type="S",
-        return_code=TAG_ITEM_RETURN if all_lines_return else "",
+    #TODO: TO-ALIS THIS Net-negative sale = refund. Refunds default to the cash tender.
+    refund_amount = abs(total) if total < 0 else Decimal("0")
+    refund_tender = None
+    if total < 0:
+        refund_tender = Tender.objects.filter(pchange="Y").order_by("pcode").first()
+        if not refund_tender:
+            messages.error(request, "No cash tender is configured for refunds.")
+            return redirect("sales:pos_cashier")
+        
+    with transaction.atomic():
+        # --- Create one TransactionHeader for the whole transaction ---
+        header = TransactionHeader.objects.create(
+            session=current_session,
+            user_id=user_id,
+            terminal_id=TERMINAL_ID,
+            store_id=STORE_ID,
+            transaction_no=trans_no,
+            transaction_date=biz_date,
+            transaction_time=now.strftime("%H:%M"),
+            transaction_type="S",
+            return_code=TAG_ITEM_RETURN if all_lines_return else "",
 
-        trans_disc_type=trans_disc.get("type", ""),
-        trans_disc_pct=trans_disc.get("pct", 0),
-        trans_disc_label=trans_disc.get("label", ""),
-        trans_disc_amount=trans_disc_amt,
+            trans_disc_type=trans_disc.get("type", ""),
+            trans_disc_pct=trans_disc.get("pct", 0),
+            trans_disc_label=trans_disc.get("label", ""),
+            trans_disc_amount=trans_disc_amt,
 
-        vat_rate=VAT_RATE,
-        vatable_amount=vatable_net,    
-        vat_amount=vat_amount,           
-        vat_exempt_amount=vat_exempt,
-        zero_rated_amount=zero_rated,
+            vat_rate=VAT_RATE,
+            vatable_amount=vatable_net,    
+            vat_amount=vat_amount,           
+            vat_exempt_amount=vat_exempt,
+            zero_rated_amount=zero_rated,
 
-        subtotal=subtotal,
-        amount_total=total,
-        amount_tendered=total_tendered,
-        change_amount=change_amount,
-    )
-
-    # --- Create one TransactionItem per cart line ---
-    TransactionItem.objects.bulk_create([
-        TransactionItem(
-            header=header,
-            item_code=line.item_code or "",
-            item_description=line.item_description or "",
-            item_qty=line.item_qty or 0,
-            item_uom=getattr(line, 'item_uom', ''),
-            item_supplier=getattr(line, 'item_supplier', ''),
-            item_department=getattr(line, 'item_department', ''),
-            item_class=getattr(line, 'item_class', ''),
-            item_size=line.item_size or "",
-            item_color=line.item_color or "",
-            item_color_desc=line.item_color_desc or "",
-            item_type=getattr(line, 'item_type', ''),
-            item_cost=getattr(line, 'item_cost', 0) or 0,
-            item_price=line.item_price or 0,
-            item_discount=line.item_discount or 0,
-            discount_code=line.discount_code or "",
-            item_price_ext=line.item_price_ext or 0,
-            tag1=getattr(line, 'tag1', ''),
-            tag2=getattr(line, 'tag2', ''),
-            tag3=getattr(line, 'tag3', ''),
-            tag4=getattr(line, 'tag4', ''),
-            promo_tag=getattr(line, 'promo_tag', ''),
+            subtotal=subtotal,
+            amount_total=total,
+            amount_tendered=total_tendered,
+            change_amount=change_amount,
         )
-        for line in cart_lines_list
-    ])
-    # --- Create one Payment per tender entry ---
-    Payment.objects.bulk_create([
-        Payment(
-            header=header,
-            pcode=tl["pcode"],
-            amount=Decimal(tl["amount"]),
-            tendered_amount=Decimal(tl["gross_amount"]),
-            change_amount=Decimal(tl["gross_amount"]) - Decimal(tl["amount"]),
-            tender_desc=tl["desc"],
-            payment_reference=(tl.get("payment_reference") or "") or None,
-            cardholder_name=(tl.get("holder") or "") or None,
-            card_number_masked=(tl.get("card_number_masked") or "") or None,
-            card_number=(tl.get("card_number") or "") or None,
-            approval_code=(tl.get("approval_code") or "") or None,
-            expiry_month=tl.get("expiry_month"),
-            expiry_year=tl.get("expiry_year"),
-        )
-        for tl in tender_lines
-    ])
 
+        # --- Create one TransactionItem per cart line ---
+        TransactionItem.objects.bulk_create([
+            TransactionItem(
+                header=header,
+                item_code=line.item_code or "",
+                item_description=line.item_description or "",
+                item_qty=line.item_qty or 0,
+                item_uom=getattr(line, 'item_uom', ''),
+                item_supplier=getattr(line, 'item_supplier', ''),
+                item_department=getattr(line, 'item_department', ''),
+                item_class=getattr(line, 'item_class', ''),
+                item_size=line.item_size or "",
+                item_color=line.item_color or "",
+                item_color_desc=line.item_color_desc or "",
+                item_type=getattr(line, 'item_type', ''),
+                item_cost=getattr(line, 'item_cost', 0) or 0,
+                item_price=line.item_price or 0,
+                item_discount=line.item_discount or 0,
+                discount_code=line.discount_code or "",
+                item_price_ext=line.item_price_ext or 0,
+                tag1=getattr(line, 'tag1', ''),
+                tag2=getattr(line, 'tag2', ''),
+                tag3=getattr(line, 'tag3', ''),
+                tag4=getattr(line, 'tag4', ''),
+                promo_tag=getattr(line, 'promo_tag', ''),
+            )
+            for line in cart_lines_list
+        ])
+        # --- Create one Payment per tender entry ---
+        Payment.objects.bulk_create([
+            Payment(
+                header=header,
+                pcode=tl["pcode"],
+                amount=Decimal(tl["amount"]),
+                tendered_amount=Decimal(tl["gross_amount"]),
+                change_amount=Decimal(tl["gross_amount"]) - Decimal(tl["amount"]),
+                tender_desc=tl["desc"],
+                payment_reference=(tl.get("payment_reference") or "") or None,
+                cardholder_name=(tl.get("holder") or "") or None,
+                card_number_masked=(tl.get("card_number_masked") or "") or None,
+                card_number=(tl.get("card_number") or "") or None,
+                approval_code=(tl.get("approval_code") or "") or None,
+                expiry_month=tl.get("expiry_month"),
+                expiry_year=tl.get("expiry_year"),
+            )
+            for tl in tender_lines
+        ])
+
+
+        # Signed refund payment so session/Z totals net correctly
+        if refund_tender:
+            source_refs = sorted({
+                l.item_ref for l in cart_lines_list
+                if (l.tag1 or "") == TAG_ITEM_RETURN and l.item_ref
+            })
+            Payment.objects.create(
+                header=header,
+                pcode=refund_tender.pcode,
+                amount=-refund_amount,
+                tendered_amount=-refund_amount,
+                change_amount=Decimal("0"),
+                tender_desc=(refund_tender.description or refund_tender.pcode)[:15],
+                payment_reference=(",".join(source_refs)[:20] or None),
+            )
+    
     # --- Clipper-style flat transaction log (TransactionLog / TLOG) ---
     try:
         service = TransactionService()
