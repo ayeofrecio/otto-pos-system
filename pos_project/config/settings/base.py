@@ -22,6 +22,7 @@ load_dotenv(BASE_DIR / '.env')
 # ---------------------------------------------------------------------------
 
 SECRET_KEY = os.environ['SECRET_KEY']
+CARD_HASH_PEPPER = os.environ["CARD_HASH_PEPPER"]
 
 AUTH_USER_MODEL = 'users.Users'  # Use our custom user model
 # ---------------------------------------------------------------------------

@@ -76,7 +76,9 @@ class POSSession(models.Model):
 
     opening_cash = models.DecimalField(max_digits=10, decimal_places=2)
     closing_cash = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-
+    expected_cash = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    cash_variance = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    close_notes   = models.TextField(blank=True, default="")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_OPEN)
 
     class Meta:

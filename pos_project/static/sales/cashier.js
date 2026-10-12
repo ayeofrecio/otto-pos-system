@@ -2046,7 +2046,8 @@
       // Reset inputs
       if (cashInput)  cashInput.value  = "";
       if (notesInput) notesInput.value = "";
-      if (confirmBtn) confirmBtn.disabled = false;
+      // if (confirmBtn) confirmBtn.disabled = false;
+      if (confirmBtn) confirmBtn.disabled = true;
 
       // Reset all display values
       const resetEl = (id, val = "₱0.00") => {
@@ -2064,7 +2065,7 @@
       resetEl("close-trans-net-sales");
       resetEl("close-trans-credit-debit-cash");
       resetEl("close-trans-expected-cash");
-      resetEl("close-trans-actual-cash");
+      // resetEl("close-trans-actual-cash");
       resetEl("close-trans-void-count",   "0");
       resetEl("close-trans-void-amount");
       resetEl("close-trans-return-count", "0");
@@ -2089,14 +2090,17 @@
           headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
       })
       .then(r => r.json())
+      .then(data => { if (data.error) throw new Error(data.error); return data; })
       .then(data => {
-          const openingCash     = parseFloat(data.opening_cash)     || 0;
+          const openingCash     = parseFloat(data.cash_fund)     || 0;
+          // const openingCash     = parseFloat(data.opening_cash)     || 0;
           const paidInCash      = parseFloat(data.paid_in_cash)     || 0;
           const midCashIn       = parseFloat(data.total_mid_cash_in) || 0;
           const midCashOut      = parseFloat(data.total_mid_cash_out) || 0;
           const cashReturned    = parseFloat(data.cash_returned)    || 0;
           const creditDebitCash = parseFloat(data.credit_debit_cash)|| 0;
-          const expectedCash    = parseFloat(data.expected_cash)    || 0;
+          const expectedCash    = parseFloat(data.cash_on_hand)    || 0;
+          // const expectedCash    = parseFloat(data.expected_cash)    || 0;
           const grossSales      = parseFloat(data.gross_sales)      || 0;
           const totalDiscounts  = parseFloat(data.total_discounts)  || 0;
           const netSales        = parseFloat(data.net_sales)        || 0;
@@ -2129,7 +2133,7 @@
           resetEl("close-trans-mid-cash-in",      formatPeso(midCashIn));
           resetEl("close-trans-mid-cash-out",     formatPeso(midCashOut));
           resetEl("close-trans-expected-cash",    formatPeso(expectedCash));
-          resetEl("close-trans-actual-cash",      formatPeso(expectedCash)); // until closing cash input re-enabled
+          // resetEl("close-trans-actual-cash",      formatPeso(expectedCash)); // until closing cash input re-enabled
           resetEl("close-trans-net-worth",        formatPeso(netWorth));
           resetEl("close-trans-gross-sales",      formatPeso(grossSales));
           resetEl("close-trans-total-discounts",  formatPeso(totalDiscounts));
@@ -2139,6 +2143,12 @@
           resetEl("close-trans-void-amount",      formatPeso(voidAmount));
           resetEl("close-trans-return-count",     returnCount);
           resetEl("close-trans-return-amount",    formatPeso(returnAmount));
+          if (cashInput) {
+              cashInput.value = expectedCash.toFixed(2);   // plain "1250.00", no ₱ or commas
+              recalcVariance();       // shows "Exact" and enables the confirm button
+              cashInput.focus();
+              cashInput.select();     // typing replaces the value right away
+          }
 
           // Cash returned sub-label
           if (cashReturnedEl && cashReturned > 0) {
@@ -2151,20 +2161,22 @@
           renderCreditDebitBreakdown(data.credit_debit_cash_list || []);
           
           // Fetch and render cash movements history
-          fetch("/sales/cash-movements-history/", {
-              method: "GET",
-              headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
-          })
-          .then(r => r.json())
-          .then(movementsData => {
-              if (movementsData.ok) {
-                  renderCashMovementsHistory(movementsData.movements || []);
-              }
-          })
-          .catch(err => console.warn("Could not load cash movements history:", err));
+          // fetch("/sales/cash-movements-history/", {
+          //     method: "GET",
+          //     headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
+          // })
+          // .then(r => r.json())
+          // .then(movementsData => {
+          //     if (movementsData.ok) {
+          //         renderCashMovementsHistory(movementsData.movements || []);
+          //     }
+          // })
+          // .catch(err => console.warn("Could not load cash movements history:", err));
       })
-      .catch(err => console.error("Failed to load session details:", err));
-
+      .catch(err => {
+          console.error("Failed to load session details:", err);
+          alert(err.message || "Could not load session details.");
+      });
       modal.classList.add("open");
       setTimeout(() => cashInput && cashInput.focus(), 80);
   };
@@ -2273,9 +2285,10 @@
           if (evt.key === "Enter") {
               evt.preventDefault();
               const confirmBtn = document.getElementById("close-trans-confirm-btn");
-              if (confirmBtn && !confirmBtn.disabled) {
-                  document.getElementById("close-trans-form").requestSubmit();
-              }
+              // if (confirmBtn && !confirmBtn.disabled) {
+              //     document.getElementById("close-trans-form").requestSubmit();
+              // }
+              if (confirmBtn && !confirmBtn.disabled) window.showZReadConfirm();
           }
       });
   }
@@ -2303,19 +2316,25 @@
       closeTransForm.addEventListener("submit", function (evt) {
           evt.preventDefault();
 
-          const modal       = getModal();
-          const cashInput   = document.getElementById("closing-cash-input");
-          const closingCash = parseFloat(cashInput?.value) || 0;
-          const expected    = (modal?._expectedCash)    || 0;
-          const variance    = closingCash - expected;
+          // const modal       = getModal();
+          // const cashInput   = document.getElementById("closing-cash-input");
+          // const closingCash = parseFloat(cashInput?.value) || 0;
+          // const expected    = (modal?._expectedCash)    || 0;
+          // const variance    = closingCash - expected;
 
-          // Sync all hidden fields
-          _syncHiddenFields(modal);
+          // // Sync all hidden fields
+          // _syncHiddenFields(modal);
+          if (cashInput) {
+              cashInput.value = expectedCash.toFixed(2);
+              recalcVariance();            // shows "Exact" and enables the confirm button
+              cashInput.focus();
+              cashInput.select();          // typing replaces the value right away
+          }
+          // // Variance is the only value that depends on closing cash input
+          // const varianceEl = document.getElementById("hidden-cash-variance");
+          // if (varianceEl) varianceEl.value = variance.toFixed(2);
 
-          // Variance is the only value that depends on closing cash input
-          const varianceEl = document.getElementById("hidden-cash-variance");
-          if (varianceEl) varianceEl.value = variance.toFixed(2);
-
+          closeTransForm.querySelectorAll("button").forEach(b => (b.disabled = true));
           closeTransForm.submit();
       });
   }

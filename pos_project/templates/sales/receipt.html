@@ -5,161 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Receipt - {{ transaction_no }}</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: 'Courier New', monospace;
-            margin: 0;
-            background: #1e2328;
-            color: #e6edf3;
-            min-height: 100vh;
-        }
-
-        /* ── Receipt paper ─────────────────────────────── */
-        .receipt {
-            max-width: 380px;
-            margin: 2rem auto;
-            padding: 1.25rem 1.5rem;
-            background: #fff;
-            color: #000;
-            border-radius: 8px;
-            font-size: 0.82rem;
-            line-height: 1.45;
-        }
-
-        /* ── Separator (mirrors "-" * paper_width) ─────── */
-        .sep {
-            border: none;
-            border-top: 1px dashed #555;
-            margin: 0.5rem 0;
-        }
-
-        /* ── Header ────────────────────────────────────── */
-        .r-header {
-            text-align: center;
-            margin-bottom: 0.1rem;
-
-        }
-
-        /* Base resets to eliminate default element gaps */
-        .r-header-bold,
-        .r-header-normal {
-            line-height: 1.0; 
-            margin: 0; 
-        }
-
-        /* Mirrors is_capitalized → \x1b\x21\x10 (double-height) */
-        .r-header-bold {
-            font-size: 1rem;
-            font-weight: 700;
-            letter-spacing: 0.0em;
-            margin-bottom: 2px; 
-        }
-
-        .r-header-normal {
-            font-size: 0.82rem;
-        }
-        /* ── "SALES INVOICE" title ──────────────────────── */
-        .r-title {
-            text-align: center;
-            font-weight: 700;
-            font-size: 0.95rem;
-            margin: 0.6rem 0 0.4rem;
-        }
-
-        /* ── Meta block (SI#, User, StoreId) ───────────── */
-        .r-meta {
-            font-size: 0.8rem;
-            margin-bottom: 0.25rem;
-            line-height: 0.81;
-        }
-
-        /* ── Item rows ──────────────────────────────────── */
-        /* Description line — full width, truncated */
-        .r-padding-left{
-            margin-left: 8px;
-        }
-        .r-padding-left-discount{
-            margin-left: 12px;
-        }
-        .r-item-desc,
-        .r-item-disc,
-        .r-item-amounts {
-            line-height: 1;
-        }
-        .r-item-desc {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        /* qty x price ··············· total  (mirrors item_line()) */
-        .r-item-amounts {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .r-item-amounts .r-left  { flex: 1; }
-        .r-item-amounts .r-right { text-align: right; font-weight: 500; }
-
-        /* Discount sub-line (mirrors "  disc_pct% - disc_total") */
-        .r-item-disc {
-            font-size: 0.78rem;
-            color: #1a7a35;
-            padding-left: 1rem;
-        }
-
-        /* ── LR pair (mirrors align_lr()) ──────────────── */
-        .r-lr {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.1rem 0;
-            line-height: 1;
-        }
-
-        /* ── Transaction discount block ─────────────────── */
-        .r-disc-label {
-            font-size: 0.8rem;
-            color: #555;
-        }
-
-        /* ── TOTAL (mirrors bold on/off) ────────────────── */
-        .r-total {
-            font-size: 1rem;
-            font-weight: 700;
-        }
-
-        /* ── CHANGE (mirrors bold on/off) ───────────────── */
-        .r-change {
-            font-weight: 700;
-        }
-
-        /* ── Footer ─────────────────────────────────────── */
-        .r-footer-center { text-align: center; line-height: 1; }
-        .r-footer-left   { text-align: left; line-height: 1; }
-
-        /* ── Actions ─────────────────────────────────────── */
-        .actions { text-align: center; margin-top: 1.5rem; }
-        .btn {
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            background: #8b3d4a;
-            color: white;
-        }
-        .btn:hover { background: #7a3540; }
-
-        /* Space between */
-        .margin-space {
-            margin-top: 2;
-            margin-bottom: 2;
-            padding: 5px 0px 5px 0;
-        }
-    </style>
+    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'css/pages/receipt.css' %}">
 </head>
 <body>
 <div class="receipt">
@@ -226,13 +75,17 @@
             <span>-{{ trans_disc_amt|floatformat:2 }}</span>
         </div>
     {% endif %}
-
+    
     <!-- ── Total (mirrors bold TOTAL) ────────────────────────── -->
     <hr class="sep">
-        <div class="r-lr">
-            <span>VAT-Exempt</span>
-            <span> {%if vat_exempt_amount%} {{vat_exempt_amount|floatformat:2}} {% else %} 0.00 {% endif%}</span>
-        </div>
+    <div class="r-lr">
+        <span>{{ total_items_sold|floatformat:0 }} Items</span>
+        <span>{%if total_items_returned > 0 %}({{ total_items_returned|floatformat:0 }} Returned){% endif %}</span>
+    </div>
+    <div class="r-lr">
+        <span>VAT-Exempt</span>
+        <span> {%if vat_exempt_amount%} {{vat_exempt_amount|floatformat:2}} {% else %} 0.00 {% endif%}</span>
+    </div>
 
         <div class="r-lr">
             <span>VATable</span>
@@ -269,11 +122,11 @@
                 <span>{{ t.desc }}</span>
                 <span>{{ t.amount|floatformat:2 }}</span>
             </div>
-            {% if t.holder %}
-                <div class="r-item-desc r-padding-left">Holder: {{ t.holder }}</div>
-            {% endif %}
             {% if t.card_number_masked %}
                 <div class="r-item-desc r-padding-left">{{ t.card_number_masked }}</div>
+            {% endif %}
+            {% if t.holder %}
+                <div class="r-item-desc r-padding-left">{{ t.holder }}</div>
             {% endif %}
             {% if t.approval_code %}
                 <div class="r-item-desc r-padding-left">Approval: {{ t.approval_code }}</div>

@@ -2442,7 +2442,7 @@ def pay_view(request):
 
 
 def _parse_tender_entries(request):
-    import json
+    import json, re
     raw = request.POST.get("tender_entries", "").strip()
     if not raw:
         return []
@@ -2457,20 +2457,31 @@ def _parse_tender_entries(request):
                 amt = Decimal("0")
             payment_reference = str(item.get("payment_reference") or "").strip()[:20]
             is_card = bool(item.get("is_card"))
-            cardholder_name = str(item.get("cardholder_name") or "").strip()[:100]
-            card_number_masked = mask_card_number(item.get("card_number") or "")[:25]
-            approval_code = str(item.get("approval_code") or "").strip()[:20]
+            holder = str(item.get("cardholder_name") or "").strip()[:50]
+            card_number = str(item.get("card_number") or "").strip()[:25]
+            card_number_masked = mask_card_number(card_number)
+            approval_code = str(item.get("approval_code") or "").strip()[:30]
+
+            expiry_month = None
+            expiry_year = None
+            expiry_raw = str(item.get("card_expiry") or "").strip()
+            m = re.match(r"^(0[1-9]|1[0-2])/(\d{2})$", expiry_raw)
+            if m:
+                expiry_month = int(m.group(1))
+                expiry_year = 2000 + int(m.group(2))
+
             if pcode and amt > 0:
                 entries.append({
                     "pcode": pcode,
                     "amount": amt,
                     "payment_reference": payment_reference,
                     "is_card": is_card,
-                    "cardholder_name": cardholder_name,
-                    "card_number": item.get("card_number"),
+                    "holder": holder,
+                    "card_number": card_number,
                     "card_number_masked": card_number_masked,
                     "approval_code": approval_code,
-                    "card_expiry": item.get("card_expiry"),
+                    "expiry_month": expiry_month,
+                    "expiry_year": expiry_year,
                 })
         return entries
     except (json.JSONDecodeError, TypeError):
@@ -2491,6 +2502,8 @@ def payment_complete(request):
     vatable_gross = Decimal("0")
     vat_exempt    = Decimal("0")
     zero_rated    = Decimal("0")
+    total_items_sold     = Decimal("0")
+    total_items_returned = Decimal("0")
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
     tender_entries = _parse_tender_entries(request)
@@ -2524,7 +2537,7 @@ def payment_complete(request):
             is_cash = bool(tender and tender.pchange == "Y")
             is_card = t.get("is_card") or bool(tender and getattr(tender, "is_card", False))
             if not is_cash:
-                if is_card and not (t.get("cardholder_name") and t.get("card_number_masked") and t.get("approval_code")):
+                if is_card and not (t.get("holder") and t.get("card_number_masked") and t.get("approval_code") and t.get("expiry_month") and t.get("expiry_year")):
                     return redirect("sales:pay")
                 if not is_card and not (t.get("payment_reference") or "").strip():
                     return redirect("sales:pay")
@@ -2540,6 +2553,11 @@ def payment_complete(request):
 
 
     for line in cart_lines_list:
+        qty = line.item_qty or Decimal("0")
+        if (line.tag1 or "") == TAG_ITEM_RETURN:
+            total_items_returned += qty
+        else:
+            total_items_sold += qty
         ext = line.item_price_ext or Decimal("0")
         tax_code = (line.item_tax_code or "V").upper()
         if tax_code == "V":
@@ -2578,10 +2596,13 @@ def payment_complete(request):
             "gross_amount": str(amt),
             "is_cash": is_cash,
             "is_card": is_card,
-            "cardholder_name": t.get("cardholder_name", ""),
+            "holder": t.get("holder", ""),
+            "card_number": t.get("card_number", ""),
             "card_number_masked": t.get("card_number_masked", ""),
             "approval_code": t.get("approval_code", ""),
             "payment_reference": t.get("payment_reference", ""),
+            "expiry_month": t.get("expiry_month"),
+            "expiry_year": t.get("expiry_year"),
             "change": str(amt - effective_amt) if is_cash else "0",
         })
         tender_entries_full.append((pcode, amt, desc, is_cash))
@@ -2665,9 +2686,12 @@ def payment_complete(request):
             change_amount=Decimal(tl["gross_amount"]) - Decimal(tl["amount"]),
             tender_desc=tl["desc"],
             payment_reference=(tl.get("payment_reference") or "") or None,
-            cardholder_name=(tl.get("cardholder_name") or "") or None,
+            cardholder_name=(tl.get("holder") or "") or None,
             card_number_masked=(tl.get("card_number_masked") or "") or None,
+            card_number=(tl.get("card_number") or "") or None,
             approval_code=(tl.get("approval_code") or "") or None,
+            expiry_month=tl.get("expiry_month"),
+            expiry_year=tl.get("expiry_year"),
         )
         for tl in tender_lines
     ])
@@ -2689,6 +2713,11 @@ def payment_complete(request):
     except Exception as e:
         print(f"⚠️  TransactionService log failed: {e}")
 
+    # This is removing the card_number in the session after the transaction is completed, for security reasons.
+    SENSITIVE_SESSION_KEYS = ["card_number"]
+    receipt_tender_lines = [
+        {k: v for k, v in tl.items() if k not in SENSITIVE_SESSION_KEYS} for tl in tender_lines
+    ]
     # --- Store receipt data ---
     request.session["last_receipt"] = {
         "transaction_no": trans_no,
@@ -2699,10 +2728,12 @@ def payment_complete(request):
         "trans_disc_label": trans_disc.get("label", ""),
         "trans_disc_amt": str(trans_disc_amt),
         "total": str(total),
+        "total_items_sold": str(total_items_sold),
+        "total_items_returned": str(total_items_returned),
         "tender": tender_display,
-        "tender_lines": tender_lines,
-        "is_cash": any(t["is_cash"] for t in tender_lines) or total < 0,
-        "amount_tendered": str(total_tendered) if tender_lines else "",
+        "tender_lines": receipt_tender_lines,
+        "is_cash": any(t["is_cash"] for t in tender_lines) or total < 0, # Check if card_number is present 
+        "amount_tendered": str(total_tendered) if tender_lines else "", # Check if card_number is present
         "change_amount": str(change_amount),
         "is_return_only": all_lines_return,
         "is_exchange": has_return_lines and not all_lines_return,
@@ -2746,9 +2777,9 @@ def payment_complete(request):
     # Next transaction number is allocated lazily on next real sale start (cart_add),
     # not immediately on close, to avoid counter drift with retrieve/pay flows.
     _save_current_transaction_no(trans_no)
-#     # --- Persist current transaction no, clear cart, advance transaction number ---
+     # --- Persist current transaction no, clear cart, advance transaction number ---
 #     _save_current_transaction_no(trans_no)
-#     # --- Clear cart, advance transaction number ---
+     # --- Clear cart, advance transaction number ---
     cart_lines_qs.delete()
     request.session.pop("pos_trans_no", None)
     _clear_trans_disc(request)
@@ -2803,26 +2834,18 @@ def item_search(request):
 
     return JsonResponse({"results": results})
 
-
-# ---------------------------------------------------------------------------
-# Close session details (GET — JSON for the close-session modal)
-# ---------------------------------------------------------------------------
-@login_required
-@require_open_session
-@require_http_methods(["GET"])
-def to_close_session_details(request):
-    store = _get_store()
-    session = _get_terminal_session(store.store_id, store.terminal_id)
-    if not session:
-        return JsonResponse({"error": "No open session found."}, status=400)
-
+def _session_close_totals(session):
+    
     cash_tender_codes = list(
         Tender.objects.filter(pchange="Y").values_list("pcode", flat=True)
     )
 
     # --- Base querysets scoped to this session ---
     session_headers = TransactionHeader.objects.filter(session_id=session.id)
-    session_items   = TransactionItem.objects.filter(header__session_id=session.id)
+    # session_items   = TransactionItem.objects.filter(header__session_id=session.id)
+    session_items = TransactionItem.objects.filter(
+        header__session_id=session.id
+    ).exclude(header__transaction_type__in=VOID_TRANSACTION_TYPES_ALL)
     session_payments = Payment.objects.filter(header__session_id=session.id)
 
     # --- Void transactions ---
@@ -2848,18 +2871,6 @@ def to_close_session_details(request):
         transaction_type__in=VOID_TRANSACTION_TYPES_ALL
     ).exclude(return_code=TAG_ITEM_RETURN)
 
-    gross_sales = session_items.aggregate(
-        total=Sum("item_price")
-    )["total"] or Decimal("0")
-
-    total_change = sale_headers.aggregate(
-        total=Sum("change_amount")
-    )["total"] or Decimal("0")
-
-    total_discounts = sale_headers.aggregate(
-        total=Sum("trans_disc_amount")
-    )["total"] or Decimal("0")
-
     # Item-level discounts from sale items only
     item_discounts = session_items.filter(
         header__transaction_type__in=["S", ""]  # normal sale type
@@ -2874,9 +2885,28 @@ def to_close_session_details(request):
         )
     )["total"] or Decimal("0")
 
+    # gross_sales = session_items.aggregate(
+    #     total=Sum("item_price")
+    # )["total"] or Decimal("0")
+    # item_price_ext is already net of item discounts (and carries returns)
+    items_net = session_items.aggregate(
+        total=Sum("item_price_ext")
+    )["total"] or Decimal("0")
+    # gross_sales = items_net + item_discounts
+
+    total_change = sale_headers.aggregate(
+        total=Sum("change_amount")
+    )["total"] or Decimal("0")
+
+    total_discounts = sale_headers.aggregate(
+        total=Sum("trans_disc_amount")
+    )["total"] or Decimal("0")
+
+
+
     total_discounts += item_discounts
-
-
+    gross_sales = items_net + item_discounts
+    
     # --- Cash tender breakdown ---
     paid_in_cash = session_payments.filter(
         pcode__in=cash_tender_codes,
@@ -2904,18 +2934,20 @@ def to_close_session_details(request):
         .annotate(total=Sum("amount"))
         .order_by("tender_desc")
     )
-    cash = paid_in_cash - cash_returned - total_change
-    final_gross_sale = gross_sales + (return_amount*return_count)
-    print(gross_sales)
-    print(return_amount)
-    total_mid_cash_in = (
-        CashInOut.objects.filter(session=session, movement_type=CashInOut.TYPE_IN)
-        .aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    )
-    total_mid_cash_out = (
-        CashInOut.objects.filter(session=session, movement_type=CashInOut.TYPE_OUT)
-        .aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    )
+    # cash = paid_in_cash - cash_returned - total_change
+    final_gross_sale = gross_sales 
+    # final_gross_sale = gross_sales + (return_amount*return_count)
+    # total_mid_cash_in = (
+    #     CashInOut.objects.filter(session=session, movement_type=CashInOut.TYPE_IN)
+    #     .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    # )
+    # total_mid_cash_out = (
+    #     CashInOut.objects.filter(session=session, movement_type=CashInOut.TYPE_OUT)
+    #     .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    # )
+    # TODO: manual cash in/out (pending task)
+    total_mid_cash_in = Decimal("0")
+    total_mid_cash_out = Decimal("0")
     # --- Cash totals ---
     # expected = change fund + cash sales - cash returned
     expected_cash = (
@@ -2924,36 +2956,85 @@ def to_close_session_details(request):
         + paid_in_cash
         - total_mid_cash_out
         - cash_returned
-        - total_change
+        # - total_change
     )
     net_worth     = expected_cash + credit_debit_total
+    # net_sales = final_gross_sale - total_discounts
+    net_sales = gross_sales - total_discounts
 
-    net_sales = final_gross_sale - total_discounts
+    return {
+        "cash_fund": session.opening_cash,
+        "paid_in_cash": paid_in_cash,
+        "total_mid_cash_in": total_mid_cash_in,
+        "total_mid_cash_out": total_mid_cash_out,
+        "cash_returned": cash_returned,
+        "cash_on_hand": expected_cash,
+        "credit_debit_cash": credit_debit_total,
+        "credit_debit_cash_list": credit_debit_breakdown,
+        "gross_sales": final_gross_sale,
+        "total_discounts": total_discounts,
+        "net_sales": net_sales,
+        "net_worth": net_worth,
+        "void_count": void_count,
+        "void_amount": abs(void_amount),
+        "return_count": return_count,
+        "return_amount": abs(return_amount),
+    }
 
-    return JsonResponse({
-        "opening_cash":          float(session.opening_cash),
-        "paid_in_cash":          float(cash),
-        "total_mid_cash_in":     float(total_mid_cash_in),
-        "total_mid_cash_out":    float(total_mid_cash_out),
-        "cash_returned":         float(cash_returned),
-        "expected_cash":         float(expected_cash),
-        "credit_debit_cash":     float(credit_debit_total),
-        "credit_debit_cash_list": [
-            {
-                "tender_desc": row["tender_desc"] or "",
-                "total":       float(row["total"] or 0),
-            }
-            for row in credit_debit_breakdown
-        ],
-        "gross_sales":     float(final_gross_sale),
-        "total_discounts": float(total_discounts),
-        "net_sales":       float(net_sales),    
-        "net_worth":       float(net_worth),
-        "void_count":      void_count,
-        "void_amount":     float(abs(void_amount)),
-        "return_count":    return_count,
-        "return_amount":   float(abs(return_amount)),
-    })
+
+def _jsonable(v):
+    if isinstance(v, Decimal):
+        return float(v)
+    if isinstance(v, list):
+        return [{k: _jsonable(x) for k, x in d.items()} for d in v]
+    return v
+# ---------------------------------------------------------------------------
+# Close session details (GET — JSON for the close-session modal)
+# ---------------------------------------------------------------------------
+@login_required
+@require_open_session
+@require_http_methods(["GET"])
+def to_close_session_details(request):
+    store = _get_store()
+    session = _get_terminal_session(store.store_id, store.terminal_id)
+    if not session:
+        return JsonResponse({"error": "No open session found."}, status=400)
+    totals = _session_close_totals(session)
+    return JsonResponse({k: _jsonable(v) for k, v in totals.items()})
+    # return JsonResponse({
+    #     # "opening_cash":          float(session.opening_cash),
+    #     # "paid_in_cash":          float(cash),
+    #     # Cash
+    #     "cash_fund":             float(session.opening_cash),
+    #     "paid_in_cash":          float(paid_in_cash),
+    #     "total_mid_cash_in":     float(total_mid_cash_in),
+    #     "total_mid_cash_out":    float(total_mid_cash_out),
+    #     # "cash_returned":         float(cash_returned),
+    #     # "expected_cash":         float(expected_cash),
+    #     "cash_on_hand":          float(expected_cash),
+    #     # Tenders
+    #     "credit_debit_cash":     float(credit_debit_total),
+    #     "credit_debit_cash_list": [
+    #         {
+    #             "tender_desc": row["tender_desc"] or "",
+    #             "total":       float(row["total"] or 0),
+    #         }
+    #         for row in credit_debit_breakdown
+    #     ],
+    #     # "gross_sales":     float(final_gross_sale),
+    #     # Sales
+    #     "gross_sales":     float(gross_sales),
+    #     "total_discounts": float(total_discounts),
+    #     "net_sales":       float(net_sales),    
+    #     # "net_worth":       float(net_worth),
+    #     # Activity
+    #     "void_count":      void_count,
+    #     "void_amount":     float(abs(void_amount)),
+    #     "return_count":    return_count,
+    #     "return_amount":   float(abs(return_amount)),
+    #     # Session totals (actual cash is entered by the cashier, so the modal computes the variance)
+    #     "net_worth":       float(net_worth),
+    # })
 
 
 def debug_sessions_json(request):
@@ -3311,6 +3392,7 @@ def _print_receipt(printer, terminal_config, context, current_operator):
     
     # ── Total ─────────────────────────────────────────────────────────────────
     separator()
+    write_line(align_lr(f"{format_qty(context['total_items_sold'])} Items"))
     write_line(align_lr("VAT-Exempt", format_money(context["vat_exempt"] or "0.00")))
     write_line(align_lr("VATable", format_money(context["vatable_amount"])))
     write_line(align_lr(f"VAT @ {context['vat_rate']}", format_money(context["vat_amount"])))
@@ -3674,6 +3756,8 @@ def receipt_view(request):
         "trans_disc_label": receipt.get("trans_disc_label", ""),
         "trans_disc_amt":   receipt.get("trans_disc_amt", "0"),
         "total":            receipt["total"],
+        "total_items_sold":     receipt.get("total_items_sold", 0),
+        "total_items_returned":     receipt.get("total_items_returned", 0),
         "tender":           receipt.get("tender", ""),
         "tender_lines":     tender_lines,
         "is_cash":          receipt.get("is_cash", False),
@@ -4011,11 +4095,19 @@ def close_session(request):
         messages.error(request, "No active session found to close.")
         return redirect("sales:pos_cashier")
 
-    closing_cash = _parse_decimal(request.POST.get("closing_cash"))
+    raw_closing = (request.POST.get("closing_cash") or "").strip()
+    if not raw_closing:
+        messages.error(request, "Enter the actual cash before closing.")
+        return redirect("sales:pos_cashier")
+    closing_cash = _parse_decimal(raw_closing)
     if closing_cash < 0:
         messages.error(request, "Closing cash cannot be negative.")
         return redirect("sales:pos_cashier")
-
+    totals = _session_close_totals(session)
+    cent = Decimal("0.01")
+    expected_cash = totals["cash_on_hand"].quantize(cent)
+    cash_variance = closing_cash.quantize(cent) - expected_cash
+    notes = (request.POST.get("notes") or "").strip()
     # Step 1: Close the session
     try:
         session.close(closed_by_user=user, closing_cash=closing_cash)
@@ -4023,6 +4115,12 @@ def close_session(request):
         messages.error(request, str(e))
         return redirect("sales:pos_cashier")
 
+    # Persist the audit figures (update() so close()'s own guards don't interfere)
+    POSSession.objects.filter(pk=session.pk).update(
+        expected_cash=expected_cash,
+        cash_variance=cash_variance,
+        close_notes=notes,
+    )
     # Step 2: Print Z-Reading
     # Intentionally separate from close:
     #   - A printer failure must NOT reopen/revert the session.
@@ -4069,13 +4167,13 @@ def close_session(request):
     # Even when printing or DB update fails, we still log out — the session
     # is already closed and cannot be reverted from here.
     if z_print_error:
-        print(
+        messages.warning(
             request,
             f"Session closed successfully, but Z-Reading could not be printed: "
             f"{z_print_error}. Please reprint manually.",
         )
     elif z_db_error:
-        print(
+        messages.error(
             request,
             f"Session closed and Z-Reading printed, but the summary records "
             f"could not be saved: {z_db_error}. Please notify your administrator.",

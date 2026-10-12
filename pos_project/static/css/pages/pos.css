@@ -1960,6 +1960,7 @@ visible without needing to zoom out. */
 .close-trans-modal-box .close-trans-confirm-strip {
     flex: 0 0 auto;
 }
+.close-trans-modal-box [hidden] { display: none !important; }
 
 .modal-body {
     display: grid;
@@ -2064,17 +2065,28 @@ visible without needing to zoom out. */
     padding: 0.55rem 0.75rem;
 }
 
+.ct-stat-cell .close-trans-cash-input {
+    font-size: 18px; padding: 0.3rem 0.5rem; text-align: left; border-width: 1.5px;
+}
+
+.ct-stat-cell .close-trans-variance-val { font-size: 12px; }
+
 .ct-stat-label {
     font-size: 11px;
     color: var(--text-muted);
 }
+
 
 .ct-stat-value {
     font-size: 18px;
     font-weight: 700;
     color: var(--text);
 }
-
+.ct-stat-value-2xl {
+    font-size: 50px;
+    font-weight: 700;
+    color: var(--text);
+}
 .ct-stat-sub {
     font-size: 11px;
     color: var(--text-muted);
@@ -2762,4 +2774,5 @@ details[open] .close-trans-denom-toggle::before {
     .close-trans-footer button {
         width: 100%;
     }
+    
 }

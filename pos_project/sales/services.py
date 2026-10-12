@@ -342,14 +342,16 @@ def import_products_from_csv(items_path, itemdtl_path, itemscosts_path):
 
 def mask_card_number(raw: str) -> str:
     """Mask a card number/slip reference for storage and receipt display.
-    Keeps first 6 and last 4 digits; everything else becomes X.
+    4-8 digits  -> fixed-width mask + last 4 digits (e.g. **********1234)
+    9+ digits   -> first 4 digits + length-preserving mask + last 2 digits
     Never pass the full PAN downstream of this function.
     """
     digits = re.sub(r"\D", "", raw or "")
     if not digits:
         return ""
-    if len(digits) <= 4:
+    if len(digits) <= 3:
         return "X" * len(digits)
-    if len(digits) <= 10:
-        return digits[:2] + "X" * (len(digits) - 4) + digits[-2:]
-    return digits[:6] + "X" * (len(digits) - 10) + digits[-4:]
+    if len(digits) <= 8:
+        return "*" * 10 + digits[-4:]
+    return digits[:4] + "*" * (len(digits) - 6) + digits[-4:]
+

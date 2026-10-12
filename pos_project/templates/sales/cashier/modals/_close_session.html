@@ -37,7 +37,7 @@
                         <div class="ct-section-label">Cash Summary</div>
                         <div class="ct-stat-grid ct-stat-grid--3">
                             <div class="ct-stat-cell">
-                                <span class="ct-stat-label">Change Fund</span>
+                                <span class="ct-stat-label">Cash Fund</span>
                                 <span class="ct-stat-value" id="close-trans-opening-cash">₱0.00</span>
                             </div>
                             <div class="ct-stat-cell">
@@ -45,11 +45,11 @@
                                 <span class="ct-stat-value" id="close-trans-paid-in-cash">₱0.00</span>
                                 <span class="ct-stat-sub" id="close-trans-cash-returned"></span>
                             </div>
-                            <div class="ct-stat-cell">
+                            <div class="ct-stat-cell" hidden>
                                 <span class="ct-stat-label">Manual Cash In</span>
                                 <span class="ct-stat-value" id="close-trans-mid-cash-in">₱0.00</span>
                             </div>
-                            <div class="ct-stat-cell">
+                            <div class="ct-stat-cell" hidden>
                                 <span class="ct-stat-label">Manual Cash Out</span>
                                 <span class="ct-stat-value" id="close-trans-mid-cash-out">₱0.00</span>
                             </div>
@@ -117,7 +117,7 @@
 
                     <hr class="ct-divider">
 
-                    <div>
+                    <div hidden>
                         <div class="ct-section-label">Cash Movements</div>
                         <div id="close-trans-movements-list" class="ct-movements-list">
                             <span class="ct-movements-empty">No cash movements recorded.</span>
@@ -129,13 +129,21 @@
                     <div>
                         <div class="ct-section-label">Session Total</div>
                         <div class="ct-stat-grid ct-stat-grid--2">
-                            <div class="ct-stat-cell">
+                            <!-- <div class="ct-stat-cell">
                                 <span class="ct-stat-label">Actual Cash</span>
                                 <span class="ct-stat-value" id="close-trans-actual-cash">₱0.00</span>
+                            </div> -->
+                            <div class="ct-stat-cell">
+                                <label class="ct-stat-label" for="closing-cash-input">Actual Cash</label>
+                                <input type="number" step="0.01" min="0" inputmode="decimal"
+                                    id="closing-cash-input" name="closing_cash"
+                                    class="close-trans-cash-input" placeholder="0.00" autocomplete="off">
+                                <span class="ct-stat-sub">Count the drawer. Edit if different.</span>
+                                <span class="close-trans-variance-val" id="close-trans-variance">—</span>
                             </div>
                             <div class="ct-stat-cell">
                                 <span class="ct-stat-label">Net Worth</span>
-                                <span class="ct-stat-value ct-val--positive" id="close-trans-net-worth">₱0.00</span>
+                                <span class="ct-stat-value-2xl ct-val--positive" id="close-trans-net-worth">₱0.00</span>
                             </div>
                         </div>
                     </div>
