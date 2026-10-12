@@ -1,0 +1,624 @@
+/* ══════════════════════════════════════════════════════════════════
+   Close Session (Z-Read) modal
+   Layout: scrollable detail  →  pinned result bar  →  notes  →  footer
+   Relies on tokens: --surface, --surface-raised, --surface-sunken,
+   --border, --text, --text-muted, --primary, --success, --danger, --info
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Modal shell ──────────────────────────────────────────────── */
+.close-trans-modal-box {
+    width: 820px;
+    max-width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.close-trans-modal-box [hidden] { display: none !important; }
+
+.ct-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Form fills the remaining height. Only the detail area scrolls, so the
+   result bar, notes and action buttons never leave the screen. */
+.close-trans-modal-box #close-trans-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.close-trans-modal-box .close-trans-summary {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.close-trans-modal-box .ct-result,
+.close-trans-modal-box .close-trans-notes-section,
+.close-trans-modal-box .close-trans-footer,
+.close-trans-modal-box .close-trans-confirm-strip {
+    flex: 0 0 auto;
+}
+
+/* ── Scrollable detail area ───────────────────────────────────── */
+.close-trans-summary {
+    background: var(--surface-raised);
+    padding: 1rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.ct-top {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.ct-card {
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.ct-section-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.ct-card .ct-section-label { margin-bottom: 0; }
+
+/* ── Shared text atoms ────────────────────────────────────────── */
+.ct-stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.ct-stat-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+/* Value modifiers */
+.ct-val--positive { color: var(--success) !important; }
+.ct-val--discount { color: #f0a445 !important; }
+.ct-val--red      { color: var(--danger)  !important; }
+.ct-val--blue     { color: var(--info)    !important; }
+
+/* ── Net Sales headline ───────────────────────────────────────── */
+.ct-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ct-hero-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.ct-hero-value {
+    font-size: 38px;
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Equation / ledger rows (Sales + Cash in Drawer) ──────────── */
+.ct-eq {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ct-eq-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 3px 0;
+    font-size: 15px;
+    border-top: 1px dashed var(--border);
+}
+
+.ct-eq-row:first-child { border-top: 0; }
+
+.ct-eq-row dt {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.ct-eq-row dt small { display: block; }
+
+.ct-eq-row dd {
+    margin: 0;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Credit / Debit breakdown ─────────────────────────────────── */
+.ct-credit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ct-credit-list div {
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+}
+
+.ct-credit-list span:first-child { color: var(--text-muted); }
+
+.ct-credit-list span:last-child {
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.ct-credit-list .close-trans-credit-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 13px;
+}
+
+.ct-credit-total {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding-top: 4px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    border-top: 1px dashed var(--border);
+    font-variant-numeric: tabular-nums;
+}
+
+.ct-credit-total span:first-child {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+/* ── Activity (voids / returns) ───────────────────────────────── */
+.ct-activity-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.ct-activity-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0.5rem 0.65rem;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+}
+
+.ct-activity-count {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.ct-activity-count span {
+    margin-right: 2px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.ct-activity-amount {
+    margin-top: 2px;
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Cash movements (hidden for now; ready for manual cash in/out) */
+.ct-movements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+}
+
+.ct-movements-list .ct-movement-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background: var(--surface-sunken);
+    border-radius: 4px;
+    border-left: 3px solid var(--border);
+}
+
+.ct-movements-list .ct-movement-row.in  { border-left-color: var(--success); }
+.ct-movements-list .ct-movement-row.out { border-left-color: var(--danger); }
+
+.ct-movements-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 13px;
+}
+
+.ct-movement-type { font-weight: 600; min-width: 60px; }
+.ct-movement-type.in  { color: var(--success); }
+.ct-movement-type.out { color: var(--danger); }
+
+.ct-movement-details { flex: 1; margin: 0 0.75rem; }
+.ct-movement-reason  { color: var(--text); font-size: 13px; }
+.ct-movement-meta    { color: var(--text-muted); font-size: 12px; }
+
+.ct-movement-amount {
+    min-width: 90px;
+    text-align: right;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* ── Pinned result bar: Expected / Actual / Variance / Net Worth ─ */
+.ct-result {
+    display: grid;
+    grid-template-columns: 1fr 1.35fr 1fr 1.25fr;
+    gap: 0.75rem;
+    align-items: stretch;
+    padding: 0.85rem 1.5rem;
+    background: var(--surface);
+    border-top: 2px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.ct-result-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+}
+
+.ct-result-value {
+    font-size: 24px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.ct-result-cell--networth {
+    padding: 0.4rem 0.75rem;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.ct-result-cell--networth .ct-result-value { font-size: 30px; }
+
+/* Actual cash input */
+.ct-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.ct-peso {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.close-trans-cash-input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    font-size: 22px;
+    font-weight: 700;
+    text-align: right;
+    color: var(--text);
+    background: var(--surface-raised);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.close-trans-cash-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(96, 184, 240, .15);
+}
+
+/* Remove spinner arrows */
+.close-trans-cash-input::-webkit-outer-spin-button,
+.close-trans-cash-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Variance (JS toggles .over / .short / .exact) */
+.close-trans-variance-val {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.close-trans-variance-val.over  { color: var(--success); }
+.close-trans-variance-val.short { color: var(--danger); }
+.close-trans-variance-val.exact { color: var(--text-muted); }
+
+/* ── Notes ────────────────────────────────────────────────────── */
+.close-trans-notes-section {
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.close-trans-label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.close-trans-notes-input {
+    width: 100%;
+    min-height: 3rem;
+    max-height: 5rem;
+    padding: 0.6rem 0.75rem;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--text);
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    resize: vertical;
+}
+
+.close-trans-notes-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+/* ── Footer + Z-Read confirm ──────────────────────────────────── */
+.close-trans-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+}
+
+.close-trans-confirm-btn {
+    padding: 0.6rem 1.2rem;
+    font-weight: 600;
+    color: #fff;
+    background: #c54b58;
+}
+
+.close-trans-confirm-btn:hover { background: #b53f4b; }
+
+.close-trans-confirm-btn:disabled {
+    color: var(--text-muted);
+    background: var(--border);
+    cursor: not-allowed;
+}
+
+.close-trans-confirm-strip { border-top: 1px solid #5a2a2a; }
+
+.close-trans-confirm-strip-warning {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0.75rem 1.5rem;
+    background: #2a1f1f;
+}
+
+.close-trans-confirm-strip-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--danger);
+}
+
+.close-trans-confirm-strip-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.close-trans-zread-final-btn {
+    padding: 0.6rem 1.2rem;
+    font-weight: 600;
+    color: #fff;
+    background: #a83232;
+}
+
+.close-trans-zread-final-btn:hover { background: #922b2b; }
+
+/* ── Mobile ───────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .close-trans-modal-box {
+        width: 95vw;
+        max-height: 95vh;
+    }
+
+    .ct-top { grid-template-columns: 1fr; }
+
+    .ct-hero-value { font-size: 32px; }
+
+    .ct-result { grid-template-columns: 1fr 1fr; }
+
+    /* Actual Cash takes the full first row so it's the first thing touched */
+    .ct-result-cell--input {
+        grid-column: 1 / -1;
+        order: -1;
+    }
+
+    .close-trans-footer { flex-direction: column-reverse; }
+    .close-trans-footer button { width: 100%; }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   SHARED / LEGACY — not used by the Close Session modal itself.
+   Keep only if the denomination modal, cash in/out modal, or the
+   generic .modal-body / .modal-bottom layouts are used elsewhere.
+   ══════════════════════════════════════════════════════════════════ */
+
+.modal-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-body .col:first-child { border-right: 1px solid var(--border); }
+
+.modal-bottom {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    background: var(--surface-sunken);
+    border-top: 1px solid var(--border);
+}
+
+.notes-wrap {
+    padding: 0.7rem 1.25rem;
+    border-right: 1px solid var(--border);
+}
+
+.cash-inout-footer { margin-top: 1rem; }
+
+.close-trans-label--spaced { margin-top: 0.75rem; }
+
+/* ── Denomination modal ───────────────────────────────────────── */
+.denom-modal-box {
+    width: 420px;
+    max-width: 95vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.denom-modal-grid {
+    padding: 1rem 1.5rem;
+    overflow-y: auto;
+}
+
+.denom-modal-total {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.8rem 1.5rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+}
+
+.denom-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 100px;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.denom-row span:first-child {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.denom-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.denom-controls input {
+    width: 50px;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text);
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+}
+
+.denom-qty {
+    padding: 0.45rem 0.5rem;
+    border-radius: 6px;
+}
+
+.denom-qty:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.denom-qty::-webkit-outer-spin-button,
+.denom-qty::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.denom-row .denom-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+    font-weight: bold;
+    color: var(--text);
+    background: var(--surface-raised);
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.denom-row .denom-btn:hover  { background: var(--border); }
+.denom-row .denom-btn:active { transform: scale(0.95); }
+
+.denom-btn.minus { color: #ff7675; }
+.denom-btn.plus  { color: #55efc4; }
+
+.denom-subtotal {
+    text-align: right;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+#denom-total-display {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--info);
+}
+
+.btn-use-denom {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--info);
+    background: #1a3a50;
+    border: 1.5px solid var(--info);
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.btn-use-denom:hover { background: #1f4a63; }
+
+@media (max-width: 600px) {
+    .denom-row {
+        grid-template-columns: 70px 1fr 80px;
+        font-size: 0.85rem;
+    }
+}
