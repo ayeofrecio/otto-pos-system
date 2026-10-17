@@ -1,0 +1,51 @@
+{% extends "auditlog/_base.html" %}
+{% block title %}Exceptions{% endblock %}
+{% block content %}
+<h2>Exceptions</h2>
+<form class="filters" method="get">
+  <input type="date" name="date_from" value="{{ get.date_from }}">
+  <input type="date" name="date_to" value="{{ get.date_to }}">
+  <select name="kind">
+    <option value="">All kinds</option>
+    {% for k in kinds %}<option value="{{ k }}" {% if get.kind == k %}selected{% endif %}>{{ k }}</option>{% endfor %}
+  </select>
+  <select name="code">
+    <option value="">All codes</option>
+    {% for c in codes %}<option value="{{ c }}" {% if get.code == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+  </select>
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if get.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <input name="username" placeholder="User" value="{{ get.username }}">
+  <input name="transaction_no" placeholder="Transaction no." value="{{ get.transaction_no }}">
+  <button>Filter</button>
+  <button name="csv" value="1">Export CSV</button>
+</form>
+<div class="wrap"><table>
+  <tr><th>Last seen</th><th>Kind / Code</th><th>#</th><th>Message</th><th>Entity</th><th>User / Terminal</th><th>Status</th></tr>
+  {% for r in page %}
+  <tr>
+    <td>{{ r.last_seen|date:"Y-m-d H:i:s" }}</td>
+    <td>{{ r.kind }}<br>{{ r.code }}</td>
+    <td>{{ r.count }}</td>
+    <td>{{ r.message }}
+      {% if r.traceback or r.context %}<details><summary>Details</summary><pre>{{ r.context }}</pre><pre>{{ r.traceback }}</pre></details>{% endif %}
+    </td>
+    <td>{{ r.entity }} {{ r.entity_id }}<br>{{ r.transaction_no }}</td>
+    <td>{{ r.username }} / {{ r.terminal }}</td>
+    <td>
+      <form method="post" action="{% url 'auditlog:error_review' r.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <select name="status">
+          {% for s in statuses %}<option value="{{ s }}" {% if r.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+        </select>
+        <input name="note" placeholder="Note" value="{{ r.note }}">
+        <button>Save</button>
+      </form>
+    </td>
+  </tr>
+  {% empty %}<tr><td colspan="7">No rows.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

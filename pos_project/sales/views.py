@@ -61,6 +61,10 @@ from .pos_constants import (
 from sales.services import import_products_from_csv
 from setup.pos_keys import get_pos_keys
 from sales.helper import update_z_reading_db, utcnow
+from auditlog.api import audit, log_exception, get_logger
+from auditlog.constants import Action, Kind, Code
+
+logger = get_logger("sales")
 
 #  for debugging
 from pprint import pprint
@@ -157,7 +161,9 @@ def _verify_manager_pin(pin: str):
 
     for user in managers:
         if user.check_password(clean_pin):
+            audit(Action.MANAGER_PIN_OK, approver=user.username)
             return user
+    audit(Action.MANAGER_PIN_FAIL, success=False)
     return None
 
 
@@ -510,6 +516,8 @@ def open_session(request):
             status=POSSession.STATUS_OPEN,
         )
         session.add_user(user)
+        audit(Action.SESSION_OPEN, session_id=session.pk, opening_cash=opening_cash,
+              business_date=session.business_date)
 
         return redirect("sales:pos_cashier")
 
@@ -549,6 +557,8 @@ def cash_inout(request):
         approved_by=approved_by,
         notes=notes,
     )
+    audit(Action.CASH_IN if movement_type == CashInOut.TYPE_IN else Action.CASH_OUT,
+          session_id=session.pk, approver=approved_by, amount=amount, reason=reason)
 
     return JsonResponse({
         "ok": True,
@@ -597,7 +607,9 @@ def cashier_view(request):
 
     try:
         biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
-    except Exception:
+    except Exception as e:
+        log_exception(Kind.DATA, Code.BIZDATE_FALLBACK,
+                      "get_business_date failed; using calendar date", exc=e)
         biz_date = now.date()
 
     # Keep transaction-number allocation lazy.
@@ -705,6 +717,8 @@ def cart_add(request):
     if not barcode:
         return JsonResponse({"ok": False, "error": "Barcode required"}, status=400)
     if _barcode_numeric_only() and not (barcode.isascii() and barcode.isdigit()):
+        log_exception(Kind.VALIDATION, Code.BARCODE_INVALID, "Non-numeric barcode rejected",
+                      entity="barcode", entity_id=barcode)
         return JsonResponse({"ok": False, "error": "Barcode must be numeric"}, status=400)
 
     user_id = _get_user_id(request)
@@ -716,7 +730,9 @@ def cart_add(request):
     now = datetime.datetime.now()
     try:
         biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
-    except Exception:
+    except Exception as e:
+        log_exception(Kind.DATA, Code.BIZDATE_FALLBACK,
+                      "get_business_date failed; using calendar date", exc=e)
         biz_date = now.date()
 
     # Lookup by barcode
@@ -746,6 +762,8 @@ def cart_add(request):
                     # fall through to the item_detail/item assignment block below
                     pass
                 else:
+                    log_exception(Kind.DATA, Code.ITEM_NOT_FOUND, "Barcode not found",
+                                  entity="barcode", entity_id=barcode, transaction_no=trans_no)
                     if request.headers.get("HX-Request"):
                         return render(
                             request,
@@ -754,6 +772,8 @@ def cart_add(request):
                         )
                     return JsonResponse({"ok": False, "error": "Item not found"}, status=404)
             else:
+                log_exception(Kind.DATA, Code.ITEM_NOT_FOUND, "Barcode not found",
+                              entity="barcode", entity_id=barcode, transaction_no=trans_no)
                 if request.headers.get("HX-Request"):
                     return render(
                         request,
@@ -778,6 +798,10 @@ def cart_add(request):
         color = item.color or ""
         color_desc = item.color_desc or ""
         item_code = item.icode
+
+    if not price:
+        log_exception(Kind.DATA, Code.PRICE_MISSING, "Item has no price",
+                      entity="item", entity_id=item_code, transaction_no=trans_no, barcode=barcode)
 
     try:
         qty = Decimal(max(1, int(request.POST.get("qty", "1") or "1")))
@@ -975,6 +999,8 @@ def cart_void_item(request):
         promo_tag=line.promo_tag or "",
     )
 
+    audit(Action.VOID_ITEM, transaction_no=trans_no, line=line.rec_ctr,
+          item_code=line.item_code, qty=line.item_qty, amount=line.item_price_ext)
     line.delete()
 
     context = _build_temp_line_cart_context(request, trans_no)
@@ -1068,6 +1094,8 @@ def cart_void_transaction(request):
         transaction_no=trans_no,
     ).delete()
 
+    audit(Action.VOID_TRANS, transaction_no=trans_no, approver=manager_user.username,
+          amount=void_total, lines=len(cart_lines))
     _save_current_transaction_no(trans_no)
     request.session["pos_trans_no"] = _get_next_transaction_no()
     _clear_trans_disc(request)
@@ -1176,6 +1204,7 @@ def cart_void_previous(request):
         #     store_id=STORE_ID,
         # )
 
+    audit(Action.VOID_PREVIOUS, transaction_no=receipt_no, approver=manager_user.username)
     return JsonResponse({
         "ok": True,
         "void_kind": "full_transaction",
@@ -1274,6 +1303,8 @@ def cart_void_previous2(request):
             for item in source_items
         ])
 
+    audit(Action.VOID_PREVIOUS, transaction_no=receipt_no, approver=manager_user.username,
+          amount=target.amount_total, lines=len(source_items))
     return JsonResponse({
         "ok": True,
         "void_kind": "previous",
@@ -1345,6 +1376,7 @@ def cart_suspend(request):
         cart_qs.delete()
 
     # Keep the reserved transaction number in suspend table; clear active cart context.
+    audit(Action.TRANS_SUSPEND, transaction_no=trans_no, lines=len(cart_lines))
     request.session.pop("pos_trans_no", None)
     _clear_trans_disc(request)
 
@@ -1436,6 +1468,7 @@ def cart_suspended_retrieve(request):
 
     # Restoring a suspended transaction must not advance POSNBR.
     # We only point the cashier session back to the restored transaction number.
+    audit(Action.TRANS_RESUME, transaction_no=trans_no, lines=len(suspended_lines))
     request.session["pos_trans_no"] = trans_no
     request.session.modified = True
     _clear_trans_disc(request)
@@ -1463,6 +1496,7 @@ def cart_trans_disc(request):
 
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
+    audit(Action.TRANS_DISC, transaction_no=trans_no, pct=pct, type=disc_type, label=disc_label)
     cart_lines = TempTransaction.objects.filter(
         user_id=user_id,
         terminal_id=TERMINAL_ID,
@@ -1526,6 +1560,8 @@ def cart_line_disc(request):
     line.discount_code = disc_type
     line.item_price_ext = ext
     line.save()
+    audit(Action.LINE_DISC, transaction_no=trans_no, line=rec_ctr, item_code=line.item_code,
+          pct=disc_pct, type=disc_type, discount=item_discount)
 
     cart_lines = TempTransaction.objects.filter(
         user_id=user_id,
@@ -1619,6 +1655,8 @@ def cart_line_price_override(request):
             "item_price_ext",
             "price_override",
         ])
+        audit(Action.PRICE_OVERRIDE, transaction_no=trans_no, line=rec_ctr,
+              item_code=line.item_code, old=old_price, new=new_price)
 
     cart_lines = TempTransaction.objects.filter(
         user_id=user_id,
@@ -1713,6 +1751,8 @@ def cart_item_return_toggle(request):
             transaction_no=source_trans_no,
         ).exists()
         if not source_exists:
+            log_exception(Kind.DATA, Code.RETURN_INVALID, "Return source transaction not found",
+                          entity="transaction", entity_id=source_trans_no, transaction_no=trans_no)
             return JsonResponse({
                 "ok": False,
                 "error": "Source transaction number was not found in historical transactions",
@@ -1742,6 +1782,9 @@ def cart_item_return_toggle(request):
         line.save(update_fields=[
             "tag1", "return_code", "transaction_date_r", "item_ref", "item_price_ext"
         ])
+        audit(Action.RETURN_ITEM, transaction_no=trans_no, approver=manager_user.username,
+              line=rec_ctr, item_code=line.item_code, source_transaction=source_trans_no,
+              amount=-base_ext)
 
     cart_lines = TempTransaction.objects.filter(
         user_id=user_id,
@@ -1899,7 +1942,9 @@ def cart_return_import(request):
     now = datetime.datetime.now()
     try:
         biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
-    except Exception:
+    except Exception as e:
+        log_exception(Kind.DATA, Code.BIZDATE_FALLBACK,
+                      "get_business_date failed; using calendar date", exc=e)
         biz_date = now.date()
 
     max_rec = TempTransaction.objects.filter(
@@ -1917,6 +1962,9 @@ def cart_return_import(request):
         if requested_qty <= 0:
             continue
         if requested_qty > source_qty:
+            log_exception(Kind.DATA, Code.RETURN_INVALID, "Return quantity exceeds sold quantity",
+                          entity="transaction", entity_id=receipt_no, transaction_no=trans_no,
+                          item_code=src.item_code, requested=requested_qty, sold=source_qty)
             return JsonResponse({
                 "ok": False,
                 "error": f"Requested return quantity exceeds sold quantity for item {src.item_code or src.id}",
@@ -1964,6 +2012,8 @@ def cart_return_import(request):
         return JsonResponse({"ok": False, "error": "No valid items selected for return"}, status=400)
 
     TempTransaction.objects.bulk_create(rows)
+    audit(Action.RETURN_ITEM, transaction_no=trans_no, approver=manager_user.username,
+          source_transaction=receipt_no, lines=len(rows))
 
     cart_lines = TempTransaction.objects.filter(
         user_id=user_id,
@@ -2046,6 +2096,8 @@ def cart_line_price_override(request):
             "item_price_ext",
             "price_override",
         ])
+        audit(Action.PRICE_OVERRIDE, transaction_no=trans_no, line=rec_ctr,
+              item_code=line.item_code, old=old_price, new=new_price)
 
     cart_lines = TempTransaction.objects.filter(
         user_id=user_id,
@@ -2136,6 +2188,8 @@ def cart_item_return_toggle(request):
             transaction_no=source_trans_no,
         ).exists()
         if not source_exists:
+            log_exception(Kind.DATA, Code.RETURN_INVALID, "Return source transaction not found",
+                          entity="transaction", entity_id=source_trans_no, transaction_no=trans_no)
             return JsonResponse({
                 "ok": False,
                 "error": "Source transaction number was not found in historical transactions",
@@ -2165,6 +2219,9 @@ def cart_item_return_toggle(request):
         line.save(update_fields=[
             "tag1", "return_code", "transaction_date_r", "item_ref", "item_price_ext"
         ])
+        audit(Action.RETURN_ITEM, transaction_no=trans_no, approver=manager_user.username,
+              line=rec_ctr, item_code=line.item_code, source_transaction=source_trans_no,
+              amount=-base_ext)
 
     cart_lines = TempTransaction.objects.filter(
         user_id=user_id,
@@ -2322,7 +2379,9 @@ def cart_return_import(request):
     now = datetime.datetime.now()
     try:
         biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
-    except Exception:
+    except Exception as e:
+        log_exception(Kind.DATA, Code.BIZDATE_FALLBACK,
+                      "get_business_date failed; using calendar date", exc=e)
         biz_date = now.date()
 
     max_rec = TempTransaction.objects.filter(
@@ -2340,6 +2399,9 @@ def cart_return_import(request):
         if requested_qty <= 0:
             continue
         if requested_qty > source_qty:
+            log_exception(Kind.DATA, Code.RETURN_INVALID, "Return quantity exceeds sold quantity",
+                          entity="transaction", entity_id=receipt_no, transaction_no=trans_no,
+                          item_code=src.item_code, requested=requested_qty, sold=source_qty)
             return JsonResponse({
                 "ok": False,
                 "error": f"Requested return quantity exceeds sold quantity for item {src.item_code or src.id}",
@@ -2387,6 +2449,8 @@ def cart_return_import(request):
         return JsonResponse({"ok": False, "error": "No valid items selected for return"}, status=400)
 
     TempTransaction.objects.bulk_create(rows)
+    audit(Action.RETURN_ITEM, transaction_no=trans_no, approver=manager_user.username,
+          source_transaction=receipt_no, lines=len(rows))
 
     cart_lines = TempTransaction.objects.filter(
         user_id=user_id,
@@ -2557,7 +2621,9 @@ def payment_complete(request):
     now = datetime.datetime.now()
     try:
         biz_date = get_business_date(STORE_ID, TERMINAL_ID, now)
-    except Exception:
+    except Exception as e:
+        log_exception(Kind.DATA, Code.BIZDATE_FALLBACK,
+                      "get_business_date failed; using calendar date", exc=e)
         biz_date = now.date()
 
 
@@ -2731,7 +2797,12 @@ def payment_complete(request):
                 tender_desc=(refund_tender.description or refund_tender.pcode)[:15],
                 payment_reference=(",".join(source_refs)[:20] or None),
             )
-    
+
+    audit(Action.PAYMENT_COMPLETE, transaction_no=trans_no,
+          total=total, tendered=total_tendered, change=change_amount,
+          tenders=[t["pcode"] for t in tender_lines],
+          is_refund=total < 0, lines=len(cart_lines_list))
+
     # --- Clipper-style flat transaction log (TransactionLog / TLOG) ---
     try:
         service = TransactionService()
@@ -2747,7 +2818,8 @@ def payment_complete(request):
             si_number=trans_no,
         )
     except Exception as e:
-        print(f"⚠️  TransactionService log failed: {e}")
+        log_exception(Kind.DATA, Code.TXN_LOG_FAILED, f"TransactionService log failed: {e}",
+                      exc=e, entity="transaction", entity_id=trans_no, transaction_no=trans_no)
 
     # This is removing the card_number in the session after the transaction is completed, for security reasons.
     SENSITIVE_SESSION_KEYS = ["card_number"]
@@ -3492,7 +3564,7 @@ def _print_receipt(printer, terminal_config, context, current_operator):
         try:
             printer.write(b"\x1b\x70\x00\x19\xfa")
         except Exception as e:
-            print(f"⚠️  Cash drawer pulse failed: {e}")
+            log_exception(Kind.DEVICE, Code.DRAWER_FAIL, f"Cash drawer pulse failed: {e}", exc=e)
  
     # ── Feed & cut ────────────────────────────────────────────────────────────
     write_line("\n" * 5)
@@ -3824,9 +3896,11 @@ def receipt_view(request):
         printer, _ = _get_printer(terminal_config)
         _print_receipt(printer, terminal_config, context, current_operator)
     except NotImplementedError as e:
-        print(f"❌ Printer not supported: {e}")
+        log_exception(Kind.DEVICE, Code.PRINTER_FAIL, f"Printer not supported: {e}",
+                      exc=e, entity="receipt", entity_id=context.get("transaction_no", ""))
     except Exception as e:
-        print(f"❌ Printer error: {e}")
+        log_exception(Kind.DEVICE, Code.PRINTER_FAIL, f"Printer error: {e}",
+                      exc=e, entity="receipt", entity_id=context.get("transaction_no", ""))
     finally:
         if printer is not None:
             try:
@@ -3858,9 +3932,11 @@ def z_reading_view(request):
     except NotImplementedError as e:
         return JsonResponse({"error": str(e)}, status=501)
     except Exception as e:
-        print(f"❌ Z-Reading print error: {e}")
+        log_exception(Kind.DEVICE, Code.PRINTER_FAIL, f"Z-Reading print error: {e}",
+                      exc=e, entity="z_reading", entity_id=session.id)
         return JsonResponse({"error": "Printer error. Check server logs."}, status=500)
- 
+
+    audit(Action.Z_READ, session_id=session.id, reprint=True)
     return JsonResponse({"status": "ok", "message": "Z-Reading printed."})
 
 
@@ -4092,11 +4168,13 @@ def print_x_reading(request):
     try:
         _do_print_x_reading(session, current_operator)
         # messages.success(request, "X-Reading printed successfully.")
+        audit(Action.X_READ, session_id=session.id)
     except NotImplementedError as e:
         messages.error(request, f"Printer not supported: {e}")
     except Exception as e:
         messages.error(request, f"X-Reading print error: {e}")
-        print(f"❌ X-Reading print error: {e}")
+        log_exception(Kind.DEVICE, Code.PRINTER_FAIL, f"X-Reading print error: {e}",
+                      exc=e, entity="x_reading", entity_id=session.id)
 
     return redirect("sales:pos_cashier")
 
@@ -4148,6 +4226,8 @@ def close_session(request):
     try:
         session.close(closed_by_user=user, closing_cash=closing_cash)
     except Exception as e:
+        log_exception(Kind.DATA, Code.UNHANDLED, f"Session close failed: {e}",
+                      exc=e, entity="session", entity_id=session.pk)
         messages.error(request, str(e))
         return redirect("sales:pos_cashier")
 
@@ -4157,6 +4237,8 @@ def close_session(request):
         cash_variance=cash_variance,
         close_notes=notes,
     )
+    audit(Action.SESSION_CLOSE, session_id=session.pk, closing_cash=closing_cash,
+          expected_cash=expected_cash, variance=cash_variance, notes=notes)
     # Step 2: Print Z-Reading
     # Intentionally separate from close:
     #   - A printer failure must NOT reopen/revert the session.
@@ -4174,7 +4256,8 @@ def close_session(request):
         )
         _do_print_z_reading(closed_session, current_operator=user)
     except Exception as e:
-        print(f"Z-Reading print failed after session close: {e}")
+        log_exception(Kind.DEVICE, Code.PRINTER_FAIL, f"Z-Reading print failed after session close: {e}",
+                      exc=e, entity="z_reading", entity_id=session.pk)
         z_print_error = str(e)
 
     # Step 3: Update POSTransNumber + AccountingSummary
@@ -4185,8 +4268,10 @@ def close_session(request):
     if not z_print_error and closed_session is not None:
         try:
             update_z_reading_db(closed_session, user)
+            audit(Action.Z_READ, session_id=session.pk)
         except Exception as e:
-            print(f"Z-Reading DB update failed after session close: {e}")
+            log_exception(Kind.DATA, Code.ZREAD_UPDATE_FAILED, f"Z-Reading DB update failed after session close: {e}",
+                          exc=e, entity="z_reading", entity_id=session.pk)
             z_db_error = str(e)
 
     # Step 4: Clear POS session keys
@@ -4247,8 +4332,10 @@ def update_from_csv(request):
             **summary,
         })
     except FileNotFoundError as e:
+        log_exception(Kind.IMPORT, Code.IMPORT_ROW_REJECTED, f"CSV file not found: {e}", exc=e)
         return JsonResponse({"status": "error", "message": f"CSV file not found: {e}"}, status=400)
     except Exception as e:
+        log_exception(Kind.IMPORT, Code.IMPORT_ROW_REJECTED, f"CSV import failed: {e}", exc=e)
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 

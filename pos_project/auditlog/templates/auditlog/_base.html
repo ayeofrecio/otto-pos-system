@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Logs{% endblock %}</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; background: #f6f7f9; color: #1f2933; }
+  nav a { margin-right: 12px; }
+  form.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  input, select, button { padding: 6px 8px; font: inherit; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { border-bottom: 1px solid #e4e7eb; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #eef0f3; }
+  pre { margin: 0; white-space: pre-wrap; font-size: 12px; }
+  .bad { color: #b42318; font-weight: 600; }
+  .pager { margin: 12px 0; }
+  .wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="{% url 'auditlog:audit_list' %}">Audit log</a>
+  <a href="{% url 'auditlog:error_list' %}">Exceptions</a>
+  <a href="{% url 'sales:pos_cashier' %}">Back to POS</a>
+</nav>
+{% block content %}{% endblock %}
+<div class="pager">
+  {% if page.has_previous %}<a href="?{{ query }}&page={{ page.previous_page_number }}">&laquo; Prev</a>{% endif %}
+  Page {{ page.number }} of {{ page.paginator.num_pages }} ({{ page.paginator.count }} rows)
+  {% if page.has_next %}<a href="?{{ query }}&page={{ page.next_page_number }}">Next &raquo;</a>{% endif %}
+</div>
+</body>
+</html>

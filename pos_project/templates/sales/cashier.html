@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="{% static 'css/modal/close-session.css' %}">
 </head>
 
-<body>
+<body data-trans-no="{{ receipt_no }}">
 
     {% include "sales/cashier/_header.html" %}
 
@@ -151,6 +151,7 @@
     <script src="{% static 'sales/header-menu.js' %}"></script>
     <script src="{% static 'sales/cloud-sync.js' %}"></script>
     <script src="{% static 'sales/theme.js' %}"></script>
+    <script src="{% static 'sales/connection.js' %}"></script>
 </body>
 
 </html>

@@ -3,6 +3,8 @@ from django.http import JsonResponse
 from sales.models import TerminalConfiguration
 from users.models import POSSession
 from django.http import HttpResponse
+from auditlog.api import log_exception
+from auditlog.constants import Kind, Code
 # Paths that must never be blocked — auth and static
 EXEMPT_PATHS = [
     '/pos/login',
@@ -108,8 +110,11 @@ class POSGuardMiddleware:
             now = datetime.now()
             return now > deadline
 
-        except Exception:
-            return False  # fail open — never lock cashiers out on DB error
+        except Exception as e:
+            # fail open — never lock cashiers out on DB error
+            log_exception(Kind.CONNECTION, Code.DB_UNAVAILABLE,
+                          f"Z-reading guard check failed (failing open): {e}", exc=e)
+            return False
 
     def _get_terminal_ids(self, request):
         """

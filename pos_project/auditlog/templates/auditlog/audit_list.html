@@ -1,0 +1,32 @@
+{% extends "auditlog/_base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<h2>Audit log</h2>
+<form class="filters" method="get">
+  <input type="date" name="date_from" value="{{ get.date_from }}">
+  <input type="date" name="date_to" value="{{ get.date_to }}">
+  <select name="action">
+    <option value="">All actions</option>
+    {% for a in actions %}<option value="{{ a }}" {% if get.action == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+  </select>
+  <input name="username" placeholder="User" value="{{ get.username }}">
+  <input name="terminal" placeholder="Terminal" value="{{ get.terminal }}">
+  <input name="transaction_no" placeholder="Transaction no." value="{{ get.transaction_no }}">
+  <button>Filter</button>
+  <button name="csv" value="1">Export CSV</button>
+</form>
+<div class="wrap"><table>
+  <tr><th>When</th><th>Action</th><th>User</th><th>Approver</th><th>Terminal</th><th>Txn</th><th>Details</th></tr>
+  {% for r in page %}
+  <tr>
+    <td>{{ r.created_at|date:"Y-m-d H:i:s" }}</td>
+    <td {% if not r.success %}class="bad"{% endif %}>{{ r.action }}</td>
+    <td>{{ r.username }}</td>
+    <td>{{ r.approver_username }}</td>
+    <td>{{ r.terminal }}</td>
+    <td>{{ r.transaction_no }}</td>
+    <td><pre>{{ r.details }}</pre></td>
+  </tr>
+  {% empty %}<tr><td colspan="7">No rows.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

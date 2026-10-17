@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'setup.apps.SetupConfig',
     'settings.apps.SettingsConfig',
     'users.apps.UsersConfig',
+    'auditlog.apps.AuditlogConfig',
     'django.contrib.humanize',
 ]
 
@@ -51,6 +52,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Request context (request id, user, terminal) for audit/exception logging
+    'auditlog.middleware.AuditContextMiddleware',
     # Custom middleware to enforce Z-reading before allowing POS actions
     'sales.middleware.POSGuardMiddleware',  
     # ================================================
@@ -92,6 +95,7 @@ DATABASES = {
         'PORT':     os.environ.get('DB_PORT'),
         'OPTIONS': {
             'charset': 'utf8mb4',
+            'connect_timeout': 5,  # fail fast if the DB server is unreachable
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
         },
     }
@@ -141,32 +145,16 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 LOGS_DIR = BASE_DIR / 'logs'
 LOGS_DIR.mkdir(exist_ok=True)
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{asctime} {levelname} {module} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOGS_DIR / 'pos.log',
-            'maxBytes': 5 * 1024 * 1024,  # 5 MB
-            'backupCount': 5,
-            'formatter': 'verbose',
-        },
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['file', 'console'],
-        'level': 'INFO',
-    },
+from config.logging_config import build_logging  # noqa: E402
+
+LOGGING = build_logging(LOGS_DIR, level=os.environ.get('LOG_LEVEL', 'INFO'))
+
+# Audit / exception tables (defaults live in auditlog/conf.py)
+AUDITLOG = {
+    # 'enabled': True,
+    # 'slow_request_seconds': 2.0,
+    # 'audit_retention_days': 730,
+    # 'error_retention_days': 90,
 }
 
 # ---------------------------------------------------------------------------
