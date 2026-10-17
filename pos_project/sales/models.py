@@ -990,6 +990,10 @@ class TerminalConfiguration(models.Model):
     print_in = models.CharField(max_length=10, choices=CONNECTION_TYPES, default="SERIAL")
     open_time = models.TimeField(default=datetime.time(9,0))
     cutoff_time = models.TimeField(default=datetime.time(4,0))
+    barcode_numeric_only = models.BooleanField(
+        default=False,
+        help_text="When on, the cashier barcode field accepts digits only.",
+    )
 
     class Meta:
         db_table = "terminal_configurations"

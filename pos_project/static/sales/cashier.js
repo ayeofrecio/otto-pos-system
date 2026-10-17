@@ -515,8 +515,23 @@
       } else if (evt.key === 'ArrowDown') {
         evt.preventDefault();
         moveItemSelection(1);
+      } else if (
+        barcodeInputEl.dataset.numericOnly === 'true' &&
+        evt.key.length === 1 && !/\d/.test(evt.key) &&
+        !evt.ctrlKey && !evt.metaKey && !evt.altKey &&
+        !(evt.key === '*' && !barcodeInputEl.value)   // '*' on empty field jumps to qty
+      ) {
+        evt.preventDefault();
       }
     });
+
+    // Numeric-only mode: strip non-digits from typing, scanner and paste.
+    if (barcodeInputEl.dataset.numericOnly === 'true') {
+      barcodeInputEl.addEventListener('input', function () {
+        const cleaned = barcodeInputEl.value.replace(/\D/g, '');
+        if (cleaned !== barcodeInputEl.value) { barcodeInputEl.value = cleaned; }
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------

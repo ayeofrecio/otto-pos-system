@@ -320,6 +320,12 @@ def _get_store_details():
         return None
 
 
+def _barcode_numeric_only():
+    """True when the terminal config restricts the barcode field to digits."""
+    config = _get_store_details()
+    return bool(config and config.barcode_numeric_only)
+
+
 # def _get_terminal_info_from_session(store_id, terminal_id):
 #     """Return (terminal_information) from the current open session for this user."""
 
@@ -637,6 +643,7 @@ def cashier_view(request):
         "last_item": last_line,
         "pos_keys": get_pos_keys(),
         "z_reading_required": getattr(request, "z_reading_required", False),
+        "barcode_numeric_only": _barcode_numeric_only(),
     }
     return render(request, "sales/cashier.html", context)
 
@@ -697,6 +704,8 @@ def cart_add(request):
     barcode = (request.POST.get("barcode") or "").strip()
     if not barcode:
         return JsonResponse({"ok": False, "error": "Barcode required"}, status=400)
+    if _barcode_numeric_only() and not (barcode.isascii() and barcode.isdigit()):
+        return JsonResponse({"ok": False, "error": "Barcode must be numeric"}, status=400)
 
     user_id = _get_user_id(request)
     trans_no = request.session.get("pos_trans_no")
