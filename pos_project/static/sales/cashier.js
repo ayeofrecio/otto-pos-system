@@ -475,6 +475,7 @@
       const itemReturnModal = document.getElementById('item-return-modal');
       const suspendModal = document.getElementById('suspend-modal');
       const cashInOutModal = document.getElementById('cash-inout-modal');
+      const closeTransModal = document.getElementById('close-trans-modal');
       if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
       else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
@@ -2324,12 +2325,6 @@
 
           // // Sync all hidden fields
           // _syncHiddenFields(modal);
-          if (cashInput) {
-              cashInput.value = expectedCash.toFixed(2);
-              recalcVariance();            // shows "Exact" and enables the confirm button
-              cashInput.focus();
-              cashInput.select();          // typing replaces the value right away
-          }
           // // Variance is the only value that depends on closing cash input
           // const varianceEl = document.getElementById("hidden-cash-variance");
           // if (varianceEl) varianceEl.value = variance.toFixed(2);
