@@ -14,6 +14,7 @@ urlpatterns = [
     path("pos/", include("sales.urls")),
     path("users/", include("users.urls")),
     path("reports/", include("reports.urls")),
+    path("logs/", include("auditlog.urls")),
     path("login/", user_views.pos_login, name="pos_login"),
     path("logout/", user_views.pos_logout, name="pos_logout"),
     

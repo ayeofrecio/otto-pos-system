@@ -2,6 +2,8 @@ from django.shortcuts import redirect, render
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from auditlog.api import audit
+from auditlog.constants import Action
 from sales.views import _get_store_name
 
 # Create your views here.
@@ -24,8 +26,10 @@ def pos_login(request):
             user = authenticate(request, username=username, password=password)
             if user:
                 login(request, user)
+                audit(Action.LOGIN_OK, username=user.get_username())
                 next_url = request.GET.get("next") or "sales:pos_cashier"
                 return redirect(next_url)
+        audit(Action.LOGIN_FAIL, success=False, username=username)
         return render(request, "users/login.html", {"error": "Invalid username or password.", "store_name": _get_store_name()})
 
     return render(request, "users/login.html", {"store_name": _get_store_name()})
@@ -33,8 +37,8 @@ def pos_login(request):
 
 def pos_logout(request):
     """Cashier logout."""
-
-    
+    if request.user.is_authenticated:
+        audit(Action.LOGOUT)
     logout(request)
     return redirect("pos_login")
 
