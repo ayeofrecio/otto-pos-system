@@ -475,6 +475,7 @@
       const itemReturnModal = document.getElementById('item-return-modal');
       const suspendModal = document.getElementById('suspend-modal');
       const cashInOutModal = document.getElementById('cash-inout-modal');
+      const closeTransModal = document.getElementById('close-trans-modal');
       if (payModal && payModal.classList.contains('open')) { window.closePayModal(); }
       else if (discModal && discModal.classList.contains('open')) { window.closeDiscountModal(); }
       else if (tdModal && tdModal.classList.contains('open')) { window.closeTransDiscModal(); }
@@ -514,8 +515,23 @@
       } else if (evt.key === 'ArrowDown') {
         evt.preventDefault();
         moveItemSelection(1);
+      } else if (
+        barcodeInputEl.dataset.numericOnly === 'true' &&
+        evt.key.length === 1 && !/\d/.test(evt.key) &&
+        !evt.ctrlKey && !evt.metaKey && !evt.altKey &&
+        !(evt.key === '*' && !barcodeInputEl.value)   // '*' on empty field jumps to qty
+      ) {
+        evt.preventDefault();
       }
     });
+
+    // Numeric-only mode: strip non-digits from typing, scanner and paste.
+    if (barcodeInputEl.dataset.numericOnly === 'true') {
+      barcodeInputEl.addEventListener('input', function () {
+        const cleaned = barcodeInputEl.value.replace(/\D/g, '');
+        if (cleaned !== barcodeInputEl.value) { barcodeInputEl.value = cleaned; }
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -2324,12 +2340,6 @@
 
           // // Sync all hidden fields
           // _syncHiddenFields(modal);
-          if (cashInput) {
-              cashInput.value = expectedCash.toFixed(2);
-              recalcVariance();            // shows "Exact" and enables the confirm button
-              cashInput.focus();
-              cashInput.select();          // typing replaces the value right away
-          }
           // // Variance is the only value that depends on closing cash input
           // const varianceEl = document.getElementById("hidden-cash-variance");
           // if (varianceEl) varianceEl.value = variance.toFixed(2);

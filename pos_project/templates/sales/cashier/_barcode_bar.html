@@ -12,7 +12,8 @@
             </div>
             <span class="qty-multiplier">×</span>
             <input type="text" id="barcode-input" name="barcode" class="barcode-input"
-                placeholder="Scan or enter barcode here" autofocus autocomplete="off">
+                placeholder="Scan or enter barcode here" autofocus autocomplete="off"
+                {% if barcode_numeric_only %}inputmode="numeric" data-numeric-only="true"{% endif %}>
             <button type="button" class="btn-search" onclick="openSearchModal()"
                 title="Search items (F1)">&#128269; Search</button>
             <button type="button" class="btn-fkey-help" onclick="openFkeyHelpModal()"

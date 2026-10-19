@@ -15,6 +15,7 @@ from .models import (
     SuspendedTransaction,
     Tender,
     TempTransaction,
+    TerminalConfiguration,
     TerminalSetup,
     TransactionHeader,
     TransactionItem,
@@ -102,6 +103,12 @@ class AccountingSummaryAdmin(admin.ModelAdmin):
     date_hierarchy = 'transaction_date'
     ordering = ('-transaction_date', 'store_id', 'terminal_id')
     readonly_fields = [f.name for f in AccountingSummary._meta.get_fields()]
+
+
+@admin.register(TerminalConfiguration)
+class TerminalConfigurationAdmin(admin.ModelAdmin):
+    list_display = ("store_id", "terminal_id", "store_name", "barcode_numeric_only")
+    list_editable = ("barcode_numeric_only",)
 
 
 @admin.register(TerminalSetup)
