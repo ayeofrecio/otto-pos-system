@@ -2912,14 +2912,9 @@ def _session_close_totals(session):
         )
     )["total"] or Decimal("0")
 
-    # gross_sales = session_items.aggregate(
-    #     total=Sum("item_price")
-    # )["total"] or Decimal("0")
-    # item_price_ext is already net of item discounts (and carries returns)
     items_net = session_items.aggregate(
         total=Sum("item_price_ext")
     )["total"] or Decimal("0")
-    # gross_sales = items_net + item_discounts
 
     total_change = sale_headers.aggregate(
         total=Sum("change_amount")
@@ -2961,32 +2956,20 @@ def _session_close_totals(session):
         .annotate(total=Sum("amount"))
         .order_by("tender_desc")
     )
-    # cash = paid_in_cash - cash_returned - total_change
     final_gross_sale = gross_sales 
-    # final_gross_sale = gross_sales + (return_amount*return_count)
-    # total_mid_cash_in = (
-    #     CashInOut.objects.filter(session=session, movement_type=CashInOut.TYPE_IN)
-    #     .aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    # )
-    # total_mid_cash_out = (
-    #     CashInOut.objects.filter(session=session, movement_type=CashInOut.TYPE_OUT)
-    #     .aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    # )
     # TODO: manual cash in/out (pending task)
     total_mid_cash_in = Decimal("0")
     total_mid_cash_out = Decimal("0")
     # --- Cash totals ---
-    # expected = change fund + cash sales - cash returned
     expected_cash = (
         session.opening_cash
         + total_mid_cash_in
         + paid_in_cash
         - total_mid_cash_out
-        - cash_returned
+        - abs(cash_returned)
         # - total_change
     )
     net_worth     = expected_cash + credit_debit_total
-    # net_sales = final_gross_sale - total_discounts
     net_sales = gross_sales - total_discounts
 
     return {
@@ -4194,13 +4177,15 @@ def close_session(request):
     # Even when printing or DB update fails, we still log out — the session
     # is already closed and cannot be reverted from here.
     if z_print_error:
-        messages.warning(
+        print(
+        # messages.warning(
             request,
             f"Session closed successfully, but Z-Reading could not be printed: "
             f"{z_print_error}. Please reprint manually.",
         )
     elif z_db_error:
-        messages.error(
+        # messages.error(
+        print(
             request,
             f"Session closed and Z-Reading printed, but the summary records "
             f"could not be saved: {z_db_error}. Please notify your administrator.",

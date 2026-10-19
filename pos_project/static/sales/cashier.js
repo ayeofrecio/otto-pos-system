@@ -1263,7 +1263,7 @@
 
     const rows = results.map(function (item) {
       const sizeLabel = item.size_display || item.size || '';
-      const colorLabel = item.color_display || item.color_desc || '';
+      const colorLabel = item.color_desc || item.color_display || '';
       const meta = [colorLabel, sizeLabel, item.code, item.barcode]
         .filter(Boolean)
         .map(escHtml)
@@ -2316,10 +2316,10 @@
       closeTransForm.addEventListener("submit", function (evt) {
           evt.preventDefault();
 
-          // const modal       = getModal();
-          // const cashInput   = document.getElementById("closing-cash-input");
+          const modal       = getModal();
+          const cashInput   = document.getElementById("closing-cash-input");
           // const closingCash = parseFloat(cashInput?.value) || 0;
-          // const expected    = (modal?._expectedCash)    || 0;
+          const expectedCash    = (modal?._expectedCash)    || 0;
           // const variance    = closingCash - expected;
 
           // // Sync all hidden fields
